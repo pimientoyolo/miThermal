@@ -1,1 +1,1 @@
-# proyecto-gradp
+# proyecto-grado
