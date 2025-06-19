@@ -1,0 +1,8 @@
+This curve is valid for the following lenses:
+
+    IR lens, f=88.9 mm (7°)
+    IR lens, f=41.3 mm (15°)
+    IR lens, f=24.6 mm (25°)
+    IR lens, f=13.1 mm (45°)
+
+https://www.flir.com/support-center/instruments2/what-is-the-typical-spectral-response-for-certain-cameralens-combination/
