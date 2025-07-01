@@ -1,0 +1,30 @@
+# Default configuration
+app:
+  name: "Proyecto Mitsuba Gradio"
+  version: "0.1.0"
+  debug: false
+
+mitsuba:
+  variant: "cuda_ad_spectral"
+  spp: 512
+  max_depth: 8
+
+gradio:
+  title: "Simulación Atmosférica con Mitsuba"
+  description: "Interfaz interactiva para simulaciones atmosféricas espectrales"
+  host: "127.0.0.1"
+  port: 7860
+  debug: false
+  share: false
+
+spectral:
+  wavelength_range: [8000, 14000]
+  num_bands: 49
+  default_temperature: 5000
+  default_sigma_t: 0.01
+
+paths:
+  data: "./assets/spectral_signatures"
+  output: "./output"
+  config: "./config"
+  logs: "./output/logs"
