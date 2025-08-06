@@ -1,0 +1,16 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Mitsuba: Ejecutar Servidor",
+			"type": "shell",
+			"command": "python",
+			"args": [
+				"run_server.py"
+			],
+			"group": "build",
+			"isBackground": true,
+			"problemMatcher": []
+		}
+	]
+}
