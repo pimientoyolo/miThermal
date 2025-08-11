@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Script para lanzar el servidor FastAPI de Mitsuba Scene Viewer
 """
@@ -11,7 +10,6 @@ sys.path.insert(0, str(project_root / "src"))
 
 if __name__ == "__main__":
     import uvicorn
-    from src.api.server import app
     
     print("🚀 Iniciando servidor FastAPI para Mitsuba Scene Viewer...")
     print("📡 API disponible en: http://localhost:8000")
@@ -19,9 +17,9 @@ if __name__ == "__main__":
     print("💡 Para detener el servidor, presiona Ctrl+C")
     
     uvicorn.run(
-        app,
+        "src.api.server:app",
         host="0.0.0.0",
         port=8000,
-        # reload=True,
+        reload=True,
         log_level="info"
     )

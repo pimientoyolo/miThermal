@@ -23,8 +23,8 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 
 # Configuración de Mitsuba
 MITSUBA_CONFIG = {
-    "variant": "cuda_ad_spectral",  # Cambiar a "cuda_ad_rgb" si no hay GPU
-    "spp": 1024,  # Samples per pixel
+    "variant": "cuda_ad_spectral",
+    "spp": 1024,
     "max_depth": 8,
     "film_width": 512,
     "film_height": 512,
