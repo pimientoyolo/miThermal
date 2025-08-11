@@ -11,6 +11,9 @@ from typing import List, Dict, Optional
 from ..config import get_config, get_output_path
 from ..mitsuba_core.scene_parser import MitsubaSceneParser
 
+# Routers
+from .controller.scene_controller import scene_router
+
 # Configuración
 config = get_config()
 logger = logging.getLogger(__name__)
@@ -41,6 +44,10 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 # Variable global para almacenar el parser actual
 current_parser: Optional[MitsubaSceneParser] = None
 current_scene_data: Optional[Dict] = None
+
+app.include_router(
+    scene_router
+)
 
 
 
