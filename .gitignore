@@ -179,3 +179,5 @@ pyrightconfig.json
 
 output/
 outputs/
+
+.vscode
