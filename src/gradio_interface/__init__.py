@@ -1,7 +1,3 @@
-"""
-Interfaz de usuario Gradio para simulaciones atmosféricas
-"""
-
 try:
     from .app import create_gradio_app, launch_gradio_app, create_app, main  # type: ignore
     from .components import create_simulation_interface  # type: ignore

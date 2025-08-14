@@ -1,7 +1,3 @@
-"""Aplicación principal Gradio enfocada en el Mitsuba Viewer.
-
-Las pestañas legacy se mantienen comentadas para futura reactivación.
-"""
 import gradio as gr
 import logging
 
@@ -18,17 +14,7 @@ def create_gradio_app() -> gr.Blocks:
         create_header()
         with gr.Tabs():
             with gr.TabItem("Mitsuba Viewer"):
-                # Embebemos la interfaz principal del visor dentro de la pestaña
                 create_mitsuba_viewer_interface()
-            # --- Pestañas legacy (descomentar si se necesitan) ---
-            # from .tabs.simulation import create_simulation_tab
-            # from .tabs.spectral_analysis import create_spectral_analysis_tab
-            # from .tabs.advanced_config import create_advanced_config_tab
-            # from .tabs.export import create_export_tab
-            # create_simulation_tab()
-            # create_spectral_analysis_tab()
-            # create_advanced_config_tab()
-            # create_export_tab()
     return app
 
 

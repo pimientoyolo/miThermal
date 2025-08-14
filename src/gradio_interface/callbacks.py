@@ -1,6 +1,3 @@
-"""
-Funciones de callback para la interfaz Gradio
-"""
 import logging
 import numpy as np
 import matplotlib.pyplot as plt
