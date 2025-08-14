@@ -181,3 +181,5 @@ output/
 outputs/
 
 .vscode
+
+*.zip
