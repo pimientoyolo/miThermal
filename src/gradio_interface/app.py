@@ -3,7 +3,10 @@ import logging
 
 from .layouts import create_main_layout, create_header
 from .mitsuba_viewer.callbacks import create_mitsuba_viewer_interface
-from ..config import get_config
+try:
+    from config import get_config  # ejecución directa
+except ImportError:
+    from ..config import get_config  # como paquete
 
 logger = logging.getLogger(__name__)
 config = get_config()
