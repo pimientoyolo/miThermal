@@ -3,11 +3,14 @@ Cliente web para API de visualización de escenas Mitsuba con Gradio
 """
 import gradio as gr
 import requests
-import json
 from pathlib import Path
 from typing import Dict
 import tempfile
 import logging
+from io import BytesIO
+from PIL import Image
+import base64
+
 
 logger = logging.getLogger(__name__)
 
@@ -30,18 +33,24 @@ class MitsubaAPIClient:
         except Exception as e:
             logger.error(f"Error conectando al servidor: {e}")
             return False
-    
-    def upload_scene(self, xml_file_path: str) -> Dict:
-        """Sube un archivo XML de escena al servidor"""
-        try:
-            with open(xml_file_path, 'rb') as f:
-                files = {'file': f}
-                response = self.session.post(f"{self.base_url}/upload-scene", files=files)
-                response.raise_for_status()
-                return response.json()
-        except Exception as e:
-            logger.error(f"Error subiendo escena: {e}")
-            return {"status": "error", "detail": str(e)}
+
+    def upload_scene(self, zip_file_path: str):
+        """Sube ZIP y devuelve imagen o JSON según la respuesta"""
+        with open(zip_file_path, 'rb') as f:
+            files = {'file': (zip_file_path, f, 'application/zip')}
+            response = requests.post(f"{self.base_url}/scene/load_scene", files=files)
+            response.raise_for_status()
+
+            content_type = response.headers.get("Content-Type", "").lower()
+
+            if "image" in content_type:
+                img_bytes = BytesIO(response.content)
+                img_bytes.seek(0)
+                # Si Gradio espera imagen -> devolver base64
+                img_b64 = base64.b64encode(img_bytes.read()).decode('utf-8')
+                return {"status": "ok", "image_base64": img_b64}
+
+            return response.json()
     
     def load_scene(self, scene_path: str) -> Dict:
         """Carga una escena desde una ruta del servidor"""
@@ -126,91 +135,102 @@ def check_server_status():
     else:
         return "❌ Servidor no disponible", "error"
 
-def upload_xml_file(file_obj):
-    """Maneja la subida de archivos XML"""
+def upload_zip_file(file_obj):
+    """Maneja la subida de archivos ZIP y adapta respuesta (imagen base64 o JSON).
+
+    Retorna tupla para componentes: (Imagen/PIL|None, texto_info:str, Dropdown(update), JSON(dict|list)).
+    """
     global object_id_mapping
-    
+
     if file_obj is None:
-        return "❌ No se seleccionó archivo", gr.Dropdown(choices=[]), ""
-    
+        return None, "❌ No se seleccionó archivo", gr.Dropdown(choices=[]), {}
+
     try:
-        # Subir archivo al servidor
         result = api_client.upload_scene(file_obj.name)
-        
-        if result.get("status") == "success":
-            # Obtener lista de objetos
-            objects_data = api_client.get_objects()
-            if objects_data.get("status") == "success":
-                objects = objects_data.get("objects", [])
-                
-                # Formatear información para mostrar
-                info_text = "✅ Escena cargada exitosamente\n"
-                info_text += f"📁 Total de objetos: {len(objects)}\n\n"
-                
-                # Crear lista de opciones para el dropdown y mapeo
-                object_choices = []
-                object_id_mapping = {}
-                
-                for obj in objects:
-                    obj_info = f"{obj['id']} ({obj['type']})"
-                    if obj.get('has_material'):
-                        obj_info += " 🎨"
-                    if obj.get('has_emission'):
-                        obj_info += " 💡"
-                    
-                    object_choices.append(obj_info)
-                    object_id_mapping[obj_info] = obj['id']
-                
-                return info_text, gr.Dropdown(choices=object_choices), json.dumps(objects, indent=2)
-            else:
-                return f"❌ Error obteniendo objetos: {objects_data.get('detail', 'Error desconocido')}", gr.Dropdown(choices=[]), ""
+
+        # Decodificar imagen si viene como base64
+        pil_image = None
+        if result.get("status") == "ok" and result.get("image_base64"):
+            try:
+                img_bytes = base64.b64decode(result["image_base64"])
+                pil_image = Image.open(BytesIO(img_bytes))
+            except Exception as e:
+                logger.error(f"Error decodificando imagen base64: {e}")
+                pil_image = None
+
+        # Obtener objetos (independiente de si hubo imagen)
+        objects = []
+        objects_data = api_client.get_objects()
+        if objects_data.get("status") == "success":
+            objects = objects_data.get("objects", [])
+
+        # Construir mapping y choices
+        object_choices = []
+        object_id_mapping = {}
+        for obj in objects:
+            obj_info = f"{obj['id']} ({obj['type']})"
+            if obj.get('has_material'):
+                obj_info += " 🎨"
+            if obj.get('has_emission'):
+                obj_info += " 💡"
+            object_choices.append(obj_info)
+            object_id_mapping[obj_info] = obj['id']
+
+        # Texto informativo
+        if pil_image is not None:
+            info_text = "✅ Escena procesada y renderizada exitosamente\n"
+            info_text += f"📁 Objetos detectados: {len(objects)}\n"
+            if not objects:
+                info_text += "⚠️ No se detectaron objetos en la escena o aún no están disponibles.\n"
+        elif result.get("status") == "success":
+            info_text = "✅ Escena cargada exitosamente (sin imagen de render)\n"
+            info_text += f"📁 Objetos detectados: {len(objects)}\n"
         else:
-            return f"❌ Error subiendo archivo: {result.get('detail', 'Error desconocido')}", gr.Dropdown(choices=[]), ""
-            
+            return None, f"❌ Error subiendo archivo: {result.get('detail', 'Error desconocido')}", gr.Dropdown(choices=[]), {}
+
+        return pil_image, info_text, gr.Dropdown(choices=object_choices), objects
+
     except Exception as e:
-        return f"❌ Error: {str(e)}", gr.Dropdown(choices=[]), ""
+        logger.error(f"Error general en upload_zip_file: {e}")
+        return None, f"❌ Error: {str(e)}", gr.Dropdown(choices=[]), {}
 
 def load_server_scene(scene_path):
-    """Carga una escena desde el servidor"""
+    """Carga una escena existente en el servidor y devuelve estructura uniforme."""
     global object_id_mapping
-    
+
     if not scene_path.strip():
-        return "❌ Ingrese una ruta válida", gr.Dropdown(choices=[]), ""
-    
+        return None, "❌ Ingrese una ruta válida", gr.Dropdown(choices=[]), {}
+
     try:
         result = api_client.load_scene(scene_path.strip())
-        
-        if result.get("status") == "success":
-            # Obtener lista de objetos
-            objects_data = api_client.get_objects()
-            if objects_data.get("status") == "success":
-                objects = objects_data.get("objects", [])
-                
-                info_text = "✅ Escena cargada desde servidor\n"
-                info_text += f"📁 Total de objetos: {len(objects)}\n\n"
-                
-                # Crear lista de opciones para el dropdown y mapeo
-                object_choices = []
-                object_id_mapping = {}
-                
-                for obj in objects:
-                    obj_info = f"{obj['id']} ({obj['type']})"
-                    if obj.get('has_material'):
-                        obj_info += " 🎨"
-                    if obj.get('has_emission'):
-                        obj_info += " 💡"
-                    
-                    object_choices.append(obj_info)
-                    object_id_mapping[obj_info] = obj['id']
-                
-                return info_text, gr.Dropdown(choices=object_choices), json.dumps(objects, indent=2)
-            else:
-                return f"❌ Error obteniendo objetos: {objects_data.get('detail', 'Error desconocido')}", gr.Dropdown(choices=[]), ""
+        if result.get("status") != "success":
+            return None, f"❌ Error cargando escena: {result.get('detail', 'Error desconocido')}", gr.Dropdown(choices=[]), {}
+
+        objects_data = api_client.get_objects()
+        objects = []
+        if objects_data.get("status") == "success":
+            objects = objects_data.get("objects", [])
         else:
-            return f"❌ Error cargando escena: {result.get('detail', 'Error desconocido')}", gr.Dropdown(choices=[]), ""
-            
+            return None, f"❌ Error obteniendo objetos: {objects_data.get('detail', 'Error desconocido')}", gr.Dropdown(choices=[]), {}
+
+        object_choices = []
+        object_id_mapping = {}
+        for obj in objects:
+            obj_info = f"{obj['id']} ({obj['type']})"
+            if obj.get('has_material'):
+                obj_info += " 🎨"
+            if obj.get('has_emission'):
+                obj_info += " 💡"
+            object_choices.append(obj_info)
+            object_id_mapping[obj_info] = obj['id']
+
+        info_text = "✅ Escena cargada desde servidor\n"
+        info_text += f"📁 Total de objetos: {len(objects)}\n"
+        return None, info_text, gr.Dropdown(choices=object_choices), objects
+
     except Exception as e:
-        return f"❌ Error: {str(e)}", gr.Dropdown(choices=[]), ""
+        logger.error(f"Error general en load_server_scene: {e}")
+        return None, f"❌ Error: {str(e)}", gr.Dropdown(choices=[]), {}
 
 def view_object_3d(object_choice):
     """Visualiza un objeto 3D específico"""
@@ -319,37 +339,42 @@ def create_mitsuba_viewer_interface():
         # Estado del servidor
         with gr.Row():
             with gr.Column(scale=1):
-                server_status = gr.Textbox(
-                    label="Estado del Servidor",
-                    value="Verificando...",
-                    interactive=False
-                )
-                check_btn = gr.Button("🔄 Verificar Conexión", variant="secondary")
+                # Componentes de estado del servidor (reservado para futura activación)
+                # server_status = gr.Textbox(label="Estado del Servidor", value="", interactive=False, visible=False)
+                # check_btn = gr.Button("🔄 Verificar Conexión", variant="secondary", visible=False)
+                pass
         
         with gr.Tabs():
             # Tab 1: Cargar Escena
             with gr.Tab("📁 Cargar Escena"):
                 with gr.Row():
                     with gr.Column(scale=1):
-                        gr.HTML("<h3>Subir archivo XML</h3>")
-                        xml_file = gr.File(
-                            label="Archivo XML de Mitsuba",
-                            file_types=[".xml"]
-                        )
+                        gr.HTML("<h3>Subir archivo comprimido de escena de Mitsuba</h3>")
+                        zip_file = gr.File(
+                            label="Archivo comprimido de escena de Mitsuba (.zip)",
+                            file_types=[".zip"]
+                        )   
                         upload_btn = gr.Button("📤 Subir Escena", variant="primary")
                         
                         gr.HTML("<h3>O cargar desde servidor</h3>")
                         server_path = gr.Textbox(
                             label="Ruta en el servidor",
-                            placeholder="/ruta/a/escena.xml",
+                            placeholder="/ruta/a/escena.zip",
                             lines=1
                         )
                         load_btn = gr.Button("📥 Cargar del Servidor", variant="secondary")
                     
                     with gr.Column(scale=2):
+                        # Mostrar render de la escena
+                        render_image = gr.Image(
+                            label="Render de la Escena",
+                            type="pil",
+                            height=400
+                        )
+                        
                         scene_info = gr.Textbox(
                             label="Información de la Escena",
-                            lines=10,
+                            lines=6,
                             interactive=False
                         )
                         
@@ -407,21 +432,21 @@ def create_mitsuba_viewer_interface():
                         )
         
         # Configurar eventos
-        check_btn.click(
-            fn=check_server_status,
-            outputs=[server_status]
-        )
+        # check_btn.click(
+        #     fn=check_server_status,
+        #     outputs=[server_status]
+        # )
         
         upload_btn.click(
-            fn=upload_xml_file,
-            inputs=[xml_file],
-            outputs=[scene_info, object_selector, scene_json]
+            fn=upload_zip_file,
+            inputs=[zip_file],
+            outputs=[render_image, scene_info, object_selector, scene_json]
         )
         
         load_btn.click(
             fn=load_server_scene,
             inputs=[server_path],
-            outputs=[scene_info, object_selector, scene_json]
+            outputs=[render_image, scene_info, object_selector, scene_json]
         )
         
         view_btn.click(
@@ -431,10 +456,10 @@ def create_mitsuba_viewer_interface():
         )
         
         # Verificar estado inicial del servidor
-        interface.load(
-            fn=check_server_status,
-            outputs=[server_status]
-        )
+        # interface.load(
+        #     fn=check_server_status,
+        #     outputs=[server_status]
+        # )
     
     return interface
 
