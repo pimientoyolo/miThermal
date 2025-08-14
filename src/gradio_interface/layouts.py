@@ -2,7 +2,12 @@
 Layouts y diseños para la interfaz Gradio
 """
 import gradio as gr
-from ..config import get_config
+try:
+    # Cuando se importa como paquete (ejecución normal)
+    from ..config import get_config  # type: ignore
+except ImportError:  # pragma: no cover
+    # Fallback cuando se ejecuta vía script y 'gradio_interface' no es paquete raíz
+    from config import get_config  # type: ignore
 
 # Cargar configuración
 config = get_config()

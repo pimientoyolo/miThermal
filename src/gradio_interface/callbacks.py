@@ -4,7 +4,6 @@ Funciones de callback para la interfaz Gradio
 import logging
 import numpy as np
 import matplotlib.pyplot as plt
-from pathlib import Path
 from typing import Tuple, List, Any
 
 logger = logging.getLogger(__name__)
