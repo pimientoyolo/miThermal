@@ -31,14 +31,14 @@ class SceneService:
         # Eliminar todo el contenido del directorio
         if os.path.exists(out_dir):
             for item in os.listdir(out_dir):
-            item_path = os.path.join(out_dir, item)
-            try:
-                if os.path.isfile(item_path):
-                os.remove(item_path)
-                elif os.path.isdir(item_path):
-                shutil.rmtree(item_path)
-            except OSError as e:
-                self.logger.warning(f"Error al eliminar {item_path}: {e}")
+                item_path = os.path.join(out_dir, item)
+                try:
+                    if os.path.isfile(item_path):
+                        os.remove(item_path)    
+                    elif os.path.isdir(item_path):
+                        shutil.rmtree(item_path)
+                except OSError as e:
+                    self.logger.warning(f"Error al eliminar {item_path}: {e}")
         
         # guardar archivo zip
         with open(f"{out_dir}/scene.zip", "wb") as buffer:

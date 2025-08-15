@@ -20,6 +20,9 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 (OUTPUT_DIR / "simulations").mkdir(exist_ok=True)
 (OUTPUT_DIR / "logs").mkdir(exist_ok=True)
 (OUTPUT_DIR / "exports").mkdir(exist_ok=True)
+(OUTPUT_DIR / "static").mkdir(exist_ok=True)
+
+SCENE_DIR = str(OUTPUT_DIR / "static" / "scene.xml")
 
 # Configuración de Mitsuba
 MITSUBA_CONFIG = {
