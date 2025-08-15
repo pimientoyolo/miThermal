@@ -2,7 +2,6 @@ import logging
 
 from fastapi import UploadFile
 
-from ...mitsuba_core.scene_parser import MitsubaSceneParser
 from fastapi import HTTPException
 from ...config import get_output_path
 import os

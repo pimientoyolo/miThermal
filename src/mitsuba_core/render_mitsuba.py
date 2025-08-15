@@ -3,7 +3,7 @@ import logging
 from src.config import get_output_path, MITSUBA_CONFIG
 import os
 import xmltodict
-import json
+from src.mitsuba_core.scene_parser import SceneParser
 
 
 class RenderRGB:
@@ -11,13 +11,13 @@ class RenderRGB:
         import mitsuba as mi
         mi.set_variant('cuda_ad_rgb')
         self.mi = mi
+        self.scene_parser = SceneParser()
         
         self.logger = logging.getLogger(__name__)
 
     def render(self, scene_path: str, out_dir: str) -> str:
 
-        with open(scene_path) as f:
-            scene_dict = xmltodict.parse(f.read())
+        scene_dict = self.scene_parser.xml_to_dict(scene_path)
 
         #spp
         scene_dict['scene']['default'][0]['@value']= int(MITSUBA_CONFIG['spp']/2)
