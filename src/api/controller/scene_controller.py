@@ -22,3 +22,7 @@ async def load_scene(file: UploadFile = File(...)) -> FileResponse:
 async def load_scene_advanced() -> FileResponse:
     image_path = render_service.render_basic_scene(SCENE_DIR)
     return StreamingResponse(open(image_path, "rb"), media_type="image/png", headers={"Content-Disposition": "attachment; filename=scene_advanced.png"})
+
+@scene_router.get("/has_loaded_scene")
+async def has_loaded_scene() -> bool:
+    return scene_service.has_loaded_scene(SCENE_DIR)

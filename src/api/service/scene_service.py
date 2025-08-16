@@ -58,7 +58,17 @@ class SceneService:
 
         return new_xml_path
 
-
+    def has_loaded_scene(self, scene_dir: str) -> bool:
+        """
+        Verifica si se ha cargado una escena en el directorio especificado.
+        
+        Args:
+            scene_dir: Ruta del directorio de la escena.
+        
+        Returns:
+            True si se ha cargado una escena, False en caso contrario.
+        """
+        return os.path.exists(scene_dir) and os.path.isfile(scene_dir)
 
 
         
