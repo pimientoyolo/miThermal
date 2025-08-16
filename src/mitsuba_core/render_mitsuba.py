@@ -2,7 +2,7 @@ import logging
 
 from src.config import get_output_path, MITSUBA_CONFIG
 import os
-import xmltodict
+import json
 from src.mitsuba_core.scene_parser import SceneParser
 
 
@@ -24,7 +24,12 @@ class RenderRGB:
 
         # guardar ahora como la scena de xml
         with open(scene_path, 'w') as f:
-            f.write(xmltodict.unparse(scene_dict, pretty=True))
+            f.write(self.scene_parser.dict_to_xml(scene_dict))
+
+        # guardar scene_dict como JSON
+        json_output_path = os.path.join(out_dir, "scene.json")
+        with open(json_output_path, 'w') as json_file:
+            json.dump(scene_dict, json_file, indent=2)
 
         # cargar escena con mitsuba
         scene = self.mi.load_file(scene_path)

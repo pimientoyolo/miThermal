@@ -1,10 +1,13 @@
 import logging
+from re import S
 
 import open3d
 
 import trimesh
 from pathlib import Path
 from fastapi import HTTPException
+from src.mitsuba_core.scene_parser import SceneParser
+from src.api.dto.suggestDTO import SuggestDTO
 
 class ObjectUtils:
     """
@@ -14,6 +17,7 @@ class ObjectUtils:
     
     def __init__(self):
         self.logger = logging.getLogger(__name__)
+        self.scene_parser = SceneParser()
 
     def ply2obj(self, ply_file_path: str, obj_file_path: str) -> bool:
         """
@@ -87,3 +91,20 @@ class ObjectUtils:
         except Exception as e:
             self.logger.error(f"Error al validar el archivo: {e}")
             raise HTTPException(status_code=500, detail="Error validando archivo")
+
+    def get_suggested_object(self, scene_path: str) -> list[SuggestDTO]:
+
+        list_suggest: list[SuggestDTO] = []
+
+        scene_dict = self.scene_parser.xml_to_dict(scene_path)
+        
+        shapes = scene_dict["scene"]["shape"]
+
+        for shape in shapes:
+            file = shape["string"]["@value"]
+            file_name = Path(file).stem
+
+            sug = SuggestDTO(id=file, suggest=file_name)
+            list_suggest.append(sug)
+
+        return list_suggest

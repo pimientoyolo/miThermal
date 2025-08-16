@@ -14,3 +14,6 @@ class SceneParser:
      with open(path_xml) as f:
             scene_dict = xmltodict.parse(f.read())
             return scene_dict
+
+    def dict_to_xml(self, scene_dict: Dict) -> str:
+        return xmltodict.unparse(scene_dict, pretty=True)
