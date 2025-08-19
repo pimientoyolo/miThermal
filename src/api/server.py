@@ -9,10 +9,11 @@ from typing import List, Dict, Optional
 
 # Imports del proyecto
 from ..config import get_config, get_output_path
-from ..mitsuba_core.scene_parser import MitsubaSceneParser
 
 # Routers
-from .controller.scene_controller import scene_router
+from src.api.controller.scene_controller import scene_router
+from src.api.controller.obj_controller import obj_router
+
 
 # Configuración
 config = get_config()
@@ -41,13 +42,11 @@ STATIC_DIR.mkdir(exist_ok=True)
 # Montar directorio estático
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
-# Variable global para almacenar el parser actual
-current_parser: Optional[MitsubaSceneParser] = None
-current_scene_data: Optional[Dict] = None
 
 app.include_router(
     scene_router
 )
 
-
-
+app.include_router(
+    obj_router
+)

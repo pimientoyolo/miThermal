@@ -2,7 +2,6 @@ import logging
 
 from fastapi import UploadFile
 
-from ...mitsuba_core.scene_parser import MitsubaSceneParser
 from fastapi import HTTPException
 from ...config import get_output_path
 import os
@@ -28,21 +27,17 @@ class SceneService:
         if not file.filename.endswith('.zip'):
             raise HTTPException(status_code=400, detail="El archivo debe ser un archivo ZIP")
 
-        # Eliminar archivos existentes con extensiones .zip, .obj y .xml
-        for ext in ['*.zip', '*.obj', '*.xml', '*.ply', "*.jpg"]:
-            for file_path in glob.glob(os.path.join(out_dir, ext)):
+        # Eliminar todo el contenido del directorio
+        if os.path.exists(out_dir):
+            for item in os.listdir(out_dir):
+                item_path = os.path.join(out_dir, item)
                 try:
-                    os.remove(file_path)
+                    if os.path.isfile(item_path):
+                        os.remove(item_path)    
+                    elif os.path.isdir(item_path):
+                        shutil.rmtree(item_path)
                 except OSError as e:
-                    self.logger.warning(f"Error al eliminar {file_path}: {e}")
-        
-        # Eliminar carpeta meshes si existe
-        meshes_dir = os.path.join(out_dir, "meshes")
-        if os.path.exists(meshes_dir):
-            try:
-                shutil.rmtree(meshes_dir)
-            except OSError as e:
-                self.logger.warning(f"Error al eliminar carpeta meshes: {e}")
+                    self.logger.warning(f"Error al eliminar {item_path}: {e}")
         
         # guardar archivo zip
         with open(f"{out_dir}/scene.zip", "wb") as buffer:
@@ -63,7 +58,17 @@ class SceneService:
 
         return new_xml_path
 
-
+    def has_loaded_scene(self, scene_dir: str) -> bool:
+        """
+        Verifica si se ha cargado una escena en el directorio especificado.
+        
+        Args:
+            scene_dir: Ruta del directorio de la escena.
+        
+        Returns:
+            True si se ha cargado una escena, False en caso contrario.
+        """
+        return os.path.exists(scene_dir) and os.path.isfile(scene_dir)
 
 
         
