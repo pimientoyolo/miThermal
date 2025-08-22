@@ -70,6 +70,15 @@ class SceneService:
         """
         return os.path.exists(scene_dir) and os.path.isfile(scene_dir)
 
+    def prepare_thermal_scene(self, scene_dir: str):
+        """
+        Copia scene.xml a scene_thermal.xml en el directorio dado.
+        """
+        scene_xml = os.path.join(scene_dir, "scene.xml")
+        thermal_xml = os.path.join(scene_dir, "scene_thermal.xml")
+        if os.path.exists(scene_xml):
+            shutil.copyfile(scene_xml, thermal_xml)
+
 
         
 
