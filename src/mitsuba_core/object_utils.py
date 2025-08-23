@@ -403,6 +403,3 @@ class ObjectUtils:
         except Exception as e:
             self.logger.error(f"Error obteniendo atenuación de '{attenuation_file}': {e}")
             raise HTTPException(status_code=500, detail=f"Error al procesar archivo de atenuación: {e}")
-
-    
-    

@@ -30,5 +30,3 @@ class SceneParser:
         with open(output_path, 'w', encoding='utf-8') as f:
             f.write(xml_content)
         logger.info(f"XML guardado en: {output_path}")
-
-    

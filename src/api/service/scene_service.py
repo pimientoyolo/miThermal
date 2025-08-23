@@ -1,4 +1,9 @@
 import logging
+
+from fastapi import UploadFile
+
+from fastapi import HTTPException
+from ...config import get_output_path
 import os
 import glob
 import zipfile
@@ -170,9 +175,6 @@ class SceneService:
             if scene_dict:
                 self.scene_parser.save_dict_as_xml(scene_dict, thermal_xml)
 
-            
-
-            
 
 
     def get_dict_scene(self, scene_xml_path: str):
