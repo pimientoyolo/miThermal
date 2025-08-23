@@ -143,6 +143,23 @@ class SceneService:
                     dict_emission = object_utils.create_spectral_emitter(wavelengths, emission)
                     shapes["emitter"] = dict_emission
 
+            # Agregar medio homogéneo con coeficiente de extinción espectral
+            # Crear valores de sigma_t para el medium (coeficiente de extinción)
+            # Valores típicos para niebla en infrarrojo lejano
+            sigma_t_values = np.full(len(wavelengths), 0.01)  # Valor constante de extinción
+            
+            # Crear el medium usando la función de object_utils
+            medium_dict = object_utils.create_homogeneous_medium(
+                wavelengths=wavelengths,
+                sigma_t=sigma_t_values,
+                medium_id="niebla",
+                g_value=0.95  # Valor para infrarrojo lejano
+            )
+            
+            # Agregar el medium a la escena
+            scene_dict["scene"]["medium"] = medium_dict
+
+
             # Guardar la escena modificada como XML
             if scene_dict:
                 self.scene_parser.save_dict_as_xml(scene_dict, thermal_xml)
