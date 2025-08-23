@@ -94,6 +94,12 @@ class SceneService:
                     bands = create_specfilm_bands(wavelengths)
                     # Usar la estructura que retorna create_specfilm_bands directamente
                     scene_dict["scene"]["sensor"]["film"]["spectrum"] = bands
+                
+                # Agregar referencia al medium en el sensor para que vea a través del gas
+                scene_dict["scene"]["sensor"]["ref"] = {
+                    "@name": "medium",
+                    "@id": "fog"
+                }
             
             # Cambiar el integrador a volpathmis con estructura correcta
             if scene_dict and "scene" in scene_dict:
@@ -146,13 +152,13 @@ class SceneService:
             # Agregar medio homogéneo con coeficiente de extinción espectral
             # Crear valores de sigma_t para el medium (coeficiente de extinción)
             # Valores típicos para niebla en infrarrojo lejano
-            sigma_t_values = np.full(len(wavelengths), 0.01)  # Valor constante de extinción
+            sigma_t_values = np.full(len(wavelengths), 0.1)  # Valor constante de extinción
             
             # Crear el medium usando la función de object_utils
             medium_dict = object_utils.create_homogeneous_medium(
                 wavelengths=wavelengths,
                 sigma_t=sigma_t_values,
-                medium_id="niebla",
+                medium_id="fog",
                 g_value=0.95  # Valor para infrarrojo lejano
             )
             
