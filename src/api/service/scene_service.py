@@ -1,15 +1,16 @@
 import logging
-
-from fastapi import UploadFile
-
-from fastapi import HTTPException
-from ...config import get_output_path
 import os
 import glob
 import zipfile
-
-from ...mitsuba_core.object_utils import ObjectUtils
 import shutil
+import json
+from fastapi import UploadFile, HTTPException
+from ...config import get_output_path
+from ...mitsuba_core.object_utils import ObjectUtils
+from ...mitsuba_core.scene_parser import SceneParser
+from ...mitsuba_core.sensor_utils import create_specfilm_bands
+import numpy as np
+import random
 
 object_utils = ObjectUtils()
 
@@ -21,6 +22,7 @@ out_dir = get_output_path("static")
 class SceneService:
     def __init__(self):
         self.logger = logger
+        self.scene_parser = SceneParser()
 
     def load_scene(self, file: UploadFile):
         # Verificar si el archivo es un ZIP
@@ -70,17 +72,84 @@ class SceneService:
         """
         return os.path.exists(scene_dir) and os.path.isfile(scene_dir)
 
-    def prepare_thermal_scene(self, scene_dir: str):
+    def prepare_thermal_scene(self, scene_path: str):
         """
-        Copia scene.xml a scene_thermal.xml en el directorio dado.
+        Crea una escena térmica básica copiando scene.xml a scene_thermal.xml y cambiando el tipo de integrador a 'specfilm'.
         """
-        scene_xml = os.path.join(scene_dir, "scene.xml")
-        thermal_xml = os.path.join(scene_dir, "scene_thermal.xml")
-        if os.path.exists(scene_xml):
-            shutil.copyfile(scene_xml, thermal_xml)
+        num_bands = 10 
+        w_min = 8000
+        w_max = 14000
+        wavelengths = np.linspace(w_min, w_max, num_bands)
+
+        if os.path.exists(scene_path):
+            thermal_xml = os.path.join(os.path.dirname(scene_path), "scene_thermal.xml")
+            shutil.copyfile(scene_path, thermal_xml)
+            scene_dict = self.get_dict_scene(thermal_xml)
+
+            # Cambiar el tipo de film
+            if scene_dict and "scene" in scene_dict and "sensor" in scene_dict["scene"]:
+                if "film" in scene_dict["scene"]["sensor"]:
+                    scene_dict["scene"]["sensor"]["film"]["@type"] = "specfilm"
+                    # Agregar bandas espectrales al film
+                    bands = create_specfilm_bands(wavelengths)
+                    # Usar la estructura que retorna create_specfilm_bands directamente
+                    scene_dict["scene"]["sensor"]["film"]["spectrum"] = bands
+            # Eliminar los materiales bsdf
+            if scene_dict and "scene" in scene_dict and "bsdf" in scene_dict["scene"]:
+                del scene_dict["scene"]["bsdf"]
+            # Eliminar el emisor emitter
+            if scene_dict and "scene" in scene_dict and "emitter" in scene_dict["scene"]:
+                del scene_dict["scene"]["emitter"]
+            # Eliminar referencias 'ref' en cada shape
+            if scene_dict and "scene" in scene_dict and "shape" in scene_dict["scene"]:
+                shapes = scene_dict["scene"]["shape"]
+                if isinstance(shapes, list):
+                    for shape in shapes:
+                        if "ref" in shape:
+                            del shape["ref"]
+                elif isinstance(shapes, dict):
+                    if "ref" in shapes:
+                        del shapes["ref"]
+                # get material
+                material = object_utils.get_material_signature("stone")
+                indices = np.linspace(0, len(material) - 1, num_bands, dtype=int)
+                metarial = material[indices]
+
+                # Agregar emisor diferente a cada shape
+                if isinstance(shapes, list):
+                    for i, shape in enumerate(shapes):
+                        # Temperatura aleatoria diferente para cada objeto
+                        temperature = random.randint(200, 400)
+                        radiance = object_utils.blackbody_radiance_nm(wavelengths, temperature)
+                        emission = radiance * metarial
+                        dict_emission = object_utils.create_spectral_emitter(wavelengths, emission)
+                        shape["emitter"] = dict_emission
+                        
+                elif isinstance(shapes, dict):
+                    # Para un solo shape
+                    temperature = random.randint(200, 400)
+                    radiance = object_utils.blackbody_radiance_nm(wavelengths, temperature)
+                    emission = radiance * metarial
+                    dict_emission = object_utils.create_spectral_emitter(wavelengths, emission)
+                    shapes["emitter"] = dict_emission
+
+            # Guardar la escena modificada como XML
+            if scene_dict:
+                self.scene_parser.save_dict_as_xml(scene_dict, thermal_xml)
+
+            
+
+            
 
 
-        
+    def get_dict_scene(self, scene_xml_path: str):
+        """
+        Carga cualquier archivo de escena XML y lo retorna como dict.
+        """
+        if not os.path.exists(scene_xml_path):
+            return None
+        scene_dict = self.scene_parser.xml_to_dict(scene_xml_path)
+        return scene_dict
 
-        
+
         
