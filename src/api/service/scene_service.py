@@ -94,6 +94,16 @@ class SceneService:
                     bands = create_specfilm_bands(wavelengths)
                     # Usar la estructura que retorna create_specfilm_bands directamente
                     scene_dict["scene"]["sensor"]["film"]["spectrum"] = bands
+            
+            # Cambiar el integrador a volpathmis con estructura correcta
+            if scene_dict and "scene" in scene_dict:
+                scene_dict["scene"]["integrator"] = {
+                    "@type": "volpathmis",
+                    "integer": {
+                        "@name": "max_depth",
+                        "@value": "16"
+                    }
+                }
             # Eliminar los materiales bsdf
             if scene_dict and "scene" in scene_dict and "bsdf" in scene_dict["scene"]:
                 del scene_dict["scene"]["bsdf"]
