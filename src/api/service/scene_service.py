@@ -152,7 +152,7 @@ class SceneService:
             # Agregar medio homogéneo con coeficiente de extinción espectral
             # Crear valores de sigma_t para el medium (coeficiente de extinción)
             # Valores típicos para niebla en infrarrojo lejano
-            sigma_t_values = np.full(len(wavelengths), 0.1)  # Valor constante de extinción
+            sigma_t_values = object_utils.get_attenuation_for_wavelengths(wavelengths) # air values
             
             # Crear el medium usando la función de object_utils
             medium_dict = object_utils.create_homogeneous_medium(

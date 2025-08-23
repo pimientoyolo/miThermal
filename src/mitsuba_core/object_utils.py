@@ -22,6 +22,21 @@ class ObjectUtils:
     MATERIAL_NAMES_DB_PATH = "assets/reference_data/matName_FullDatabase.npy"
     MATERIAL_LIB_DB_PATH = "assets/reference_data/matLib_FullDatabase.npy"
     
+    # Ruta base para archivos de reference_data
+    REFERENCE_DATA_BASE_PATH = "assets/reference_data"
+    
+    # Lista de archivos de gases atmosféricos disponibles
+    ATMOSPHERIC_GAS_FILES = [
+        "air.txt",      # Aire
+        "CH4.txt",      # Metano
+        "CO2.txt",      # Dióxido de carbono
+        "H2O.txt",      # Vapor de agua
+        "O3.txt",        # Ozono
+        "enclosure.txt"  # mezcla de varios
+    ]
+
+
+    
     def __init__(self):
         self.logger = logging.getLogger(__name__)
         self.scene_parser = SceneParser()
@@ -335,4 +350,59 @@ class ObjectUtils:
             self.logger.error(f"Error creando medium homogéneo: {e}")
             raise HTTPException(status_code=500, detail=f"Error al crear medium homogéneo: {e}")
 
+    def get_attenuation_for_wavelengths(self, wavelengths: np.ndarray, attenuation_file: str = "air") -> np.ndarray:
+        """
+        Obtiene los valores de atenuación (sigma_t) para una lista específica de longitudes de onda.
+        Encuentra los valores más cercanos en el archivo de atenuación.
+        
+        Args:
+            wavelengths (np.ndarray): Array con las longitudes de onda deseadas en micrómetros
+            attenuation_file (str): Nombre del archivo de atenuación (sin extensión)
+            
+        Returns:
+            np.ndarray: Array con los valores de atenuación correspondientes
+            
+        Raises:
+            HTTPException: Si el archivo no existe o hay error en el procesamiento
+        """
+        try:
+            # Construir la ruta del archivo
+            file_path = f"{self.REFERENCE_DATA_BASE_PATH}/{attenuation_file}.txt"
+            
+            # Validar que el archivo existe
+            if not Path(file_path).exists():
+                available_files = [f.replace('.txt', '') for f in self.ATMOSPHERIC_GAS_FILES]
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Archivo '{attenuation_file}.txt' no encontrado. Disponibles: {available_files}"
+                )
+            
+            # Cargar los datos del archivo
+            trans_array = np.loadtxt(file_path)
+            
+            # Extraer columnas: [wavelength, transmittance, attenuation]
+            file_wavelengths = trans_array[:, 0]  # Primera columna: longitudes de onda
+            file_attenuation = trans_array[:, 2]  # Tercera columna: atenuación
+            
+            # Encontrar los índices más cercanos para cada longitud de onda deseada
+            attenuation_values = []
+            
+            for target_wavelength in wavelengths:
+                # Encontrar el índice del valor más cercano
+                closest_index = np.argmin(np.abs(file_wavelengths - target_wavelength))
+                attenuation_values.append(file_attenuation[closest_index])
+            
+            attenuation_array = np.array(attenuation_values)
+            
+            self.logger.info(f"Atenuación obtenida para {len(wavelengths)} longitudes de onda usando '{attenuation_file}.txt'")
+            
+            return attenuation_array
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            self.logger.error(f"Error obteniendo atenuación de '{attenuation_file}': {e}")
+            raise HTTPException(status_code=500, detail=f"Error al procesar archivo de atenuación: {e}")
+
+    
     
