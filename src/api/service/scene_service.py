@@ -175,7 +175,22 @@ class SceneService:
             if scene_dict:
                 self.scene_parser.save_dict_as_xml(scene_dict, thermal_xml)
 
-
+    def prepare_depth_scene(self, scene_path: str):
+        """
+        Prepara la escena para la renderización en profundidad.
+        """
+        if os.path.exists(scene_path):
+            depth_xml = os.path.join(os.path.dirname(scene_path), "scene_depth.xml")
+            shutil.copyfile(scene_path, depth_xml)
+            scene_dict = self.get_dict_scene(depth_xml)
+            if scene_dict and "scene" in scene_dict:
+                # Modificar la escena según sea necesario para la renderización en profundidad
+                scene_dict["scene"]["integrator"] = {
+                    "@type": "depth",
+                }
+            
+            if scene_dict:
+                self.scene_parser.save_dict_as_xml(scene_dict, depth_xml)
 
     def get_dict_scene(self, scene_xml_path: str):
         """

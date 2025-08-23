@@ -21,6 +21,14 @@ async def prepare_thermal_scene() -> bool:
     scene_service.prepare_thermal_scene(SCENE_DIR)
     return True
 
+@scene_router.post("/prepare_depth_scene")
+async def prepare_depth_scene() -> bool:
+    """
+    Prepara la escena para la renderización en profundidad.
+    """
+    scene_service.prepare_depth_scene(SCENE_DIR)
+    return True
+
 @scene_router.post("/load_scene")
 async def load_scene(file: UploadFile = File(...)) -> FileResponse:    
     scene_path = scene_service.load_scene(file)
