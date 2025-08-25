@@ -356,7 +356,7 @@ class ObjectUtils:
         Encuentra los valores más cercanos en el archivo de atenuación.
         
         Args:
-            wavelengths (np.ndarray): Array con las longitudes de onda deseadas en micrómetros
+            wavelengths (np.ndarray): Array con las longitudes de onda deseadas en nanometros
             attenuation_file (str): Nombre del archivo de atenuación (sin extensión)
             
         Returns:
@@ -365,6 +365,9 @@ class ObjectUtils:
         Raises:
             HTTPException: Si el archivo no existe o hay error en el procesamiento
         """
+        # Convertir longitudes de onda de nanómetros a micrómetros
+        wavelengths_um = wavelengths / 1000.0
+
         try:
             # Construir la ruta del archivo
             file_path = f"{self.REFERENCE_DATA_BASE_PATH}/{attenuation_file}.txt"
@@ -387,14 +390,14 @@ class ObjectUtils:
             # Encontrar los índices más cercanos para cada longitud de onda deseada
             attenuation_values = []
             
-            for target_wavelength in wavelengths:
+            for target_wavelength in wavelengths_um:
                 # Encontrar el índice del valor más cercano
                 closest_index = np.argmin(np.abs(file_wavelengths - target_wavelength))
                 attenuation_values.append(file_attenuation[closest_index])
             
             attenuation_array = np.array(attenuation_values)
             
-            self.logger.info(f"Atenuación obtenida para {len(wavelengths)} longitudes de onda usando '{attenuation_file}.txt'")
+            self.logger.info(f"Atenuación obtenida para {len(wavelengths_um)} longitudes de onda usando '{attenuation_file}.txt'")
             
             return attenuation_array
             
