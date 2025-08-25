@@ -140,7 +140,7 @@ class SceneService:
                 if isinstance(shapes, list):
                     for i, shape in enumerate(shapes):
                         # Temperatura aleatoria diferente para cada objeto
-                        temperature = random.randint(200, 400)
+                        temperature = random.randint(200, 200)
                         radiance = object_utils.blackbody_radiance_nm(wavelengths, temperature)
                         emission = radiance * metarial
                         dict_emission = object_utils.create_spectral_emitter(wavelengths, emission)
@@ -148,7 +148,7 @@ class SceneService:
                         
                 elif isinstance(shapes, dict):
                     # Para un solo shape
-                    temperature = random.randint(200, 400)
+                    temperature = random.randint(200, 200)
                     radiance = object_utils.blackbody_radiance_nm(wavelengths, temperature)
                     emission = radiance * metarial
                     dict_emission = object_utils.create_spectral_emitter(wavelengths, emission)

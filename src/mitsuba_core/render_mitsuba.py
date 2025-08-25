@@ -69,3 +69,23 @@ class RenderDepth():
         np.save(output_path, grayscale_channel)
         
         return output_path
+
+class RenderThermal():
+
+    def __init__(self):
+        import mitsuba as mi
+        mi.set_variant('cuda_ad_spectral')
+        self.mi = mi
+
+    def render(self, scene_path: str, out_dir: str) -> str:
+        scene = self.mi.load_file(scene_path)
+        image = self.mi.render(scene)
+
+        # Convertir la imagen a numpy array
+        image_array = np.array(image)
+
+        # Guardar toda la información (todos los canales)
+        output_path = os.path.join(out_dir, "thermal.npy")
+        np.save(output_path, image_array)
+
+        return output_path

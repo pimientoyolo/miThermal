@@ -23,6 +23,14 @@ async def prepare_thermal_scene() -> bool:
     scene_service.prepare_thermal_scene(SCENE_DIR)
     return True
 
+@scene_router.post("/prepare_depth_scene")
+async def prepare_depth_scene() -> bool:
+    """
+    Copia scene.xml a scene_depth.xml usando el servicio SceneService.
+    """
+    scene_service.prepare_depth_scene(SCENE_DIR)
+    return True
+
 @scene_router.post("/load_scene")
 async def load_scene(file: UploadFile = File(...)) -> FileResponse:    
     scene_path = scene_service.load_scene(file)
@@ -38,6 +46,11 @@ async def load_scene_advanced() -> FileResponse:
 async def render_scene_depth() -> FileResponse:
     image_path = render_service.render_depth_image(scenes_directory + "/scene_depth.xml")
     return StreamingResponse(open(image_path, "rb"), media_type="application/octet-stream", headers={"Content-Disposition": "attachment; filename=depth.npy"})
+
+@scene_router.get("/render_scene_thermal")
+async def render_scene_thermal() -> FileResponse:
+    image_path = render_service.render_thermal_image(scenes_directory + "/scene_thermal.xml")
+    return StreamingResponse(open(image_path, "rb"), media_type="application/octet-stream", headers={"Content-Disposition": "attachment; filename=thermal.npy"})
 
 @scene_router.get("/has_loaded_scene")
 async def has_loaded_scene() -> bool:
