@@ -12,6 +12,15 @@ scene_router = APIRouter(
     tags=["scene"]
 )
 
+
+@scene_router.post("/prepare_thermal_scene")
+async def prepare_thermal_scene() -> bool:
+    """
+    Copia scene.xml a scene_thermal.xml usando el servicio SceneService.
+    """
+    scene_service.prepare_thermal_scene(SCENE_DIR)
+    return True
+
 @scene_router.post("/load_scene")
 async def load_scene(file: UploadFile = File(...)) -> FileResponse:    
     scene_path = scene_service.load_scene(file)
@@ -26,3 +35,4 @@ async def load_scene_advanced() -> FileResponse:
 @scene_router.get("/has_loaded_scene")
 async def has_loaded_scene() -> bool:
     return scene_service.has_loaded_scene(SCENE_DIR)
+
