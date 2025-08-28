@@ -356,7 +356,11 @@ class ObjectUtils:
         Encuentra los valores más cercanos en el archivo de atenuación.
         
         Args:
+<<<<<<< HEAD
             wavelengths (np.ndarray): Array con las longitudes de onda deseadas en nanometros
+=======
+            wavelengths (np.ndarray): Array con las longitudes de onda deseadas en micrómetros
+>>>>>>> main
             attenuation_file (str): Nombre del archivo de atenuación (sin extensión)
             
         Returns:
