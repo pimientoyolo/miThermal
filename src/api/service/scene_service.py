@@ -160,6 +160,13 @@ class SceneService:
         num_bands = config_scene["num_bands"]
         wavelengths = config_scene["wavelengths"]
 
+        # Validar que num_bands coincida con la longitud de wavelengths
+        if len(wavelengths) != num_bands:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"El número de bandas ({num_bands}) no coincide con las longitudes ({len(wavelengths)})"
+            )
+
         if os.path.exists(scene_path):
             thermal_xml = os.path.join(os.path.dirname(scene_path), "scene_thermal.xml")
             shutil.copyfile(scene_path, thermal_xml)
@@ -217,6 +224,13 @@ class SceneService:
                         emission = radiance * material
                         dict_emission = object_utils.create_spectral_emitter(wavelengths, emission)
                         shape["emitter"] = dict_emission
+
+                        # Validar que la longitud del material coincida con el número de bandas
+                        if len(material) != num_bands:
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"La firma espectral ({id}) no coincide con el número de bandas ({num_bands})"
+                            )
                         
                 elif isinstance(shapes, dict):
                     # Para un solo shape
@@ -228,10 +242,23 @@ class SceneService:
                     dict_emission = object_utils.create_spectral_emitter(wavelengths, emission)
                     shape["emitter"] = dict_emission
 
+                    if len(material) != num_bands:
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"La firma espectral ({id}) no coincide con el número de bandas ({num_bands})"
+                            )
+
             # Agregar medio homogéneo con coeficiente de extinción espectral
             # Crear valores de sigma_t para el medium (coeficiente de extinción)
             # Valores típicos para niebla en infrarrojo lejano
             sigma_t_values = config_scene["air"]["sigma_t"] # air values
+
+            # Validar que sigma_t_values tenga la longitud correcta
+            if len(sigma_t_values) != num_bands:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Los valores de sigma_t ({len(sigma_t_values)}) no coinciden con el número de bandas ({num_bands})"
+                )
             
             # Crear el medium usando la función de object_utils
             medium_dict = object_utils.create_homogeneous_medium(
