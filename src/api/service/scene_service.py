@@ -63,6 +63,74 @@ class SceneService:
         new_xml_path = os.path.join(out_dir, "scene.xml")
         os.rename(xml_file, new_xml_path)
 
+        config_scene = {}
+        num_bands = 10
+        T = 300
+        parent_dir = os.path.dirname(new_xml_path)
+
+        # get material
+        material = object_utils.get_material_signature("stone")
+        indices = np.linspace(0, len(material) - 1, num_bands, dtype=int)
+        metarial = material[indices]
+
+        scene_dict = self.get_dict_scene(new_xml_path)
+
+        # revisar si se encuentran los archivos de los objetos y crear firmas
+        if scene_dict and "scene" in scene_dict and "shape" in scene_dict["scene"]:
+            shapes = scene_dict["scene"]["shape"]
+            if isinstance(shapes, list):
+                for shape in shapes:
+                    id = shape["string"]["@value"]
+                    obj = {}
+                    obj["emissivity"] = metarial.tolist()
+                    obj["temperature"] = T
+                    config_scene[id] = obj
+
+                    dir_file = os.path.join(parent_dir, id)
+                    if not os.path.exists(dir_file):
+                        raise HTTPException(status_code=400, detail=f"No se encontró el archivo del objeto: {id}")
+
+                    # Cambiar extensión del id para archivo .npy
+                    file_name = os.path.splitext(id)[0] + ".npy"
+                    npy_path = os.path.join(parent_dir, file_name)
+                    np.save(npy_path, metarial)
+            elif isinstance(shapes, dict):
+                id = shapes["string"]["@value"]
+                obj = {}
+                obj["id"] = id
+                obj["emissivity"] = metarial.tolist()
+                obj["temperature"] = T
+                config_scene["objects"].append(obj)
+
+                dir_file = os.path.join(parent_dir, id)
+
+                if not os.path.exists(dir_file):
+                    raise HTTPException(status_code=400, detail=f"No se encontró el archivo del objeto: {id}")
+
+                # Cambiar extensión del id para archivo .npy
+                file_name = os.path.splitext(id)[0] + ".npy"
+                npy_path = os.path.join(parent_dir, file_name)
+                np.save(npy_path, metarial)
+
+        # air values
+        T_air = 280
+        wavelengths = np.linspace(8000, 14000, num_bands)
+        sigma_t_values = object_utils.get_attenuation_for_wavelengths(wavelengths)
+
+        config_scene["air"] = {
+            "temperature": T_air,
+            "sigma_t": sigma_t_values.tolist()
+        }
+
+        config_scene["num_bands"] = num_bands
+        config_scene["wavelengths"] = wavelengths.tolist()
+
+        # guardar config_scene como JSON
+        config_path = os.path.join(parent_dir, "config_scene.json")
+        with open(config_path, 'w') as f:
+            json.dump(config_scene, f, indent=4)
+
+
         return new_xml_path
 
     def has_loaded_scene(self, scene_dir: str) -> bool:
@@ -81,10 +149,23 @@ class SceneService:
         """
         Crea una escena térmica básica copiando scene.xml a scene_thermal.xml y cambiando el tipo de integrador a 'specfilm'.
         """
-        num_bands = 10 
-        w_min = 8000
-        w_max = 14000
-        wavelengths = np.linspace(w_min, w_max, num_bands)
+        # Cargar configuración JSON desde el directorio de la escena
+        config_path = os.path.join(os.path.dirname(scene_path), "config_scene.json")
+        if not os.path.exists(config_path):
+            raise HTTPException(status_code=400, detail="No se encontró el archivo config_scene.json")
+
+        with open(config_path, 'r') as f:
+            config_scene = json.load(f)
+
+        num_bands = config_scene["num_bands"]
+        wavelengths = config_scene["wavelengths"]
+
+        # Validar que num_bands coincida con la longitud de wavelengths
+        if len(wavelengths) != num_bands:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"El número de bandas ({num_bands}) no coincide con las longitudes ({len(wavelengths)})"
+            )
 
         if os.path.exists(scene_path):
             thermal_xml = os.path.join(os.path.dirname(scene_path), "scene_thermal.xml")
@@ -131,33 +212,53 @@ class SceneService:
                 elif isinstance(shapes, dict):
                     if "ref" in shapes:
                         del shapes["ref"]
-                # get material
-                material = object_utils.get_material_signature("stone")
-                indices = np.linspace(0, len(material) - 1, num_bands, dtype=int)
-                metarial = material[indices]
 
                 # Agregar emisor diferente a cada shape
                 if isinstance(shapes, list):
                     for i, shape in enumerate(shapes):
-                        # Temperatura aleatoria diferente para cada objeto
-                        temperature = random.randint(200, 400)
+                        # para cada objeto
+                        id = shape["string"]["@value"]
+                        material = config_scene[id]["emissivity"]
+                        temperature = config_scene[id]["temperature"]
                         radiance = object_utils.blackbody_radiance_nm(wavelengths, temperature)
-                        emission = radiance * metarial
+                        emission = radiance * material
                         dict_emission = object_utils.create_spectral_emitter(wavelengths, emission)
                         shape["emitter"] = dict_emission
+
+                        # Validar que la longitud del material coincida con el número de bandas
+                        if len(material) != num_bands:
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"La firma espectral ({id}) no coincide con el número de bandas ({num_bands})"
+                            )
                         
                 elif isinstance(shapes, dict):
                     # Para un solo shape
-                    temperature = random.randint(200, 400)
+                    id = shape["string"]["@value"]
+                    material = config_scene[id]["emissivity"]
+                    temperature = config_scene[id]["temperature"]
                     radiance = object_utils.blackbody_radiance_nm(wavelengths, temperature)
-                    emission = radiance * metarial
+                    emission = radiance * material
                     dict_emission = object_utils.create_spectral_emitter(wavelengths, emission)
-                    shapes["emitter"] = dict_emission
+                    shape["emitter"] = dict_emission
+
+                    if len(material) != num_bands:
+                            raise HTTPException(
+                                status_code=400,
+                                detail=f"La firma espectral ({id}) no coincide con el número de bandas ({num_bands})"
+                            )
 
             # Agregar medio homogéneo con coeficiente de extinción espectral
             # Crear valores de sigma_t para el medium (coeficiente de extinción)
             # Valores típicos para niebla en infrarrojo lejano
-            sigma_t_values = object_utils.get_attenuation_for_wavelengths(wavelengths) # air values
+            sigma_t_values = config_scene["air"]["sigma_t"] # air values
+
+            # Validar que sigma_t_values tenga la longitud correcta
+            if len(sigma_t_values) != num_bands:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Los valores de sigma_t ({len(sigma_t_values)}) no coinciden con el número de bandas ({num_bands})"
+                )
             
             # Crear el medium usando la función de object_utils
             medium_dict = object_utils.create_homogeneous_medium(
@@ -175,7 +276,22 @@ class SceneService:
             if scene_dict:
                 self.scene_parser.save_dict_as_xml(scene_dict, thermal_xml)
 
-
+    def prepare_depth_scene(self, scene_path: str):
+        """
+        Prepara la escena para la renderización en profundidad.
+        """
+        if os.path.exists(scene_path):
+            depth_xml = os.path.join(os.path.dirname(scene_path), "scene_depth.xml")
+            shutil.copyfile(scene_path, depth_xml)
+            scene_dict = self.get_dict_scene(depth_xml)
+            if scene_dict and "scene" in scene_dict:
+                # Modificar la escena según sea necesario para la renderización en profundidad
+                scene_dict["scene"]["integrator"] = {
+                    "@type": "depth",
+                }
+            
+            if scene_dict:
+                self.scene_parser.save_dict_as_xml(scene_dict, depth_xml)
 
     def get_dict_scene(self, scene_xml_path: str):
         """
