@@ -1,1 +1,6 @@
 uv.lock linguist-generated=true -diff
+*.ply binary
+*.npy binary
+*.obj binary
+*.blend binary
+assets/**/*.txt binary -diff
