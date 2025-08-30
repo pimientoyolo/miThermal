@@ -9,7 +9,7 @@ import gradio as gr
 
 from .api_client import MitsubaAPIClient
 from .state import viewer_state
-from ..components import build_upload_section, build_object_viewer_section, format_object_label
+from ..components import build_upload_section, build_object_viewer_section
 
 logger = logging.getLogger(__name__)
 _api_client: MitsubaAPIClient | None = None
@@ -21,9 +21,13 @@ def get_client() -> MitsubaAPIClient:
     return _api_client
 
 def upload_zip_file(file_obj):
+    """Sube ZIP, obtiene render y rellena dropdown con /object/suggest_objects.
+
+    Returns (render_image, scene_info, object_selector_update, scene_json_data)
+    """
     client = get_client()
     if file_obj is None:
-        return None, "❌ No se seleccionó archivo", gr.Dropdown(choices=[]), {}
+        return None, "❌ No se seleccionó archivo", gr.update(choices=[], value=None), []
     try:
         result = client.upload_scene(file_obj.name)
         pil_image = None
@@ -32,50 +36,38 @@ def upload_zip_file(file_obj):
                 pil_image = Image.open(BytesIO(base64.b64decode(result["image_base64"])))
             except Exception as e:
                 logger.error(f"Decoding image error: {e}")
-        objects = []
-        data = client.get_objects()
-        if data.get("status") == "success":
-            objects = data.get("objects", [])
+        # Sugerencias de objetos
+        suggestions = client.suggest_objects() or []
         viewer_state.object_id_mapping = {}
         choices = []
-        for obj in objects:
-            label = format_object_label(obj)
+        for s in suggestions:
+            label = s.get('suggest') or s.get('id')
             choices.append(label)
-            viewer_state.object_id_mapping[label] = obj['id']
-        if pil_image is not None:
-            info = f"✅ Render recibido. Objetos: {len(objects)}"
-        elif result.get("status") == "success":
-            info = f"✅ Escena cargada (sin render). Objetos: {len(objects)}"
-        else:
-            return None, f"❌ Error: {result.get('detail','Error desconocido')}", gr.Dropdown(choices=[]), {}
-        return pil_image, info, gr.Dropdown(choices=choices), objects
+            viewer_state.object_id_mapping[label] = s['id']
+        info = f"✅ Escena cargada. Objetos sugeridos: {len(suggestions)}"
+        return pil_image, info, gr.update(choices=choices, value=None), suggestions
     except Exception as e:
         logger.error(f"upload_zip_file error: {e}")
-        return None, f"❌ Error: {e}", gr.Dropdown(choices=[]), {}
+        return None, f"❌ Error: {e}", gr.update(choices=[], value=None), []
 
 def load_server_scene(scene_path: str):
+    """(Futuro) Carga desde ruta servidor - placeholder (endpoint actual no existe)."""
+    return None, "⚠️ No implementado con endpoints actuales", gr.update(choices=[], value=None), []
+
+def render_scene_rgb():
+    """Fuerza un render y devuelve imagen actualizada sin cambiar lista objetos."""
     client = get_client()
-    if not scene_path or not scene_path.strip():
-        return None, "❌ Ingrese una ruta válida", gr.Dropdown(choices=[]), {}
     try:
-        result = client.load_scene(scene_path.strip())
-        if result.get("status") != "success":
-            return None, f"❌ Error cargando escena: {result.get('detail','Error desconocido')}", gr.Dropdown(choices=[]), {}
-        data = client.get_objects()
-        if data.get("status") != "success":
-            return None, f"❌ Error obteniendo objetos: {data.get('detail','Error desconocido')}", gr.Dropdown(choices=[]), {}
-        objects = data.get("objects", [])
-        viewer_state.object_id_mapping = {}
-        choices = []
-        for obj in objects:
-            label = format_object_label(obj)
-            choices.append(label)
-            viewer_state.object_id_mapping[label] = obj['id']
-        info = f"✅ Escena cargada. Objetos: {len(objects)}"
-        return None, info, gr.Dropdown(choices=choices), objects
+        result = client.render_scene_rgb()
+        if result.get("status") == "ok" and result.get("image_base64"):
+            pil_image = Image.open(BytesIO(base64.b64decode(result["image_base64"])))
+            info = "🖼️ Render actualizado"
+            # No tocamos dropdown ni json -> devolver None para esos outputs gestionados
+            return pil_image, info
+        return None, "❌ Error render"
     except Exception as e:
-        logger.error(f"load_server_scene error: {e}")
-        return None, f"❌ Error: {e}", gr.Dropdown(choices=[]), {}
+        logger.error(f"render_scene_rgb error: {e}")
+        return None, f"❌ Error: {e}"
 
 def view_object_3d(choice: str):
     if not choice:
@@ -85,31 +77,21 @@ def view_object_3d(choice: str):
         return None, "❌ ID de objeto no encontrado"
     client = get_client()
     try:
-        data = client.get_object(oid)
-        if data.get("status") != "success":
-            return None, f"❌ Error obteniendo objeto: {data.get('detail','Error desconocido')}"
-        obj = data.get("object", {})
         tmp_dir = tempfile.mkdtemp()
-        tmp_base = Path(tmp_dir) / oid
+        # Usar solo el nombre del archivo para evitar problemas con subcarpetas en temp
+        tmp_base = Path(tmp_dir) / Path(oid).name
         downloaded = client.download_object(oid, str(tmp_base))
         if not downloaded:
-            return None, f"❌ Error descargando objeto {oid}"
+            return None, f"❌ Error descargando objeto: {oid}"
         p = Path(downloaded)
         ext = p.suffix.lower()
         lines = [
-            f"🎯 Objeto: {obj['id']}",
-            f"📦 Tipo: {obj['type']}",
-            f"📄 Archivo: {obj.get('filename','')} ({ext})",
+            f"🎯 Objeto: {oid}",
+            f"📄 Archivo: {p.name} ({ext})",
             f"💾 Tamaño: {p.stat().st_size} bytes",
         ]
-        if obj.get('transform'):
-            lines.append(f"🔄 Transformaciones: {len(obj['transform'])}")
-        if obj.get('has_material'):
-            lines.append(f"🎨 Material: {obj['bsdf'].get('type','?')}")
-        if obj.get('has_emission'):
-            lines.append(f"💡 Emisor: {obj['emitter'].get('type','?')}")
         if ext == '.ply':
-            lines.append("⚠️ PLY detectado. Mejor convertir a OBJ si es binario.")
+            lines.append("⚠️ PLY detectado (se convierte internamente si es necesario).")
         return str(p), "\n".join(lines)
     except Exception as e:
         logger.error(f"view_object_3d error: {e}")
@@ -136,6 +118,12 @@ def create_mitsuba_viewer_interface():
                 object_section['object_selector'],
                 upload_section['scene_json'],
             ]
+        )
+        # Botón de render independiente
+        upload_section['render_btn'].click(
+            fn=render_scene_rgb,
+            inputs=[],
+            outputs=[upload_section['render_image'], upload_section['scene_info']]
         )
         if upload_section.get('load_btn') and upload_section.get('server_path'):
             upload_section['load_btn'].click(

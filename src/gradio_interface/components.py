@@ -39,6 +39,7 @@ def build_upload_section(show_server_path: bool = False) -> Dict[str, gr.compone
 		with gr.Column(scale=1):
 			zip_file = gr.File(label="Escena Mitsuba (.zip)", file_types=[".zip"])
 			upload_btn = gr.Button("📤 Subir Escena", variant="primary")
+			render_btn = gr.Button("🖼️ Render RGB", variant="secondary")
 			server_path = None
 			load_btn = None
 			if show_server_path:
@@ -51,6 +52,7 @@ def build_upload_section(show_server_path: bool = False) -> Dict[str, gr.compone
 	return {
 		"zip_file": zip_file,
 		"upload_btn": upload_btn,
+		"render_btn": render_btn,
 		"server_path": server_path,
 		"load_btn": load_btn,
 		"scene_info": scene_info,

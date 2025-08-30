@@ -9,13 +9,10 @@ import glob
 import zipfile
 import shutil
 import json
-from fastapi import UploadFile, HTTPException
-from ...config import get_output_path
 from ...mitsuba_core.object_utils import ObjectUtils
 from ...mitsuba_core.scene_parser import SceneParser
 from ...mitsuba_core.sensor_utils import create_specfilm_bands
 import numpy as np
-import random
 
 object_utils = ObjectUtils()
 
@@ -46,15 +43,12 @@ class SceneService:
                 except OSError as e:
                     self.logger.warning(f"Error al eliminar {item_path}: {e}")
         
-        # guardar archivo zip
         with open(f"{out_dir}/scene.zip", "wb") as buffer:
             buffer.write(file.file.read())
 
-        # descomprimir archivo zip
         with zipfile.ZipFile(f"{out_dir}/scene.zip", 'r') as zip_ref:
             zip_ref.extractall(out_dir)
 
-        # buscar y renombrar .xml
         xml_files = glob.glob(os.path.join(out_dir, "*.xml"))
         if len(xml_files) != 1:
             raise HTTPException(status_code=400, detail="Debe haber exactamente un archivo XML en el ZIP")
@@ -64,6 +58,7 @@ class SceneService:
         os.rename(xml_file, new_xml_path)
 
         config_scene = {}
+        config_scene["objects"] = []
         num_bands = 10
         T = 300
         parent_dir = os.path.dirname(new_xml_path)
@@ -78,39 +73,57 @@ class SceneService:
         # revisar si se encuentran los archivos de los objetos y crear firmas
         if scene_dict and "scene" in scene_dict and "shape" in scene_dict["scene"]:
             shapes = scene_dict["scene"]["shape"]
-            if isinstance(shapes, list):
-                for shape in shapes:
-                    id = shape["string"]["@value"]
-                    obj = {}
-                    obj["emissivity"] = metarial.tolist()
-                    obj["temperature"] = T
-                    config_scene[id] = obj
 
-                    dir_file = os.path.join(parent_dir, id)
+            # Normalizar shapes a lista
+            if isinstance(shapes, dict):
+                shapes = [shapes]
+
+            for shape in shapes:
+                obj_id = shape.get("@id", "unnamed")
+                filename = None
+
+                if "string" in shape:
+                    string_node = shape["string"]
+
+                    if isinstance(string_node, dict):
+                        filename = string_node.get("@value")
+                    elif isinstance(string_node, list):
+                        # buscar el que tenga name="filename"
+                        for s in string_node:
+                            if s.get("@name") == "filename":
+                                filename = s.get("@value")
+                                break
+
+                if filename:
+                    # Caso con archivo externo
+                    obj = {
+                        "emissivity": metarial.tolist(),
+                        "temperature": T,
+                        "filename": filename
+                    }
+                    config_scene[obj_id] = obj
+
+                    dir_file = os.path.join(parent_dir, filename)
                     if not os.path.exists(dir_file):
-                        raise HTTPException(status_code=400, detail=f"No se encontró el archivo del objeto: {id}")
+                        raise HTTPException(status_code=400, detail=f"No se encontró el archivo del objeto: {filename}")
 
-                    # Cambiar extensión del id para archivo .npy
-                    file_name = os.path.splitext(id)[0] + ".npy"
+                    # Guardar firma como .npy
+                    file_name = os.path.splitext(obj_id)[0] + ".npy"
                     npy_path = os.path.join(parent_dir, file_name)
                     np.save(npy_path, metarial)
-            elif isinstance(shapes, dict):
-                id = shapes["string"]["@value"]
-                obj = {}
-                obj["id"] = id
-                obj["emissivity"] = metarial.tolist()
-                obj["temperature"] = T
-                config_scene["objects"].append(obj)
 
-                dir_file = os.path.join(parent_dir, id)
-
-                if not os.path.exists(dir_file):
-                    raise HTTPException(status_code=400, detail=f"No se encontró el archivo del objeto: {id}")
-
-                # Cambiar extensión del id para archivo .npy
-                file_name = os.path.splitext(id)[0] + ".npy"
-                npy_path = os.path.join(parent_dir, file_name)
-                np.save(npy_path, metarial)
+                else:
+                    # Caso procedural (ej: sphere, cube, etc.)
+                    obj = {
+                        "emissivity": metarial.tolist(),
+                        "temperature": T,
+                        "type": shape.get("@type")
+                    }
+                    config_scene[obj_id] = obj
+                    # En este caso no se necesita archivo .obj, pero igualmente guardamos .npy
+                    file_name = os.path.splitext(obj_id)[0] + ".npy"
+                    npy_path = os.path.join(parent_dir, file_name)
+                    np.save(npy_path, metarial)
 
         # air values
         T_air = 280
@@ -130,8 +143,8 @@ class SceneService:
         with open(config_path, 'w') as f:
             json.dump(config_scene, f, indent=4)
 
-
         return new_xml_path
+
 
     def has_loaded_scene(self, scene_dir: str) -> bool:
         """
