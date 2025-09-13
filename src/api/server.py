@@ -13,6 +13,7 @@ from ..config import get_config, get_output_path
 # Routers
 from src.api.controller.scene_controller import scene_router
 from src.api.controller.obj_controller import obj_router
+from src.api.controller.render_controller import render_router
 
 
 # Configuración
@@ -49,4 +50,8 @@ app.include_router(
 
 app.include_router(
     obj_router
+)
+
+app.include_router(
+    render_router
 )

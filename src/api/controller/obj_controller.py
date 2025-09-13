@@ -17,12 +17,12 @@ obj_router = APIRouter(
     tags=["objects"]
 )
 
-@obj_router.get("/suggest_objects")
+@obj_router.get("/suggest")
 async def suggest_objects() -> list[SuggestDTO]:
     objects = object_utils.get_suggested_object(SCENE_DIR)
     return objects
 
-@obj_router.get("/object")
-async def get_obj(id: str) -> FileResponse:
-    response = object_service.get_object(str(get_output_path("static") / id))
+@obj_router.get("/{object_id}")
+async def get_obj(object_id: str) -> FileResponse:
+    response = object_service.get_object(str(get_output_path("static") / object_id))
     return response
