@@ -2,6 +2,7 @@
 Configuración global del proyecto
 """
 
+import json
 from pathlib import Path
 from typing import Dict, Any
 
@@ -22,7 +23,23 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 (OUTPUT_DIR / "exports").mkdir(exist_ok=True)
 (OUTPUT_DIR / "static").mkdir(exist_ok=True)
 
+# scenes dir
 SCENE_DIR = str(OUTPUT_DIR / "static" / "scene.xml")
+SCENE_THERMAL_DIR = str(OUTPUT_DIR / "static" / "scene_thermal.xml")
+SCENE_DEPTH_DIR = str(OUTPUT_DIR / "static" / "scene_depth.xml")
+SCENE_BLACKBODY_AIR = str(OUTPUT_DIR / "static" / "scene_blackbody_air.xml")
+SCENE_TRANSMITTANCE_BLACKBODY_AIR = str(OUTPUT_DIR / "static" / "scene_transmittance_blackbody_air.xml")
+
+## OTHER FILES
+OUTPUT_STATIC_DIR = str(OUTPUT_DIR / "static")
+SCENE_ZIP = str(OUTPUT_DIR / "static" / "scene.zip")
+CONFIG_SCENE = str(CONFIG_DIR / "config_scene.json")
+
+# resultados
+OUTPUT_STATIC_RESULT_DIR = OUTPUT_DIR / "static" / "result"
+IMAGE_DIR = str(OUTPUT_STATIC_RESULT_DIR / "rgb.png")
+DEPTH_DIR = str(OUTPUT_STATIC_RESULT_DIR / "depth.npy")
+THERMAL_DIR = str(OUTPUT_STATIC_RESULT_DIR / "thermal.npy")
 
 # Configuración de Mitsuba
 MITSUBA_CONFIG = {
@@ -117,3 +134,8 @@ def get_output_path(subfolder: str = "") -> Path:
     path = OUTPUT_DIR / subfolder if subfolder else OUTPUT_DIR
     path.mkdir(exist_ok=True)
     return path
+
+def get_config_scene_dict() -> dict:
+    with open(CONFIG_SCENE, 'r') as f:
+        config_scene = json.load(f)
+    return config_scene

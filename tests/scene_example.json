@@ -1,0 +1,480 @@
+{
+  "scene": {
+    "@version": "2.1.0",
+    "default": [
+      {
+        "@name": "spp",
+        "@value": "4096"
+      },
+      {
+        "@name": "resx",
+        "@value": "1920"
+      },
+      {
+        "@name": "resy",
+        "@value": "1080"
+      }
+    ],
+    "integrator": {
+      "@type": "path",
+      "@id": "elm__0",
+      "@name": "elm__0",
+      "integer": {
+        "@name": "max_depth",
+        "@value": "12"
+      }
+    },
+    "sensor": {
+      "@type": "perspective",
+      "@id": "elm__4",
+      "@name": "elm__4",
+      "string": {
+        "@name": "fov_axis",
+        "@value": "x"
+      },
+      "float": [
+        {
+          "@name": "fov",
+          "@value": "39.597755"
+        },
+        {
+          "@name": "principal_point_offset_x",
+          "@value": "0.000000"
+        },
+        {
+          "@name": "principal_point_offset_y",
+          "@value": "-0.000000"
+        },
+        {
+          "@name": "near_clip",
+          "@value": "0.100000"
+        },
+        {
+          "@name": "far_clip",
+          "@value": "100.000000"
+        }
+      ],
+      "transform": {
+        "@name": "to_world",
+        "rotate": [
+          {
+            "@x": "1",
+            "@angle": "-153.5592908827048"
+          },
+          {
+            "@y": "1",
+            "@angle": "-46.691938147394204"
+          },
+          {
+            "@z": "1",
+            "@angle": "-179.999991348578"
+          }
+        ],
+        "translate": {
+          "@value": "7.358891 4.958309 6.925791"
+        }
+      },
+      "sampler": {
+        "@type": "independent",
+        "@name": "sampler",
+        "integer": {
+          "@name": "sample_count",
+          "@value": "$spp"
+        }
+      },
+      "film": {
+        "@type": "hdrfilm",
+        "@name": "film",
+        "integer": [
+          {
+            "@name": "width",
+            "@value": "$resx"
+          },
+          {
+            "@name": "height",
+            "@value": "$resy"
+          }
+        ]
+      }
+    },
+    "bsdf": [
+      {
+        "@type": "twosided",
+        "@id": "mat-Material",
+        "@name": "mat-Material",
+        "bsdf": {
+          "@type": "principled",
+          "@name": "bsdf",
+          "rgb": {
+            "@value": "0.800000 0.800000 0.800000",
+            "@name": "base_color"
+          },
+          "float": [
+            {
+              "@name": "spec_tint",
+              "@value": "0.000000"
+            },
+            {
+              "@name": "spec_trans",
+              "@value": "0.000000"
+            },
+            {
+              "@name": "metallic",
+              "@value": "0.000000"
+            },
+            {
+              "@name": "anisotropic",
+              "@value": "0.000000"
+            },
+            {
+              "@name": "roughness",
+              "@value": "0.250000"
+            },
+            {
+              "@name": "sheen",
+              "@value": "0.000000"
+            },
+            {
+              "@name": "sheen_tint",
+              "@value": "0.500000"
+            },
+            {
+              "@name": "clearcoat",
+              "@value": "0.000000"
+            },
+            {
+              "@name": "clearcoat_gloss",
+              "@value": "0.000900"
+            },
+            {
+              "@name": "specular",
+              "@value": "0.500000"
+            }
+          ]
+        }
+      },
+      {
+        "@type": "twosided",
+        "@id": "mat-Material.001",
+        "@name": "mat-Material.001",
+        "bsdf": {
+          "@type": "principled",
+          "@name": "bsdf",
+          "rgb": {
+            "@value": "0.800000 0.800000 0.800000",
+            "@name": "base_color"
+          },
+          "float": [
+            {
+              "@name": "spec_tint",
+              "@value": "0.000000"
+            },
+            {
+              "@name": "spec_trans",
+              "@value": "0.000000"
+            },
+            {
+              "@name": "metallic",
+              "@value": "0.000000"
+            },
+            {
+              "@name": "anisotropic",
+              "@value": "0.000000"
+            },
+            {
+              "@name": "roughness",
+              "@value": "0.250000"
+            },
+            {
+              "@name": "sheen",
+              "@value": "0.000000"
+            },
+            {
+              "@name": "sheen_tint",
+              "@value": "0.500000"
+            },
+            {
+              "@name": "clearcoat",
+              "@value": "0.000000"
+            },
+            {
+              "@name": "clearcoat_gloss",
+              "@value": "0.000900"
+            },
+            {
+              "@name": "specular",
+              "@value": "0.500000"
+            }
+          ]
+        }
+      },
+      {
+        "@type": "twosided",
+        "@id": "mat-Material.002",
+        "@name": "mat-Material.002",
+        "bsdf": {
+          "@type": "principled",
+          "@name": "bsdf",
+          "rgb": {
+            "@value": "0.800000 0.800000 0.800000",
+            "@name": "base_color"
+          },
+          "float": [
+            {
+              "@name": "spec_tint",
+              "@value": "0.000000"
+            },
+            {
+              "@name": "spec_trans",
+              "@value": "0.000000"
+            },
+            {
+              "@name": "metallic",
+              "@value": "0.000000"
+            },
+            {
+              "@name": "anisotropic",
+              "@value": "0.000000"
+            },
+            {
+              "@name": "roughness",
+              "@value": "0.250000"
+            },
+            {
+              "@name": "sheen",
+              "@value": "0.000000"
+            },
+            {
+              "@name": "sheen_tint",
+              "@value": "0.500000"
+            },
+            {
+              "@name": "clearcoat",
+              "@value": "0.000000"
+            },
+            {
+              "@name": "clearcoat_gloss",
+              "@value": "0.000900"
+            },
+            {
+              "@name": "specular",
+              "@value": "0.500000"
+            }
+          ]
+        }
+      },
+      {
+        "@type": "twosided",
+        "@id": "mat-Material.003",
+        "@name": "mat-Material.003",
+        "bsdf": {
+          "@type": "principled",
+          "@name": "bsdf",
+          "rgb": {
+            "@value": "0.800000 0.800000 0.800000",
+            "@name": "base_color"
+          },
+          "float": [
+            {
+              "@name": "spec_tint",
+              "@value": "0.000000"
+            },
+            {
+              "@name": "spec_trans",
+              "@value": "0.000000"
+            },
+            {
+              "@name": "metallic",
+              "@value": "0.000000"
+            },
+            {
+              "@name": "anisotropic",
+              "@value": "0.000000"
+            },
+            {
+              "@name": "roughness",
+              "@value": "0.250000"
+            },
+            {
+              "@name": "sheen",
+              "@value": "0.000000"
+            },
+            {
+              "@name": "sheen_tint",
+              "@value": "0.500000"
+            },
+            {
+              "@name": "clearcoat",
+              "@value": "0.000000"
+            },
+            {
+              "@name": "clearcoat_gloss",
+              "@value": "0.000900"
+            },
+            {
+              "@name": "specular",
+              "@value": "0.500000"
+            }
+          ]
+        }
+      },
+      {
+        "@type": "twosided",
+        "@id": "mat-Material.004",
+        "@name": "mat-Material.004",
+        "bsdf": {
+          "@type": "principled",
+          "@name": "bsdf",
+          "rgb": {
+            "@value": "0.800000 0.800000 0.800000",
+            "@name": "base_color"
+          },
+          "float": [
+            {
+              "@name": "spec_tint",
+              "@value": "0.000000"
+            },
+            {
+              "@name": "spec_trans",
+              "@value": "0.000000"
+            },
+            {
+              "@name": "metallic",
+              "@value": "0.000000"
+            },
+            {
+              "@name": "anisotropic",
+              "@value": "0.000000"
+            },
+            {
+              "@name": "roughness",
+              "@value": "0.250000"
+            },
+            {
+              "@name": "sheen",
+              "@value": "0.000000"
+            },
+            {
+              "@name": "sheen_tint",
+              "@value": "0.500000"
+            },
+            {
+              "@name": "clearcoat",
+              "@value": "0.000000"
+            },
+            {
+              "@name": "clearcoat_gloss",
+              "@value": "0.000900"
+            },
+            {
+              "@name": "specular",
+              "@value": "0.500000"
+            }
+          ]
+        }
+      }
+    ],
+    "emitter": {
+      "@type": "point",
+      "@id": "elm__3",
+      "@name": "elm__3",
+      "point": {
+        "@name": "position",
+        "@x": "4.076245307922363",
+        "@y": "5.903861999511719",
+        "@z": "-1.0054539442062378"
+      },
+      "rgb": {
+        "@value": "79.577469 79.577469 79.577469",
+        "@name": "intensity"
+      }
+    },
+    "shape": [
+      {
+        "@type": "ply",
+        "@id": "elm__2",
+        "@name": "elm__2",
+        "string": {
+          "@name": "filename",
+          "@value": "meshes/Cube.ply"
+        },
+        "boolean": {
+          "@name": "face_normals",
+          "@value": "true"
+        },
+        "ref": {
+          "@id": "mat-Material",
+          "@name": "bsdf"
+        }
+      },
+      {
+        "@type": "ply",
+        "@id": "elm__6",
+        "@name": "elm__6",
+        "string": {
+          "@name": "filename",
+          "@value": "meshes/Cube_001.ply"
+        },
+        "boolean": {
+          "@name": "face_normals",
+          "@value": "true"
+        },
+        "ref": {
+          "@id": "mat-Material.001",
+          "@name": "bsdf"
+        }
+      },
+      {
+        "@type": "ply",
+        "@id": "elm__8",
+        "@name": "elm__8",
+        "string": {
+          "@name": "filename",
+          "@value": "meshes/Cube_002.ply"
+        },
+        "boolean": {
+          "@name": "face_normals",
+          "@value": "true"
+        },
+        "ref": {
+          "@id": "mat-Material.002",
+          "@name": "bsdf"
+        }
+      },
+      {
+        "@type": "ply",
+        "@id": "elm__10",
+        "@name": "elm__10",
+        "string": {
+          "@name": "filename",
+          "@value": "meshes/Cube_003.ply"
+        },
+        "boolean": {
+          "@name": "face_normals",
+          "@value": "true"
+        },
+        "ref": {
+          "@id": "mat-Material.003",
+          "@name": "bsdf"
+        }
+      },
+      {
+        "@type": "ply",
+        "@id": "elm__12",
+        "@name": "elm__12",
+        "string": {
+          "@name": "filename",
+          "@value": "meshes/Cube_004.ply"
+        },
+        "boolean": {
+          "@name": "face_normals",
+          "@value": "true"
+        },
+        "ref": {
+          "@id": "mat-Material.004",
+          "@name": "bsdf"
+        }
+      }
+    ]
+  }
+}

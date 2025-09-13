@@ -1,10 +1,10 @@
 import logging
 
-from src.config import get_output_path, MITSUBA_CONFIG
 import os
 import json
 import numpy as np
 from src.mitsuba_core.scene_parser import SceneParser
+import src.config as config
 
 
 class RenderRGB:
@@ -16,32 +16,19 @@ class RenderRGB:
         
         self.logger = logging.getLogger(__name__)
 
-    def render(self, scene_path: str, out_dir: str) -> str:
-
-        scene_dict = self.scene_parser.xml_to_dict(scene_path)
-
-        #spp
-        scene_dict['scene']['default'][0]['@value']= int(MITSUBA_CONFIG['spp']/2)
-
-        # guardar ahora como la scena de xml
-        with open(scene_path, 'w') as f:
-            f.write(self.scene_parser.dict_to_xml(scene_dict))
-
-        # guardar scene_dict como JSON
-        json_output_path = os.path.join(out_dir, "scene.json")
-        with open(json_output_path, 'w') as json_file:
-            json.dump(scene_dict, json_file, indent=2)
+    def render(self) -> str:
 
         # cargar escena con mitsuba
-        scene = self.mi.load_file(scene_path)
+        scene = self.mi.load_file(config.SCENE_DIR)
 
-        self.logger.info("Inicio de renderizado de escena de muestra")
+        # renderizar imagen
         image = self.mi.render(scene)
-        self.logger.info("Renderizado de escena completado")
 
-        output_path = os.path.join(out_dir, "rendered_image.jpg")
-        self.mi.util.write_bitmap(output_path, image)
-        return output_path
+        # crear carpeta si no existe
+        os.makedirs(config.OUTPUT_STATIC_RESULT_DIR, exist_ok=True)
+        
+        # guardar imagen
+        self.mi.util.write_bitmap(config.IMAGE_DIR, image)
 
 class RenderDepth():
     def __init__(self):
