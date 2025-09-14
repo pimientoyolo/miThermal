@@ -5,7 +5,8 @@ from fastapi import HTTPException
 
 from src.mitsuba_core.scenes import Scene
 from src.mitsuba_core.render_mitsuba import RenderRGB, RenderDepth, RenderThermal
-from src.config import get_output_path
+import src.config as config
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +16,7 @@ class RenderService:
         self.render_rgb = RenderRGB()
         self.render_depth = RenderDepth()
         self.render_thermal = RenderThermal()
-        self.output_path = get_output_path("static")
+        self.output_path = config.OUTPUT_DIR
 
     def _validate_scene_file(self, scene_path: str, scene_type: str) -> None:
         """
@@ -41,17 +42,32 @@ class RenderService:
                 detail=f"La ruta especificada no es un archivo válido: {scene_path}"
             )
 
-    def render_basic_scene(self, path_xml_scene: str) -> str:
-        self._validate_scene_file(path_xml_scene, "RGB")
-        path_image = self.render_rgb.render(scene_path=path_xml_scene, out_dir=self.output_path)
-        return path_image
+    def render_basic_scene(self):
+        self._validate_scene_file(config.SCENE_DIR, "RGB")
+        self.render_rgb.render()
 
-    def render_depth_image(self, path_xml_scene: str) -> str:
-        self._validate_scene_file(path_xml_scene, "depth")
-        path_image = self.render_depth.render(scene_path=path_xml_scene, out_dir=self.output_path)
-        return path_image
+    def render_depth_image(self):
+        self._validate_scene_file(config.SCENE_DEPTH_DIR, "depth")
+        self.render_depth.render()
 
-    def render_thermal_image(self, path_xml_scene: str) -> str:
-        self._validate_scene_file(path_xml_scene, "thermal")
-        path_image = self.render_thermal.render(scene_path=path_xml_scene, out_dir=self.output_path)
-        return path_image
+    def render_thermal_image(self):
+        self._validate_scene_file(config.SCENE_THERMAL_DIR, "thermal")
+        self.render_contribution_air()
+        self.render_thermal.render()
+
+    def render_blackbody_air_image(self):
+        self._validate_scene_file(config.SCENE_BLACKBODY_AIR, "blackbody air")
+        self.render_thermal.render_blackbody_air()
+
+    def render_transmittance_blackbody_air_image(self):
+        self._validate_scene_file(config.SCENE_TRANSMITTANCE_BLACKBODY_AIR, "transmittance blackbody air")
+        self.render_thermal.render_transmittance_blackbody_air()
+
+    def render_contribution_air(self):
+        self.render_blackbody_air_image()
+        self.render_transmittance_blackbody_air_image()
+        blackbody_air = np.load(config.BLACKBODY_AIR_DIR)
+        transmittance_blackbody_air = np.load(config.TRANSMITTANCE_BLACKBODY_AIR_DIR)
+
+        contribution_blackbody_air = blackbody_air - transmittance_blackbody_air
+        np.save(config.CONTRIBUTION_BLACKBODY_AIR_DIR, contribution_blackbody_air)

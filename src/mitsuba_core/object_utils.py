@@ -230,24 +230,64 @@ class ObjectUtils:
             temperature:    temperature in Kelvin (K).
 
         Returns:
-            numpy array of spectral radiance in W·sr⁻¹·m⁻²·nm⁻¹.
+            numpy array of spectral radiance in μW/cm²/sr/μm (microflicks)
         """
         # Convert wavelengths to meters
         wavelengths_m = np.array(wavelengths_nm, dtype=float) * 1e-9
 
-        # Planck's law for spectral radiance per meter: W·sr⁻¹·m⁻²·m⁻¹
-        B_m = (
-            (2 * const.h * const.c**2)
-            / (wavelengths_m**5)
-            / (np.exp(const.h * const.c / (wavelengths_m * const.k * temperature)) - 1)
-        )
+        # Planck's law for spectral radiance: from W/m²/sr/m
+        exponent = (const.h * const.c) / (wavelengths_m * const.k * temperature)
+        radiance = (2 * const.h * const.c**2) / (wavelengths_m**5) / (np.exp(exponent) - 1)
 
-        # Convert from per meter to per nanometer: 1 m = 1e9 nm
-        B_nm = B_m * 1e-9
+        # Convert radiance from W/m²/sr/m to μW/cm²/sr/μm
+        radiance = radiance * 1e-4
 
-        return B_nm
+        return radiance
+    
+    def create_reflectance_material(self, wavelengths: np.ndarray, reflectance: np.ndarray) -> dict:
+        """
+        Crea un diccionario para un material con reflectancia espectral irregular.
+        
+        Args:
+            wavelengths (np.ndarray): Array con las longitudes de onda en nanómetros
+            reflectance (np.ndarray): Array con los valores de reflectancia correspondientes
+            
+        Returns:
+            dict: Diccionario del material listo para Mitsuba/XML
+            
+        Raises:
+            HTTPException: Si las longitudes de los arrays no coinciden
+        """
+        try:
+            # Validar que ambos arrays tengan la misma longitud
+            if len(wavelengths) != len(reflectance):
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Las longitudes no coinciden: wavelengths={len(wavelengths)}, reflectance={len(reflectance)}"
+                )
+            
+            # Crear el diccionario del material con estructura para XML
+            material_dict = {
+                "@type": "diffuse",
+                "spectrum": {
+                    "@type": "irregular",
+                    "@name": "reflectance",
+                    "string": [
+                        {"@name": "wavelengths", "@value": self.lista_a_string(wavelengths)},
+                        {"@name": "values", "@value": self.lista_a_string(reflectance)},
+                    ]
+                }
+            }
+            
+            return material_dict
+            
+        except HTTPException:
+            raise
+        except Exception as e:
+            self.logger.error(f"Error creando material de reflectancia: {e}")
+            raise HTTPException(status_code=500, detail=f"Error al crear material de reflectancia: {e}")
 
-    def create_spectral_emitter(self, wavelengths: np.ndarray, emission: np.ndarray) -> dict:
+    def create_spectral_emitter(self, wavelengths: np.ndarray, emission: np.ndarray, type: str = "area") -> dict:
         """
         Crea un diccionario para un emisor con radiancia espectral irregular.
         
@@ -271,7 +311,7 @@ class ObjectUtils:
             
             # Crear el diccionario del emisor con estructura para XML
             emitter_dict = {
-                "@type": "area",
+                "@type": type,
                 "spectrum": {
                     "@type": "irregular",
                     "@name": "radiance",
@@ -356,11 +396,7 @@ class ObjectUtils:
         Encuentra los valores más cercanos en el archivo de atenuación.
         
         Args:
-<<<<<<< HEAD
             wavelengths (np.ndarray): Array con las longitudes de onda deseadas en nanometros
-=======
-            wavelengths (np.ndarray): Array con las longitudes de onda deseadas en micrómetros
->>>>>>> main
             attenuation_file (str): Nombre del archivo de atenuación (sin extensión)
             
         Returns:

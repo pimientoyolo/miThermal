@@ -10,18 +10,16 @@ import zipfile
 import shutil
 import json
 from fastapi import UploadFile, HTTPException
-from ...config import get_output_path
-from ...mitsuba_core.object_utils import ObjectUtils
-from ...mitsuba_core.scene_parser import SceneParser
-from ...mitsuba_core.sensor_utils import create_specfilm_bands
+from src.mitsuba_core.object_utils import ObjectUtils
+from src.mitsuba_core.scene_parser import SceneParser
+from src.mitsuba_core.sensor_utils import create_specfilm_bands
 import numpy as np
 import random
+import src.config as config
 
 object_utils = ObjectUtils()
 
 logger = logging.getLogger(__name__)
-
-out_dir = get_output_path("static")
 
 
 class SceneService:
@@ -35,45 +33,58 @@ class SceneService:
             raise HTTPException(status_code=400, detail="El archivo debe ser un archivo ZIP")
 
         # Eliminar todo el contenido del directorio
-        if os.path.exists(out_dir):
-            for item in os.listdir(out_dir):
-                item_path = os.path.join(out_dir, item)
-                try:
-                    if os.path.isfile(item_path):
-                        os.remove(item_path)    
-                    elif os.path.isdir(item_path):
-                        shutil.rmtree(item_path)
-                except OSError as e:
-                    self.logger.warning(f"Error al eliminar {item_path}: {e}")
-        
+        if os.path.exists(config.OUTPUT_STATIC_DIR):
+            try:
+                shutil.rmtree(config.OUTPUT_STATIC_DIR)
+                os.makedirs(config.OUTPUT_STATIC_DIR)
+            except OSError as e:
+                self.logger.warning(f"Error al limpiar directorio {config.OUTPUT_STATIC_DIR}: {e}")
+                os.makedirs(config.OUTPUT_STATIC_DIR)
+
         # guardar archivo zip
-        with open(f"{out_dir}/scene.zip", "wb") as buffer:
+        with open(config.SCENE_ZIP, "wb") as buffer:
             buffer.write(file.file.read())
 
         # descomprimir archivo zip
-        with zipfile.ZipFile(f"{out_dir}/scene.zip", 'r') as zip_ref:
-            zip_ref.extractall(out_dir)
+        with zipfile.ZipFile(config.SCENE_ZIP, 'r') as zip_ref:
+            zip_ref.extractall(config.OUTPUT_STATIC_DIR)
 
         # buscar y renombrar .xml
-        xml_files = glob.glob(os.path.join(out_dir, "*.xml"))
+        xml_files = glob.glob(os.path.join(config.OUTPUT_STATIC_DIR, "*.xml"))
         if len(xml_files) != 1:
             raise HTTPException(status_code=400, detail="Debe haber exactamente un archivo XML en el ZIP")
 
         xml_file = xml_files[0]
-        new_xml_path = os.path.join(out_dir, "scene.xml")
-        os.rename(xml_file, new_xml_path)
+        os.rename(xml_file, config.SCENE_DIR)
 
         config_scene = {}
         num_bands = 10
         T = 300
-        parent_dir = os.path.dirname(new_xml_path)
 
         # get material
         material = object_utils.get_material_signature("stone")
         indices = np.linspace(0, len(material) - 1, num_bands, dtype=int)
         metarial = material[indices]
 
-        scene_dict = self.get_dict_scene(new_xml_path)
+        scene_dict = self.get_dict_scene(config.SCENE_DIR)
+
+        # cambiar el spp de la scenea por defecto
+        scene_dict['scene']['default'][0]['@value'] = 256
+
+        # cambiar el width y height de la escena por defecto
+        # resx -> width
+        scene_dict['scene']['default'][1]['@value'] = 256
+
+        # resy -> height
+        scene_dict['scene']['default'][2]['@value'] = 256
+
+        # guardar cambios en scene.xml
+        self.scene_parser.save_dict_as_xml(scene_dict, config.SCENE_DIR)
+
+        # guardar scene_dict como JSON
+        json_output_path = os.path.join(config.OUTPUT_DIR, "scene.json")
+        with open(json_output_path, 'w') as json_file:
+            json.dump(scene_dict, json_file, indent=2)
 
         # revisar si se encuentran los archivos de los objetos y crear firmas
         if scene_dict and "scene" in scene_dict and "shape" in scene_dict["scene"]:
@@ -86,14 +97,10 @@ class SceneService:
                     obj["temperature"] = T
                     config_scene[id] = obj
 
-                    dir_file = os.path.join(parent_dir, id)
+                    dir_file = os.path.join(config.OUTPUT_STATIC_DIR, id)
                     if not os.path.exists(dir_file):
                         raise HTTPException(status_code=400, detail=f"No se encontró el archivo del objeto: {id}")
 
-                    # Cambiar extensión del id para archivo .npy
-                    file_name = os.path.splitext(id)[0] + ".npy"
-                    npy_path = os.path.join(parent_dir, file_name)
-                    np.save(npy_path, metarial)
             elif isinstance(shapes, dict):
                 id = shapes["string"]["@value"]
                 obj = {}
@@ -102,36 +109,33 @@ class SceneService:
                 obj["temperature"] = T
                 config_scene["objects"].append(obj)
 
-                dir_file = os.path.join(parent_dir, id)
+                dir_file = os.path.join(config.OUTPUT_STATIC_DIR, id)
 
                 if not os.path.exists(dir_file):
                     raise HTTPException(status_code=400, detail=f"No se encontró el archivo del objeto: {id}")
 
-                # Cambiar extensión del id para archivo .npy
-                file_name = os.path.splitext(id)[0] + ".npy"
-                npy_path = os.path.join(parent_dir, file_name)
-                np.save(npy_path, metarial)
-
         # air values
-        T_air = 280
+        t_air = 280
         wavelengths = np.linspace(8000, 14000, num_bands)
         sigma_t_values = object_utils.get_attenuation_for_wavelengths(wavelengths)
 
         config_scene["air"] = {
-            "temperature": T_air,
+            "temperature": t_air,
             "sigma_t": sigma_t_values.tolist()
+        }
+
+        config_scene["camera"] = {
+            "spp": 256,
+            "width": 256,
+            "height": 256
         }
 
         config_scene["num_bands"] = num_bands
         config_scene["wavelengths"] = wavelengths.tolist()
 
         # guardar config_scene como JSON
-        config_path = os.path.join(parent_dir, "config_scene.json")
-        with open(config_path, 'w') as f:
+        with open(config.CONFIG_SCENE, 'w') as f:
             json.dump(config_scene, f, indent=4)
-
-
-        return new_xml_path
 
     def has_loaded_scene(self, scene_dir: str) -> bool:
         """
@@ -145,17 +149,12 @@ class SceneService:
         """
         return os.path.exists(scene_dir) and os.path.isfile(scene_dir)
 
-    def prepare_thermal_scene(self, scene_path: str):
+    def prepare_thermal_scene(self):
         """
         Crea una escena térmica básica copiando scene.xml a scene_thermal.xml y cambiando el tipo de integrador a 'specfilm'.
         """
         # Cargar configuración JSON desde el directorio de la escena
-        config_path = os.path.join(os.path.dirname(scene_path), "config_scene.json")
-        if not os.path.exists(config_path):
-            raise HTTPException(status_code=400, detail="No se encontró el archivo config_scene.json")
-
-        with open(config_path, 'r') as f:
-            config_scene = json.load(f)
+        config_scene = config.get_config_scene_dict()
 
         num_bands = config_scene["num_bands"]
         wavelengths = config_scene["wavelengths"]
@@ -167,12 +166,12 @@ class SceneService:
                 detail=f"El número de bandas ({num_bands}) no coincide con las longitudes ({len(wavelengths)})"
             )
 
-        if os.path.exists(scene_path):
-            thermal_xml = os.path.join(os.path.dirname(scene_path), "scene_thermal.xml")
-            shutil.copyfile(scene_path, thermal_xml)
+        if os.path.exists(config.SCENE_DIR):
+            thermal_xml = config.SCENE_THERMAL_DIR
+            shutil.copyfile(config.SCENE_DIR, thermal_xml)
             scene_dict = self.get_dict_scene(thermal_xml)
 
-            # Cambiar el tipo de film
+            # Cambiar el tipo de film y configurar sampler
             if scene_dict and "scene" in scene_dict and "sensor" in scene_dict["scene"]:
                 if "film" in scene_dict["scene"]["sensor"]:
                     scene_dict["scene"]["sensor"]["film"]["@type"] = "specfilm"
@@ -180,6 +179,20 @@ class SceneService:
                     bands = create_specfilm_bands(wavelengths)
                     # Usar la estructura que retorna create_specfilm_bands directamente
                     scene_dict["scene"]["sensor"]["film"]["spectrum"] = bands
+                    
+                    # Agregar filtro gaussiano para mejor suavizado de la imagen
+                    scene_dict["scene"]["sensor"]["film"]["rfilter"] = {
+                        "@type": "gaussian",
+                        "float": {
+                            "@name": "stddev",
+                            "@value": "0.5"
+                        }
+                    }
+                
+                # Cambiar el sampler a multijitter para mejor calidad de muestreo
+                if "sampler" in scene_dict["scene"]["sensor"]:
+                    scene_dict["scene"]["sensor"]["sampler"]["@type"] = "multijitter"
+                    
                 
                 # Agregar referencia al medium en el sensor para que vea a través del gas
                 scene_dict["scene"]["sensor"]["ref"] = {
@@ -222,8 +235,11 @@ class SceneService:
                         temperature = config_scene[id]["temperature"]
                         radiance = object_utils.blackbody_radiance_nm(wavelengths, temperature)
                         emission = radiance * material
+                        reflectance = 1 - np.array(material)
+                        dict_reflectance = object_utils.create_reflectance_material(wavelengths, reflectance)
                         dict_emission = object_utils.create_spectral_emitter(wavelengths, emission)
                         shape["emitter"] = dict_emission
+                        shape['bsdf'] = dict_reflectance
 
                         # Validar que la longitud del material coincida con el número de bandas
                         if len(material) != num_bands:
@@ -234,13 +250,16 @@ class SceneService:
                         
                 elif isinstance(shapes, dict):
                     # Para un solo shape
-                    id = shape["string"]["@value"]
+                    id = shapes["string"]["@value"]
                     material = config_scene[id]["emissivity"]
                     temperature = config_scene[id]["temperature"]
                     radiance = object_utils.blackbody_radiance_nm(wavelengths, temperature)
                     emission = radiance * material
+                    reflectance = 1 - np.array(material)
+                    dict_reflectance = object_utils.create_reflectance_material(wavelengths, reflectance)
                     dict_emission = object_utils.create_spectral_emitter(wavelengths, emission)
-                    shape["emitter"] = dict_emission
+                    shapes["emitter"] = dict_emission
+                    shapes['bsdf'] = dict_reflectance
 
                     if len(material) != num_bands:
                             raise HTTPException(
@@ -252,6 +271,14 @@ class SceneService:
             # Crear valores de sigma_t para el medium (coeficiente de extinción)
             # Valores típicos para niebla en infrarrojo lejano
             sigma_t_values = config_scene["air"]["sigma_t"] # air values
+            t_air = config_scene["air"]["temperature"]
+
+            emission_air = object_utils.blackbody_radiance_nm(wavelengths, t_air)
+
+            emitter_air_dict = object_utils.create_spectral_emitter(wavelengths, emission_air, "constant")
+
+            # Agregar emisor de aire a la escena
+            scene_dict["scene"]["emitter"] = emitter_air_dict
 
             # Validar que sigma_t_values tenga la longitud correcta
             if len(sigma_t_values) != num_bands:
@@ -267,6 +294,7 @@ class SceneService:
                 medium_id="fog",
                 g_value=0.95  # Valor para infrarrojo lejano
             )
+
             
             # Agregar el medium a la escena
             scene_dict["scene"]["medium"] = medium_dict
@@ -276,22 +304,90 @@ class SceneService:
             if scene_dict:
                 self.scene_parser.save_dict_as_xml(scene_dict, thermal_xml)
 
-    def prepare_depth_scene(self, scene_path: str):
+    def prepare_depth_scene(self):
         """
         Prepara la escena para la renderización en profundidad.
         """
-        if os.path.exists(scene_path):
-            depth_xml = os.path.join(os.path.dirname(scene_path), "scene_depth.xml")
-            shutil.copyfile(scene_path, depth_xml)
-            scene_dict = self.get_dict_scene(depth_xml)
-            if scene_dict and "scene" in scene_dict:
-                # Modificar la escena según sea necesario para la renderización en profundidad
-                scene_dict["scene"]["integrator"] = {
-                    "@type": "depth",
-                }
-            
-            if scene_dict:
-                self.scene_parser.save_dict_as_xml(scene_dict, depth_xml)
+        depth_xml = config.SCENE_DEPTH_DIR
+        shutil.copyfile(config.SCENE_DIR, depth_xml)
+        scene_dict = self.get_dict_scene(depth_xml)
+        if scene_dict and "scene" in scene_dict:
+            # Modificar la escena según sea necesario para la renderización en profundidad
+            scene_dict["scene"]["integrator"] = {
+                "@type": "depth",
+            }
+        
+        if scene_dict:
+            self.scene_parser.save_dict_as_xml(scene_dict, depth_xml)
+
+    def prepare_blackbody_air_scene(self):
+        """
+        Prepara la escena para renderización de cuerpo negro del aire.
+        """
+        # Verificar si existe la escena térmica, si no, crearla
+        if not os.path.exists(config.SCENE_THERMAL_DIR):
+            self.prepare_thermal_scene()
+
+        # Crear la escena de blackbody air copiando la escena térmica
+        blackbody_air_xml = config.SCENE_BLACKBODY_AIR
+        shutil.copyfile(config.SCENE_THERMAL_DIR, blackbody_air_xml)
+        scene_dict = self.get_dict_scene(blackbody_air_xml)
+
+        # Eliminar todos los objetos de la escena (shapes)
+        if scene_dict and "scene" in scene_dict and "shape" in scene_dict["scene"]:
+            del scene_dict["scene"]["shape"]
+
+        # Eliminar el medio atenuante
+        if scene_dict and "scene" in scene_dict and "medium" in scene_dict["scene"]:
+            del scene_dict["scene"]["medium"]
+
+        if scene_dict and "scene" in scene_dict and "sensor" in scene_dict["scene"]:
+            del scene_dict["scene"]["sensor"]["ref"]
+
+        if scene_dict:
+            self.scene_parser.save_dict_as_xml(scene_dict, blackbody_air_xml)
+
+    def prepare_transmittance_blackbody_air_scene(self):
+        """
+        Prepara la escena para renderización de transmitancia de cuerpo negro del aire.
+        """
+        # Verificar si existe la escena térmica, si no, crearla
+        if not os.path.exists(config.SCENE_THERMAL_DIR):
+            self.prepare_thermal_scene()
+
+        # Crear la escena de transmitancia blackbody air copiando la escena térmica
+        transmittance_blackbody_air_xml = config.SCENE_TRANSMITTANCE_BLACKBODY_AIR
+        shutil.copyfile(config.SCENE_THERMAL_DIR, transmittance_blackbody_air_xml)
+        scene_dict = self.get_dict_scene(transmittance_blackbody_air_xml)
+
+        config_scene = config.get_config_scene_dict()
+
+        t_air = config_scene["air"]["temperature"]
+        wavelengths = config_scene["wavelengths"]
+
+        emission_air = object_utils.blackbody_radiance_nm(wavelengths, t_air)
+
+        emitter_air_dict = object_utils.create_spectral_emitter(wavelengths, emission_air)
+
+        if scene_dict and "scene" in scene_dict and "shape" in scene_dict["scene"]:
+                shapes = scene_dict["scene"]["shape"]
+
+                # Agregar emisor diferente a cada shape
+                if isinstance(shapes, list):
+                    for i, shape in enumerate(shapes):
+                        
+                        shape["emitter"] = emitter_air_dict
+                        del shape["bsdf"]
+                        
+                elif isinstance(shapes, dict):
+                    # Para un solo shape
+
+                    shapes["emitter"] = emitter_air_dict
+                    del shapes['bsdf']
+
+
+        if scene_dict:
+            self.scene_parser.save_dict_as_xml(scene_dict, transmittance_blackbody_air_xml)
 
     def get_dict_scene(self, scene_xml_path: str):
         """
