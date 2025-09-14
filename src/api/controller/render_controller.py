@@ -38,3 +38,12 @@ async def render_scene_thermal() -> StreamingResponse:
             while chunk := await file.read(1024):
                 yield chunk
     return StreamingResponse(iterfile(), media_type="application/octet-stream", headers={"Content-Disposition": "attachment; filename=thermal.npy"})
+
+@render_router.get("/blackbody_air")
+async def render_scene_blackbody_air() -> StreamingResponse:
+    render_service.render_blackbody_air_image()
+    async def iterfile():
+        async with aiofiles.open(config.BLACKBODY_AIR_DIR, "rb") as file:
+            while chunk := await file.read(1024):
+                yield chunk
+    return StreamingResponse(iterfile(), media_type="application/octet-stream", headers={"Content-Disposition": "attachment; filename=blackbody_air.npy"})

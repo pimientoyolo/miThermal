@@ -40,7 +40,8 @@ OUTPUT_STATIC_RESULT_DIR = OUTPUT_DIR / "static" / "result"
 IMAGE_DIR = str(OUTPUT_STATIC_RESULT_DIR / "rgb.png")
 DEPTH_DIR = str(OUTPUT_STATIC_RESULT_DIR / "depth.npy")
 THERMAL_DIR = str(OUTPUT_STATIC_RESULT_DIR / "thermal.npy")
-
+BLACKBODY_AIR_DIR = str(OUTPUT_STATIC_RESULT_DIR / "blackbody_air.npy")
+TRANSMITTANCE_BLACKBODY_AIR_DIR = str(OUTPUT_STATIC_RESULT_DIR / "transmittance_blackbody_air.npy")
 # Configuración de Mitsuba
 MITSUBA_CONFIG = {
     "variant": "cuda_ad_spectral",

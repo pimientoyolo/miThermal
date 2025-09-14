@@ -341,6 +341,9 @@ class SceneService:
         if scene_dict and "scene" in scene_dict and "medium" in scene_dict["scene"]:
             del scene_dict["scene"]["medium"]
 
+        if scene_dict and "scene" in scene_dict and "sensor" in scene_dict["scene"]:
+            del scene_dict["scene"]["sensor"]["ref"]
+
         if scene_dict:
             self.scene_parser.save_dict_as_xml(scene_dict, blackbody_air_xml)
 

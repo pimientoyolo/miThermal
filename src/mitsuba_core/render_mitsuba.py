@@ -80,3 +80,18 @@ class RenderThermal():
         # Guardar toda la información (todos los canales)
         np.save(config.THERMAL_DIR, image_array)
 
+    def render_blackbody_air(self):
+        
+        scene = self.mi.load_file(config.SCENE_BLACKBODY_AIR)
+
+        image = self.mi.render(scene)
+
+        # Convertir la imagen a numpy array
+        image_array = np.array(image)
+
+        # crear carpeta si no existe
+        os.makedirs(config.OUTPUT_STATIC_RESULT_DIR, exist_ok=True)
+
+        # Guardar toda la información (todos los canales)
+        np.save(config.BLACKBODY_AIR_DIR, image_array)
+
