@@ -149,17 +149,12 @@ class SceneService:
         """
         return os.path.exists(scene_dir) and os.path.isfile(scene_dir)
 
-    def prepare_thermal_scene(self, scene_path: str):
+    def prepare_thermal_scene(self):
         """
         Crea una escena térmica básica copiando scene.xml a scene_thermal.xml y cambiando el tipo de integrador a 'specfilm'.
         """
         # Cargar configuración JSON desde el directorio de la escena
-        config_path = os.path.join(os.path.dirname(scene_path), "config_scene.json")
-        if not os.path.exists(config_path):
-            raise HTTPException(status_code=400, detail="No se encontró el archivo config_scene.json")
-
-        with open(config_path, 'r') as f:
-            config_scene = json.load(f)
+        config_scene = config.get_config_scene_dict()
 
         num_bands = config_scene["num_bands"]
         wavelengths = config_scene["wavelengths"]
@@ -171,9 +166,9 @@ class SceneService:
                 detail=f"El número de bandas ({num_bands}) no coincide con las longitudes ({len(wavelengths)})"
             )
 
-        if os.path.exists(scene_path):
-            thermal_xml = os.path.join(os.path.dirname(scene_path), "scene_thermal.xml")
-            shutil.copyfile(scene_path, thermal_xml)
+        if os.path.exists(config.SCENE_DIR):
+            thermal_xml = config.SCENE_THERMAL_DIR
+            shutil.copyfile(config.SCENE_DIR, thermal_xml)
             scene_dict = self.get_dict_scene(thermal_xml)
 
             # Cambiar el tipo de film
@@ -256,6 +251,14 @@ class SceneService:
             # Crear valores de sigma_t para el medium (coeficiente de extinción)
             # Valores típicos para niebla en infrarrojo lejano
             sigma_t_values = config_scene["air"]["sigma_t"] # air values
+            t_air = config_scene["air"]["temperature"]
+
+            emission_air = object_utils.blackbody_radiance_nm(wavelengths, t_air)
+
+            emitter_air_dict = object_utils.create_spectral_emitter(wavelengths, emission_air, "constant")
+
+            # Agregar emisor de aire a la escena
+            scene_dict["scene"]["emitter"] = emitter_air_dict
 
             # Validar que sigma_t_values tenga la longitud correcta
             if len(sigma_t_values) != num_bands:
@@ -271,6 +274,7 @@ class SceneService:
                 medium_id="fog",
                 g_value=0.95  # Valor para infrarrojo lejano
             )
+
             
             # Agregar el medium a la escena
             scene_dict["scene"]["medium"] = medium_dict
@@ -280,22 +284,53 @@ class SceneService:
             if scene_dict:
                 self.scene_parser.save_dict_as_xml(scene_dict, thermal_xml)
 
-    def prepare_depth_scene(self, scene_path: str):
+    def prepare_depth_scene(self):
         """
         Prepara la escena para la renderización en profundidad.
         """
-        if os.path.exists(scene_path):
-            depth_xml = os.path.join(os.path.dirname(scene_path), "scene_depth.xml")
-            shutil.copyfile(scene_path, depth_xml)
-            scene_dict = self.get_dict_scene(depth_xml)
-            if scene_dict and "scene" in scene_dict:
-                # Modificar la escena según sea necesario para la renderización en profundidad
-                scene_dict["scene"]["integrator"] = {
-                    "@type": "depth",
-                }
-            
-            if scene_dict:
-                self.scene_parser.save_dict_as_xml(scene_dict, depth_xml)
+        depth_xml = config.SCENE_DEPTH_DIR
+        shutil.copyfile(config.SCENE_DIR, depth_xml)
+        scene_dict = self.get_dict_scene(depth_xml)
+        if scene_dict and "scene" in scene_dict:
+            # Modificar la escena según sea necesario para la renderización en profundidad
+            scene_dict["scene"]["integrator"] = {
+                "@type": "depth",
+            }
+        
+        if scene_dict:
+            self.scene_parser.save_dict_as_xml(scene_dict, depth_xml)
+
+    def prepare_blackbody_air_scene(self):
+        """
+        Prepara la escena para la renderización en profundidad.
+        """
+        # Verificar si existe la escena térmica, si no, crearla
+        if not os.path.exists(config.SCENE_THERMAL_DIR):
+            self.prepare_thermal_scene()
+
+        # Crear la escena de blackbody air copiando la escena térmica
+        blackbody_air_xml = config.SCENE_BLACKBODY_AIR_DIR
+        shutil.copyfile(config.SCENE_THERMAL_DIR, blackbody_air_xml)
+        scene_dict = self.get_dict_scene(blackbody_air_xml)
+
+        # Eliminar todos los objetos de la escena (shapes)
+        if scene_dict and "scene" in scene_dict and "shape" in scene_dict["scene"]:
+            del scene_dict["scene"]["shape"]
+
+        # obtener el json de configuracion
+        config_scene = config.get_config_scene_dict()
+        wavelengths = config_scene["wavelengths"]
+        t_air = config_scene["air"]["temperature"]
+
+        # Crear emission del aire
+        radiance = object_utils.blackbody_radiance_nm(wavelengths, t_air)
+
+        # Crear emissor en la escena
+
+
+
+        if scene_dict:
+            self.scene_parser.save_dict_as_xml(scene_dict, blackbody_air_xml)
 
     def get_dict_scene(self, scene_xml_path: str):
         """

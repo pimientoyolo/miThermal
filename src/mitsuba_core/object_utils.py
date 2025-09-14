@@ -247,7 +247,7 @@ class ObjectUtils:
 
         return B_nm
 
-    def create_spectral_emitter(self, wavelengths: np.ndarray, emission: np.ndarray) -> dict:
+    def create_spectral_emitter(self, wavelengths: np.ndarray, emission: np.ndarray, type: str = "area") -> dict:
         """
         Crea un diccionario para un emisor con radiancia espectral irregular.
         
@@ -271,7 +271,7 @@ class ObjectUtils:
             
             # Crear el diccionario del emisor con estructura para XML
             emitter_dict = {
-                "@type": "area",
+                "@type": type,
                 "spectrum": {
                     "@type": "irregular",
                     "@name": "radiance",
@@ -356,11 +356,7 @@ class ObjectUtils:
         Encuentra los valores más cercanos en el archivo de atenuación.
         
         Args:
-<<<<<<< HEAD
             wavelengths (np.ndarray): Array con las longitudes de onda deseadas en nanometros
-=======
-            wavelengths (np.ndarray): Array con las longitudes de onda deseadas en micrómetros
->>>>>>> main
             attenuation_file (str): Nombre del archivo de atenuación (sin extensión)
             
         Returns:

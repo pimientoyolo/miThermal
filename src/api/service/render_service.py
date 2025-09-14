@@ -45,12 +45,10 @@ class RenderService:
         self._validate_scene_file(config.SCENE_DIR, "RGB")
         self.render_rgb.render()
 
-    def render_depth_image(self, path_xml_scene: str) -> str:
-        self._validate_scene_file(path_xml_scene, "depth")
-        path_image = self.render_depth.render(scene_path=path_xml_scene, out_dir=self.output_path)
-        return path_image
+    def render_depth_image(self):
+        self._validate_scene_file(config.SCENE_DEPTH_DIR, "depth")
+        self.render_depth.render()
 
-    def render_thermal_image(self, path_xml_scene: str) -> str:
-        self._validate_scene_file(path_xml_scene, "thermal")
-        path_image = self.render_thermal.render(scene_path=path_xml_scene, out_dir=self.output_path)
-        return path_image
+    def render_thermal_image(self) -> str:
+        self._validate_scene_file(config.SCENE_THERMAL_DIR, "thermal")
+        self.render_thermal.render()

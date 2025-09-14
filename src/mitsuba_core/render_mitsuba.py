@@ -36,8 +36,10 @@ class RenderDepth():
         mi.set_variant('cuda_ad_rgb')
         self.mi = mi
 
-    def render(self, scene_path: str, out_dir: str) -> str:
-        scene = self.mi.load_file(scene_path)
+    def render(self):
+
+        scene = self.mi.load_file(config.SCENE_DEPTH_DIR)
+
         image = self.mi.render(scene)
         
         # Convertir la imagen a numpy array
@@ -50,12 +52,12 @@ class RenderDepth():
         else:
             # Si ya es escala de grises o un solo canal
             grayscale_channel = image_array.squeeze()
+
+        # crear carpeta si no existe
+        os.makedirs(config.OUTPUT_STATIC_RESULT_DIR, exist_ok=True)
         
         # Guardar como archivo numpy
-        output_path = os.path.join(out_dir, "depth.npy")
-        np.save(output_path, grayscale_channel)
-        
-        return output_path
+        np.save(config.DEPTH_DIR, grayscale_channel)
 
 class RenderThermal():
 
@@ -64,15 +66,17 @@ class RenderThermal():
         mi.set_variant('cuda_ad_spectral')
         self.mi = mi
 
-    def render(self, scene_path: str, out_dir: str) -> str:
-        scene = self.mi.load_file(scene_path)
+    def render(self):
+        scene = self.mi.load_file(config.SCENE_THERMAL_DIR)
+
         image = self.mi.render(scene)
 
         # Convertir la imagen a numpy array
         image_array = np.array(image)
 
-        # Guardar toda la información (todos los canales)
-        output_path = os.path.join(out_dir, "thermal.npy")
-        np.save(output_path, image_array)
+        # crear carpeta si no existe
+        os.makedirs(config.OUTPUT_STATIC_RESULT_DIR, exist_ok=True)
 
-        return output_path
+        # Guardar toda la información (todos los canales)
+        np.save(config.THERMAL_DIR, image_array)
+

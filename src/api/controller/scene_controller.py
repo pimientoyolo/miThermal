@@ -17,6 +17,8 @@ scene_router = APIRouter(
 async def load_scene(file: UploadFile = File(...)) -> FileResponse:    
     scene_service.load_scene(file)
     render_service.render_basic_scene()
+    scene_service.prepare_depth_scene()
+    scene_service.prepare_thermal_scene()
     return FileResponse(config.IMAGE_DIR, media_type="image/png", filename="rgb.png")
 
 
