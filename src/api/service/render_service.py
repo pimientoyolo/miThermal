@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from src.mitsuba_core.scenes import Scene
 from src.mitsuba_core.render_mitsuba import RenderRGB, RenderDepth, RenderThermal
 import src.config as config
+import numpy as np
 
 logger = logging.getLogger(__name__)
 
@@ -49,10 +50,23 @@ class RenderService:
         self._validate_scene_file(config.SCENE_DEPTH_DIR, "depth")
         self.render_depth.render()
 
-    def render_thermal_image(self) -> str:
+    def render_thermal_image(self):
         self._validate_scene_file(config.SCENE_THERMAL_DIR, "thermal")
         self.render_thermal.render()
 
-    def render_blackbody_air_image(self) -> str:
+    def render_blackbody_air_image(self):
         self._validate_scene_file(config.SCENE_BLACKBODY_AIR, "blackbody air")
         self.render_thermal.render_blackbody_air()
+
+    def render_transmittance_blackbody_air_image(self):
+        self._validate_scene_file(config.SCENE_TRANSMITTANCE_BLACKBODY_AIR, "transmittance blackbody air")
+        self.render_thermal.render_transmittance_blackbody_air()
+
+    def render_contribution_air(self):
+        self.render_blackbody_air_image()
+        self.render_transmittance_blackbody_air_image()
+        blackbody_air = np.load(config.BLACKBODY_AIR_DIR)
+        transmittance_blackbody_air = np.load(config.TRANSMITTANCE_BLACKBODY_AIR_DIR)
+
+        contribution_blackbody_air = blackbody_air - transmittance_blackbody_air
+        np.save(config.CONTRIBUTION_BLACKBODY_AIR_DIR, contribution_blackbody_air)

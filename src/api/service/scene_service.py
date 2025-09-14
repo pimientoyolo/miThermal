@@ -250,7 +250,7 @@ class SceneService:
                         
                 elif isinstance(shapes, dict):
                     # Para un solo shape
-                    id = shape["string"]["@value"]
+                    id = shapes["string"]["@value"]
                     material = config_scene[id]["emissivity"]
                     temperature = config_scene[id]["temperature"]
                     radiance = object_utils.blackbody_radiance_nm(wavelengths, temperature)
@@ -258,8 +258,8 @@ class SceneService:
                     reflectance = 1 - np.array(material)
                     dict_reflectance = object_utils.create_reflectance_material(wavelengths, reflectance)
                     dict_emission = object_utils.create_spectral_emitter(wavelengths, emission)
-                    shape["emitter"] = dict_emission
-                    shape['bsdf'] = dict_reflectance
+                    shapes["emitter"] = dict_emission
+                    shapes['bsdf'] = dict_reflectance
 
                     if len(material) != num_bands:
                             raise HTTPException(
@@ -346,6 +346,48 @@ class SceneService:
 
         if scene_dict:
             self.scene_parser.save_dict_as_xml(scene_dict, blackbody_air_xml)
+
+    def prepare_transmittance_blackbody_air_scene(self):
+        """
+        Prepara la escena para renderización de transmitancia de cuerpo negro del aire.
+        """
+        # Verificar si existe la escena térmica, si no, crearla
+        if not os.path.exists(config.SCENE_THERMAL_DIR):
+            self.prepare_thermal_scene()
+
+        # Crear la escena de transmitancia blackbody air copiando la escena térmica
+        transmittance_blackbody_air_xml = config.SCENE_TRANSMITTANCE_BLACKBODY_AIR
+        shutil.copyfile(config.SCENE_THERMAL_DIR, transmittance_blackbody_air_xml)
+        scene_dict = self.get_dict_scene(transmittance_blackbody_air_xml)
+
+        config_scene = config.get_config_scene_dict()
+
+        t_air = config_scene["air"]["temperature"]
+        wavelengths = config_scene["wavelengths"]
+
+        emission_air = object_utils.blackbody_radiance_nm(wavelengths, t_air)
+
+        emitter_air_dict = object_utils.create_spectral_emitter(wavelengths, emission_air)
+
+        if scene_dict and "scene" in scene_dict and "shape" in scene_dict["scene"]:
+                shapes = scene_dict["scene"]["shape"]
+
+                # Agregar emisor diferente a cada shape
+                if isinstance(shapes, list):
+                    for i, shape in enumerate(shapes):
+                        
+                        shape["emitter"] = emitter_air_dict
+                        del shape["bsdf"]
+                        
+                elif isinstance(shapes, dict):
+                    # Para un solo shape
+
+                    shapes["emitter"] = emitter_air_dict
+                    del shapes['bsdf']
+
+
+        if scene_dict:
+            self.scene_parser.save_dict_as_xml(scene_dict, transmittance_blackbody_air_xml)
 
     def get_dict_scene(self, scene_xml_path: str):
         """
