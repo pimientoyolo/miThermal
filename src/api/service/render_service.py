@@ -52,6 +52,7 @@ class RenderService:
 
     def render_thermal_image(self):
         self._validate_scene_file(config.SCENE_THERMAL_DIR, "thermal")
+        self.render_contribution_air()
         self.render_thermal.render()
 
     def render_blackbody_air_image(self):

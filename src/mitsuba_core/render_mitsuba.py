@@ -77,6 +77,10 @@ class RenderThermal():
         # crear carpeta si no existe
         os.makedirs(config.OUTPUT_STATIC_RESULT_DIR, exist_ok=True)
 
+        contribution_blackbody_air = np.load(config.CONTRIBUTION_BLACKBODY_AIR_DIR)
+
+        image_array = image_array + contribution_blackbody_air
+
         # Guardar toda la información (todos los canales)
         np.save(config.THERMAL_DIR, image_array)
 
