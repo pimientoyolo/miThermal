@@ -171,7 +171,7 @@ class SceneService:
             shutil.copyfile(config.SCENE_DIR, thermal_xml)
             scene_dict = self.get_dict_scene(thermal_xml)
 
-            # Cambiar el tipo de film
+            # Cambiar el tipo de film y configurar sampler
             if scene_dict and "scene" in scene_dict and "sensor" in scene_dict["scene"]:
                 if "film" in scene_dict["scene"]["sensor"]:
                     scene_dict["scene"]["sensor"]["film"]["@type"] = "specfilm"
@@ -179,6 +179,20 @@ class SceneService:
                     bands = create_specfilm_bands(wavelengths)
                     # Usar la estructura que retorna create_specfilm_bands directamente
                     scene_dict["scene"]["sensor"]["film"]["spectrum"] = bands
+                    
+                    # Agregar filtro gaussiano para mejor suavizado de la imagen
+                    scene_dict["scene"]["sensor"]["film"]["rfilter"] = {
+                        "@type": "gaussian",
+                        "float": {
+                            "@name": "stddev",
+                            "@value": "0.5"
+                        }
+                    }
+                
+                # Cambiar el sampler a multijitter para mejor calidad de muestreo
+                if "sampler" in scene_dict["scene"]["sensor"]:
+                    scene_dict["scene"]["sensor"]["sampler"]["@type"] = "multijitter"
+                    
                 
                 # Agregar referencia al medium en el sensor para que vea a través del gas
                 scene_dict["scene"]["sensor"]["ref"] = {
@@ -221,8 +235,11 @@ class SceneService:
                         temperature = config_scene[id]["temperature"]
                         radiance = object_utils.blackbody_radiance_nm(wavelengths, temperature)
                         emission = radiance * material
+                        reflectance = 1 - np.array(material)
+                        dict_reflectance = object_utils.create_reflectance_material(wavelengths, reflectance)
                         dict_emission = object_utils.create_spectral_emitter(wavelengths, emission)
                         shape["emitter"] = dict_emission
+                        shape['bsdf'] = dict_reflectance
 
                         # Validar que la longitud del material coincida con el número de bandas
                         if len(material) != num_bands:
@@ -238,8 +255,11 @@ class SceneService:
                     temperature = config_scene[id]["temperature"]
                     radiance = object_utils.blackbody_radiance_nm(wavelengths, temperature)
                     emission = radiance * material
+                    reflectance = 1 - np.array(material)
+                    dict_reflectance = object_utils.create_reflectance_material(wavelengths, reflectance)
                     dict_emission = object_utils.create_spectral_emitter(wavelengths, emission)
                     shape["emitter"] = dict_emission
+                    shape['bsdf'] = dict_reflectance
 
                     if len(material) != num_bands:
                             raise HTTPException(
@@ -302,14 +322,14 @@ class SceneService:
 
     def prepare_blackbody_air_scene(self):
         """
-        Prepara la escena para la renderización en profundidad.
+        Prepara la escena para renderización de cuerpo negro del aire.
         """
         # Verificar si existe la escena térmica, si no, crearla
         if not os.path.exists(config.SCENE_THERMAL_DIR):
             self.prepare_thermal_scene()
 
         # Crear la escena de blackbody air copiando la escena térmica
-        blackbody_air_xml = config.SCENE_BLACKBODY_AIR_DIR
+        blackbody_air_xml = config.SCENE_BLACKBODY_AIR
         shutil.copyfile(config.SCENE_THERMAL_DIR, blackbody_air_xml)
         scene_dict = self.get_dict_scene(blackbody_air_xml)
 
@@ -317,17 +337,9 @@ class SceneService:
         if scene_dict and "scene" in scene_dict and "shape" in scene_dict["scene"]:
             del scene_dict["scene"]["shape"]
 
-        # obtener el json de configuracion
-        config_scene = config.get_config_scene_dict()
-        wavelengths = config_scene["wavelengths"]
-        t_air = config_scene["air"]["temperature"]
-
-        # Crear emission del aire
-        radiance = object_utils.blackbody_radiance_nm(wavelengths, t_air)
-
-        # Crear emissor en la escena
-
-
+        # Eliminar el medio atenuante
+        if scene_dict and "scene" in scene_dict and "medium" in scene_dict["scene"]:
+            del scene_dict["scene"]["medium"]
 
         if scene_dict:
             self.scene_parser.save_dict_as_xml(scene_dict, blackbody_air_xml)

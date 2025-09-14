@@ -253,18 +253,17 @@ def create_specfilm_bands(wavelengths: np.ndarray) -> list:
         list: Lista con las bandas para el film del sensor espectral.
     """
     band_list = []
-    
-    # Calcular la distancia promedio entre longitudes de onda
-    if len(wavelengths) > 1:
-        distancias = np.diff(wavelengths)
-        distancia_promedio = np.mean(distancias)
-        separar = distancia_promedio / 2
-    else:
-        separar = 50  # Valor por defecto para una sola banda
-    
-    for wave_length in wavelengths:
-        wmin_band = float(wave_length - separar)
-        wmax_band = float(wave_length + separar)
+
+    for i, wave_length in enumerate(wavelengths):
+
+        if i == len(wavelengths) - 1:
+            wmin_band = int(wave_length-1)
+            wmax_band = int(wave_length)
+
+        else:
+            wmin_band = int(wave_length)
+            wmax_band = int(wave_length+1)
+
         band_list.append({
             "@type": "regular",
             "@name": f"band_{int(wave_length)}",
