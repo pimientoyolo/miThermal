@@ -475,50 +475,53 @@ class SceneService:
     def update_thermal_scene_air(self):
         """
         Actualiza las propiedades del aire en la escena térmica con sus nuevas propiedades.
+        Refresca el espectro del film (sensor espectral) según las nuevas longitudes de onda.
         """
-        # Cargar configuración JSON desde el directorio de la escena
         config_scene = config.get_config_scene_dict()
         wavelengths = config_scene["wavelengths"]
         num_bands = config_scene["num_bands"]
 
         scene_dict = self.get_dict_scene(config.SCENE_THERMAL_DIR)
-        
-        # Agregar medio homogéneo con coeficiente de extinción espectral
-        # Crear valores de sigma_t para el medium (coeficiente de extinción)
-        # Valores típicos para niebla en infrarrojo lejano
-        sigma_t_values = config_scene["air"]["sigma_t"] # air values
+
+        if not scene_dict or "scene" not in scene_dict:
+            raise HTTPException(status_code=404, detail="Escena térmica no encontrada para actualizar aire")
+
+        # === Actualizar film spectrum si existe el sensor ===
+        sensor = scene_dict["scene"].get("sensor")
+        if sensor and "film" in sensor:
+            film = sensor["film"]
+            # Asegurar tipo specfilm
+            film["@type"] = "specfilm"
+            # Regenerar bandas espectrales según las longitudes actuales
+            film["spectrum"] = create_specfilm_bands(wavelengths)
+            # Nota: No re-agregamos rfilter aquí para mantenerlo opcional
+
+        # Datos de aire
+        sigma_t_values = config_scene["air"]["sigma_t"]
         t_air = config_scene["air"]["temperature"]
 
+        # Recalcular emisión del aire
         emission_air = object_utils.blackbody_radiance_nm(wavelengths, t_air)
-
         emitter_air_dict = object_utils.create_spectral_emitter(wavelengths, emission_air, "constant")
-
-        # Agregar emisor de aire a la escena
         scene_dict["scene"]["emitter"] = emitter_air_dict
 
-        # Validar que sigma_t_values tenga la longitud correcta
         if len(sigma_t_values) != num_bands:
             raise HTTPException(
                 status_code=400,
                 detail=f"Los valores de sigma_t ({len(sigma_t_values)}) no coinciden con el número de bandas ({num_bands})"
             )
-        
-        # Crear el medium usando la función de object_utils
+
+        # Medium actualizado
         medium_dict = object_utils.create_homogeneous_medium(
             wavelengths=wavelengths,
             sigma_t=sigma_t_values,
             medium_id="fog",
-            g_value=0.95  # Valor para infrarrojo lejano
+            g_value=0.95
         )
-
-        
-        # Agregar el medium a la escena
         scene_dict["scene"]["medium"] = medium_dict
 
-
         # Guardar la escena modificada como XML
-        if scene_dict:
-            self.scene_parser.save_dict_as_xml(scene_dict, config.SCENE_THERMAL_DIR)
+        self.scene_parser.save_dict_as_xml(scene_dict, config.SCENE_THERMAL_DIR)
 
     def get_camera_info(self):
         config_scene = config.get_config_scene_dict()
@@ -531,6 +534,82 @@ class SceneService:
             width=camera_config.get("width"),
             height=camera_config.get("height")
         )
+    
+    def update_camera_info(self, camera_data: CameraDTO):
+        config_scene = config.get_config_scene_dict()
         
+        # Actualizar la configuración de la cámara
+        config_scene["camera"] = {
+            "spp": camera_data.spp,
+            "width": camera_data.width,
+            "height": camera_data.height
+        }
 
+        # Validar valores de la cámara
+        if camera_data.spp <= 0:
+            raise HTTPException(status_code=400, detail="El valor de spp debe ser mayor que 0")
+        
+        if camera_data.width <= 0 or camera_data.height <= 0:
+            raise HTTPException(status_code=400, detail="Los valores de width y height deben ser mayores que 0")
+        
+        # Validar que spp sea una potencia de 2
+        if camera_data.spp & (camera_data.spp - 1) != 0:
+            raise HTTPException(status_code=400, detail="El valor de spp debe ser una potencia de 2 (2, 4, 8, 16, 32, etc.)")
 
+        # Guardar los cambios en el archivo de configuración
+        config.save_config_scene_dict(config_scene)
+
+        # Actualizar la escena RGB
+        self.update_scene_camera_rgb()
+        # Actualizar la escena térmica
+        self.update_scene_camera_thermal()
+
+        # Re hacer el resto
+        self.prepare_depth_scene()
+        self.prepare_transmittance_blackbody_air_scene()
+        self.prepare_blackbody_air_scene()
+
+        # Retornar la configuración actualizada
+        return camera_data
+    
+    def update_scene_camera_rgb(self):
+        scene_dict = self.get_dict_scene(config.SCENE_DIR)
+
+        if not scene_dict or "scene" not in scene_dict or "default" not in scene_dict["scene"]:
+            raise HTTPException(status_code=400, detail="No se encontraron parámetros por defecto en la escena")
+
+        defaults = scene_dict["scene"]["default"]
+
+        cam_cfg = config.get_config_scene_dict().get("camera", {})
+        spp = cam_cfg.get("spp", 256)
+        width = cam_cfg.get("width", 256)
+        height = cam_cfg.get("height", 256)
+
+        defaults[0]["@value"] = spp      # spp
+        defaults[1]["@value"] = width    # resx
+        defaults[2]["@value"] = height   # resy
+
+        # Guardar la escena modificada como XML
+        if scene_dict:
+            self.scene_parser.save_dict_as_xml(scene_dict, config.SCENE_DIR)
+
+    def update_scene_camera_thermal(self):
+        scene_dict = self.get_dict_scene(config.SCENE_THERMAL_DIR)
+
+        if not scene_dict or "scene" not in scene_dict or "default" not in scene_dict["scene"]:
+            raise HTTPException(status_code=400, detail="No se encontraron parámetros por defecto en la escena térmica")
+
+        defaults = scene_dict["scene"]["default"]
+
+        cam_cfg = config.get_config_scene_dict().get("camera", {})
+        spp = cam_cfg.get("spp", 256)
+        width = cam_cfg.get("width", 256)
+        height = cam_cfg.get("height", 256)
+
+        defaults[0]["@value"] = spp      # spp
+        defaults[1]["@value"] = width    # resx
+        defaults[2]["@value"] = height   # resy
+
+        # Guardar la escena modificada como XML
+        if scene_dict:
+            self.scene_parser.save_dict_as_xml(scene_dict, config.SCENE_THERMAL_DIR)

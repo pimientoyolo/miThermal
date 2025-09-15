@@ -90,7 +90,7 @@
         ]
     },
     "camera": {
-        "spp": 256,
+        "spp": 512,
         "width": 256,
         "height": 256
     },
