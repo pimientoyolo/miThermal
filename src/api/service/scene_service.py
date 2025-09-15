@@ -3,6 +3,8 @@ import logging
 from fastapi import UploadFile
 
 from fastapi import HTTPException
+
+from src.api.dto.cameraDTO import CameraDTO
 from ...config import get_output_path
 import os
 import glob
@@ -517,6 +519,18 @@ class SceneService:
         # Guardar la escena modificada como XML
         if scene_dict:
             self.scene_parser.save_dict_as_xml(scene_dict, config.SCENE_THERMAL_DIR)
+
+    def get_camera_info(self):
+        config_scene = config.get_config_scene_dict()
+        camera_config = config_scene.get("camera", {})
+        if not camera_config:
+            raise HTTPException(status_code=404, detail="Configuración de la cámara no encontrada en la escena")
+        
+        return CameraDTO(
+            spp=camera_config.get("spp"),
+            width=camera_config.get("width"),
+            height=camera_config.get("height")
+        )
         
 
 
