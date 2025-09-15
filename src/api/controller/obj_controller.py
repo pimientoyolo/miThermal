@@ -2,6 +2,7 @@
 Object Controller - Placeholder
 Controller para manejo de objetos 3D
 """
+from src.api.dto.objectDTO import ObjectDTO
 from src.api.dto.suggestDTO import SuggestDTO
 from src.mitsuba_core.object_utils import ObjectUtils
 from src.api.service.obj_service import ObjService
@@ -23,7 +24,7 @@ async def suggest_objects() -> list[SuggestDTO]:
     return objects
 
 @obj_router.get("/file/id")
-async def get_obj(
+async def get_obj_file(
     object_id: str = Query(..., description="ID del objeto (ej: 'meshes/objeto.ply', 'Dragon.obj')")
 ) -> FileResponse:
     """
@@ -35,5 +36,21 @@ async def get_obj(
     Returns:
         Archivo del objeto 3D
     """
-    response = object_service.get_object_by_id(object_id)
+    response = object_service.get_object_file_by_id(object_id)
+    return response
+
+@obj_router.get("/id")
+async def get_obj_info(
+    object_id: str = Query(..., description="ID del objeto (ej: 'meshes/objeto.ply', 'Dragon.obj')")
+) -> ObjectDTO:
+    """
+    Obtiene la información de un objeto 3D específico.
+    
+    Args:
+        object_id: ID del objeto que puede incluir subdirectorios
+        
+    Returns:
+        Información del objeto 3D
+    """
+    response = object_service.get_object_info_by_id(object_id)
     return response
