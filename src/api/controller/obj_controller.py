@@ -54,3 +54,20 @@ async def get_obj_info(
     """
     response = object_service.get_object_info_by_id(object_id)
     return response
+
+@obj_router.put("/id")
+async def update_obj_info(
+    object_data: ObjectDTO
+) -> ObjectDTO:
+    """
+    Actualiza la información de un objeto 3D específico.
+    
+    Args:
+        object_data: Datos del objeto a actualizar
+        
+    Returns:
+        Información actualizada del objeto 3D
+    """
+    object_data = object_service.update_object_info(object_data)
+    
+    return object_data

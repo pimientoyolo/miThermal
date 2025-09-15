@@ -397,6 +397,78 @@ class SceneService:
             return None
         scene_dict = self.scene_parser.xml_to_dict(scene_xml_path)
         return scene_dict
+    
+    def update_thermal_scene_obj(self, object_id: str):
+        """
+        Actualiza un objeto específico en la escena térmica con sus nuevas propiedades.
+        """
+        # Cargar configuración JSON desde el directorio de la escena
+        config_scene = config.get_config_scene_dict()
+        wavelengths = config_scene["wavelengths"]
+
+        scene_dict = self.get_dict_scene(config.SCENE_THERMAL_DIR)
+        
+        # Verificar que el objeto existe en la configuración
+        if object_id not in config_scene:
+            raise HTTPException(
+                status_code=404,
+                detail=f"El objeto {object_id} no se encuentra en la configuración de la escena"
+            )
+        
+        # Obtener las propiedades del objeto específico
+        material = config_scene[object_id]["emissivity"]
+        temperature = config_scene[object_id]["temperature"]
+        
+        # Validar que la longitud del material coincida con el número de longitudes de onda
+        if len(material) != len(wavelengths):
+            raise HTTPException(
+                status_code=400,
+                detail=f"La firma espectral del objeto ({object_id}) tiene {len(material)} bandas, pero se esperan {len(wavelengths)} según las longitudes de onda"
+            )
+        
+        object_found = False
+        
+        if scene_dict and "scene" in scene_dict and "shape" in scene_dict["scene"]:
+            shapes = scene_dict["scene"]["shape"]
+            
+            # Buscar y actualizar solo el objeto específico
+            if isinstance(shapes, list):
+                for i, shape in enumerate(shapes):
+                    shape_id = shape["string"]["@value"]
+                    if shape_id == object_id:
+                        # Actualizar solo este objeto
+                        radiance = object_utils.blackbody_radiance_nm(wavelengths, temperature)
+                        emission = radiance * material
+                        reflectance = 1 - np.array(material)
+                        dict_reflectance = object_utils.create_reflectance_material(wavelengths, reflectance)
+                        dict_emission = object_utils.create_spectral_emitter(wavelengths, emission)
+                        shape["emitter"] = dict_emission
+                        shape['bsdf'] = dict_reflectance
+                        object_found = True
+                        break
+
+            elif isinstance(shapes, dict):
+                # Para un solo shape
+                shape_id = shapes["string"]["@value"]
+                if shape_id == object_id:
+                    radiance = object_utils.blackbody_radiance_nm(wavelengths, temperature)
+                    emission = radiance * material
+                    reflectance = 1 - np.array(material)
+                    dict_reflectance = object_utils.create_reflectance_material(wavelengths, reflectance)
+                    dict_emission = object_utils.create_spectral_emitter(wavelengths, emission)
+                    shapes["emitter"] = dict_emission
+                    shapes['bsdf'] = dict_reflectance
+                    object_found = True
+        
+        if not object_found:
+            raise HTTPException(
+                status_code=404,
+                detail=f"El objeto {object_id} no se encuentra en la escena térmica"
+            )
+        
+        # Guardar la escena térmica actualizada
+        if scene_dict:
+            self.scene_parser.save_dict_as_xml(scene_dict, config.SCENE_THERMAL_DIR)
 
 
         

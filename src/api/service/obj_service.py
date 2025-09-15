@@ -7,8 +7,11 @@ from fastapi.responses import StreamingResponse
 import src.config as config
 from src.api.dto.objectDTO import ObjectDTO
 import numpy as np
+from src.api.service.scene_service import SceneService
 
 logger = logging.getLogger(__name__)
+
+scene_service = SceneService()
 
 class ObjService:
     def __init__(self):
@@ -84,5 +87,28 @@ class ObjService:
             emissivity=emissivity,
             reflection=reflection
         )
+    
+    def update_object_info(self, object_data: ObjectDTO) -> ObjectDTO:
+        object_id = object_data.id
+        self.validate_object_id_exists(object_id)
+        
+        config_scene = config.get_config_scene_dict()
+        
+        if object_id not in config_scene:
+            raise HTTPException(status_code=404, detail=f"Configuración no encontrada para el objeto: {object_id}")
+        
+        # Actualizar la configuración del objeto
+        config_scene[object_id]["temperature"] = object_data.temperature
+        config_scene[object_id]["emissivity"] = object_data.emissivity
+        
+        # Guardar la configuración actualizada
+        config.save_config_scene_dict(config_scene)
+
+        scene_service.update_thermal_scene_obj(object_id=object_id)
+        scene_service.prepare_depth_scene()
+        scene_service.prepare_blackbody_air_scene()
+        scene_service.prepare_transmittance_blackbody_air_scene()
+        
+        return object_data
 
 

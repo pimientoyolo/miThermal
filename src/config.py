@@ -142,3 +142,7 @@ def get_config_scene_dict() -> dict:
     with open(CONFIG_SCENE, 'r') as f:
         config_scene = json.load(f)
     return config_scene
+
+def save_config_scene_dict(config_scene: dict) -> None:
+    with open(CONFIG_SCENE, 'w') as f:
+        json.dump(config_scene, f, indent=4)
