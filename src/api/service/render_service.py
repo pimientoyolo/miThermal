@@ -44,24 +44,44 @@ class RenderService:
 
     def render_basic_scene(self):
         self._validate_scene_file(config.SCENE_DIR, "RGB")
-        self.render_rgb.render()
+        try:
+            self.render_rgb.render()
+        except Exception as e:
+            self.logger.error(f"Error al renderizar la escena RGB: {e}")
+            raise HTTPException(status_code=500, detail="Error al renderizar: prueba bajar spp y resolución")
 
     def render_depth_image(self):
         self._validate_scene_file(config.SCENE_DEPTH_DIR, "depth")
-        self.render_depth.render()
+        try:
+            self.render_depth.render()
+        except Exception as e:
+            self.logger.error(f"Error al renderizar la escena de profundidad: {e}")
+            raise HTTPException(status_code=500, detail="Error al renderizar: prueba bajar spp y resolución")
 
     def render_thermal_image(self):
         self._validate_scene_file(config.SCENE_THERMAL_DIR, "thermal")
         self.render_contribution_air()
-        self.render_thermal.render()
+        try:
+            self.render_thermal.render()
+        except Exception as e:
+            self.logger.error(f"Error al renderizar la escena térmica: {e}")
+            raise HTTPException(status_code=500, detail="Error al renderizar: prueba bajar spp y resolución")
 
     def render_blackbody_air_image(self):
         self._validate_scene_file(config.SCENE_BLACKBODY_AIR, "blackbody air")
-        self.render_thermal.render_blackbody_air()
+        try:
+            self.render_thermal.render_blackbody_air()
+        except Exception as e:
+            self.logger.error(f"Error al renderizar la escena de blackbody air: {e}")
+            raise HTTPException(status_code=500, detail="Error al renderizar: prueba bajar spp y resolución")
 
     def render_transmittance_blackbody_air_image(self):
         self._validate_scene_file(config.SCENE_TRANSMITTANCE_BLACKBODY_AIR, "transmittance blackbody air")
-        self.render_thermal.render_transmittance_blackbody_air()
+        try:
+            self.render_thermal.render_transmittance_blackbody_air()
+        except Exception as e:
+            self.logger.error(f"Error al renderizar la escena de transmittance blackbody air: {e}")
+            raise HTTPException(status_code=500, detail="Error al renderizar: prueba bajar spp y resolución")
 
     def render_contribution_air(self):
         self.render_blackbody_air_image()
