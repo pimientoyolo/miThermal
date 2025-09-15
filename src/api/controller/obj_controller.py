@@ -2,6 +2,7 @@
 Object Controller - Placeholder
 Controller para manejo de objetos 3D
 """
+from src.api.dto.airDTO import AirDTO
 from src.api.dto.objectDTO import ObjectDTO
 from src.api.dto.suggestDTO import SuggestDTO
 from src.mitsuba_core.object_utils import ObjectUtils
@@ -71,3 +72,30 @@ async def update_obj_info(
     object_data = object_service.update_object_info(object_data)
     
     return object_data
+
+@obj_router.get("/air")
+async def get_air_info() -> AirDTO:
+    """
+    Obtiene la información del aire en la escena.
+    
+    Returns:
+        Información del aire en la escena
+    """
+    return object_service.get_air_info()
+
+@obj_router.put("/air")
+async def update_air_info(
+    air_data: AirDTO
+) -> AirDTO:
+    """
+    Actualiza la información del aire en la escena.
+
+    Args:
+        air_data: Datos del aire a actualizar
+
+    Returns:
+        Información actualizada del aire en la escena
+    """
+    air_data = object_service.update_air_info(air_data)
+
+    return air_data

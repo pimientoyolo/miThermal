@@ -470,5 +470,53 @@ class SceneService:
         if scene_dict:
             self.scene_parser.save_dict_as_xml(scene_dict, config.SCENE_THERMAL_DIR)
 
+    def update_thermal_scene_air(self):
+        """
+        Actualiza las propiedades del aire en la escena térmica con sus nuevas propiedades.
+        """
+        # Cargar configuración JSON desde el directorio de la escena
+        config_scene = config.get_config_scene_dict()
+        wavelengths = config_scene["wavelengths"]
+        num_bands = config_scene["num_bands"]
+
+        scene_dict = self.get_dict_scene(config.SCENE_THERMAL_DIR)
+        
+        # Agregar medio homogéneo con coeficiente de extinción espectral
+        # Crear valores de sigma_t para el medium (coeficiente de extinción)
+        # Valores típicos para niebla en infrarrojo lejano
+        sigma_t_values = config_scene["air"]["sigma_t"] # air values
+        t_air = config_scene["air"]["temperature"]
+
+        emission_air = object_utils.blackbody_radiance_nm(wavelengths, t_air)
+
+        emitter_air_dict = object_utils.create_spectral_emitter(wavelengths, emission_air, "constant")
+
+        # Agregar emisor de aire a la escena
+        scene_dict["scene"]["emitter"] = emitter_air_dict
+
+        # Validar que sigma_t_values tenga la longitud correcta
+        if len(sigma_t_values) != num_bands:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Los valores de sigma_t ({len(sigma_t_values)}) no coinciden con el número de bandas ({num_bands})"
+            )
+        
+        # Crear el medium usando la función de object_utils
+        medium_dict = object_utils.create_homogeneous_medium(
+            wavelengths=wavelengths,
+            sigma_t=sigma_t_values,
+            medium_id="fog",
+            g_value=0.95  # Valor para infrarrojo lejano
+        )
 
         
+        # Agregar el medium a la escena
+        scene_dict["scene"]["medium"] = medium_dict
+
+
+        # Guardar la escena modificada como XML
+        if scene_dict:
+            self.scene_parser.save_dict_as_xml(scene_dict, config.SCENE_THERMAL_DIR)
+        
+
+
