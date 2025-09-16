@@ -34,6 +34,8 @@ SCENE_TRANSMITTANCE_BLACKBODY_AIR = str(OUTPUT_DIR / "static" / "scene_transmitt
 OUTPUT_STATIC_DIR = str(OUTPUT_DIR / "static")
 SCENE_ZIP = str(OUTPUT_DIR / "static" / "scene.zip")
 CONFIG_SCENE = str(CONFIG_DIR / "config_scene.json")
+DEFAULT_EMITTIVITY_FILE = str(ASSETS_DIR / "materials" / "default.txt")
+AIR_ATTENUATION_FILE = str(OUTPUT_DIR / "air.txt")
 
 # resultados
 OUTPUT_STATIC_RESULT_DIR = OUTPUT_DIR / "static" / "result"

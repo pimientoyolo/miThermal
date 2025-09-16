@@ -60,13 +60,7 @@ class SceneService:
         os.rename(xml_file, config.SCENE_DIR)
 
         config_scene = {}
-        num_bands = 10
         T = 300
-
-        # get material
-        material = object_utils.get_material_signature("stone")
-        indices = np.linspace(0, len(material) - 1, num_bands, dtype=int)
-        metarial = material[indices]
 
         scene_dict = self.get_dict_scene(config.SCENE_DIR)
 
@@ -94,8 +88,8 @@ class SceneService:
             if isinstance(shapes, list):
                 for shape in shapes:
                     id = shape["string"]["@value"]
+                    object_utils.save_default_emissivity(id)
                     obj = {}
-                    obj["emissivity"] = metarial.tolist()
                     obj["temperature"] = T
                     config_scene[id] = obj
 
@@ -105,9 +99,9 @@ class SceneService:
 
             elif isinstance(shapes, dict):
                 id = shapes["string"]["@value"]
+                object_utils.save_default_emissivity(id)
                 obj = {}
                 obj["id"] = id
-                obj["emissivity"] = metarial.tolist()
                 obj["temperature"] = T
                 config_scene["objects"].append(obj)
 
@@ -118,12 +112,15 @@ class SceneService:
 
         # air values
         t_air = 280
-        wavelengths = np.linspace(8000, 14000, num_bands)
-        sigma_t_values = object_utils.get_attenuation_for_wavelengths(wavelengths)
+
+        wavelengths = np.linspace(10000, 12000, 10, endpoint=True, dtype=int)
+
+        # Obtener longitudes de onda y atenuación desde archivo de referencia
+        object_utils.get_attenuation()
+        num_bands = len(wavelengths)
 
         config_scene["air"] = {
-            "temperature": t_air,
-            "sigma_t": sigma_t_values.tolist()
+            "temperature": t_air
         }
 
         config_scene["camera"] = {
@@ -131,7 +128,7 @@ class SceneService:
             "width": 256,
             "height": 256
         }
-
+        
         config_scene["num_bands"] = num_bands
         config_scene["wavelengths"] = wavelengths.tolist()
 
@@ -233,65 +230,46 @@ class SceneService:
                     for i, shape in enumerate(shapes):
                         # para cada objeto
                         id = shape["string"]["@value"]
-                        material = config_scene[id]["emissivity"]
+                        wavelengths_obj, emissivity = object_utils.read_object_emissivity_file(id)
                         temperature = config_scene[id]["temperature"]
-                        radiance = object_utils.blackbody_radiance_nm(wavelengths, temperature)
-                        emission = radiance * material
-                        reflectance = 1 - np.array(material)
-                        dict_reflectance = object_utils.create_reflectance_material(wavelengths, reflectance)
-                        dict_emission = object_utils.create_spectral_emitter(wavelengths, emission)
+                        radiance = object_utils.blackbody_radiance_nm(wavelengths_obj, temperature)
+                        emission = radiance * emissivity
+                        reflectance = 1 - np.array(emissivity)
+                        dict_reflectance = object_utils.create_reflectance_material(wavelengths_obj, reflectance)
+                        dict_emission = object_utils.create_spectral_emitter(wavelengths_obj, emission)
                         shape["emitter"] = dict_emission
                         shape['bsdf'] = dict_reflectance
-
-                        # Validar que la longitud del material coincida con el número de bandas
-                        if len(material) != num_bands:
-                            raise HTTPException(
-                                status_code=400,
-                                detail=f"La firma espectral ({id}) no coincide con el número de bandas ({num_bands})"
-                            )
                         
                 elif isinstance(shapes, dict):
                     # Para un solo shape
                     id = shapes["string"]["@value"]
-                    material = config_scene[id]["emissivity"]
+                    wavelengths_obj, emissivity = object_utils.read_object_emissivity_file(id)
                     temperature = config_scene[id]["temperature"]
-                    radiance = object_utils.blackbody_radiance_nm(wavelengths, temperature)
-                    emission = radiance * material
-                    reflectance = 1 - np.array(material)
-                    dict_reflectance = object_utils.create_reflectance_material(wavelengths, reflectance)
-                    dict_emission = object_utils.create_spectral_emitter(wavelengths, emission)
+                    radiance = object_utils.blackbody_radiance_nm(wavelengths_obj, temperature)
+                    emission = radiance * emissivity
+                    reflectance = 1 - np.array(emissivity)
+                    dict_reflectance = object_utils.create_reflectance_material(wavelengths_obj, reflectance)
+                    dict_emission = object_utils.create_spectral_emitter(wavelengths_obj, emission)
                     shapes["emitter"] = dict_emission
                     shapes['bsdf'] = dict_reflectance
 
-                    if len(material) != num_bands:
-                            raise HTTPException(
-                                status_code=400,
-                                detail=f"La firma espectral ({id}) no coincide con el número de bandas ({num_bands})"
-                            )
 
             # Agregar medio homogéneo con coeficiente de extinción espectral
             # Crear valores de sigma_t para el medium (coeficiente de extinción)
             # Valores típicos para niebla en infrarrojo lejano
-            sigma_t_values = config_scene["air"]["sigma_t"] # air values
             t_air = config_scene["air"]["temperature"]
+            wavelengths_air, sigma_t_values = object_utils.read_air_attenuation_file()
 
-            emission_air = object_utils.blackbody_radiance_nm(wavelengths, t_air)
+            emission_air = object_utils.blackbody_radiance_nm(wavelengths_air, t_air)
 
-            emitter_air_dict = object_utils.create_spectral_emitter(wavelengths, emission_air, "constant")
+            emitter_air_dict = object_utils.create_spectral_emitter(wavelengths_air, emission_air, "constant")
 
             # Agregar emisor de aire a la escena
             scene_dict["scene"]["emitter"] = emitter_air_dict
-
-            # Validar que sigma_t_values tenga la longitud correcta
-            if len(sigma_t_values) != num_bands:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Los valores de sigma_t ({len(sigma_t_values)}) no coinciden con el número de bandas ({num_bands})"
-                )
             
             # Crear el medium usando la función de object_utils
             medium_dict = object_utils.create_homogeneous_medium(
-                wavelengths=wavelengths,
+                wavelengths=wavelengths_air,
                 sigma_t=sigma_t_values,
                 medium_id="fog",
                 g_value=0.95  # Valor para infrarrojo lejano
@@ -365,11 +343,11 @@ class SceneService:
         config_scene = config.get_config_scene_dict()
 
         t_air = config_scene["air"]["temperature"]
-        wavelengths = config_scene["wavelengths"]
+        wavelengths_air, _ = object_utils.read_air_attenuation_file()
 
-        emission_air = object_utils.blackbody_radiance_nm(wavelengths, t_air)
+        emission_air = object_utils.blackbody_radiance_nm(wavelengths_air, t_air)
 
-        emitter_air_dict = object_utils.create_spectral_emitter(wavelengths, emission_air)
+        emitter_air_dict = object_utils.create_spectral_emitter(wavelengths_air, emission_air)
 
         if scene_dict and "scene" in scene_dict and "shape" in scene_dict["scene"]:
                 shapes = scene_dict["scene"]["shape"]
@@ -406,7 +384,6 @@ class SceneService:
         """
         # Cargar configuración JSON desde el directorio de la escena
         config_scene = config.get_config_scene_dict()
-        wavelengths = config_scene["wavelengths"]
 
         scene_dict = self.get_dict_scene(config.SCENE_THERMAL_DIR)
         
@@ -418,15 +395,9 @@ class SceneService:
             )
         
         # Obtener las propiedades del objeto específico
-        material = config_scene[object_id]["emissivity"]
+        wavelengths_obj, emissivity = object_utils.read_object_emissivity_file(object_id)
         temperature = config_scene[object_id]["temperature"]
         
-        # Validar que la longitud del material coincida con el número de longitudes de onda
-        if len(material) != len(wavelengths):
-            raise HTTPException(
-                status_code=400,
-                detail=f"La firma espectral del objeto ({object_id}) tiene {len(material)} bandas, pero se esperan {len(wavelengths)} según las longitudes de onda"
-            )
         
         object_found = False
         
@@ -439,11 +410,11 @@ class SceneService:
                     shape_id = shape["string"]["@value"]
                     if shape_id == object_id:
                         # Actualizar solo este objeto
-                        radiance = object_utils.blackbody_radiance_nm(wavelengths, temperature)
-                        emission = radiance * material
-                        reflectance = 1 - np.array(material)
-                        dict_reflectance = object_utils.create_reflectance_material(wavelengths, reflectance)
-                        dict_emission = object_utils.create_spectral_emitter(wavelengths, emission)
+                        radiance = object_utils.blackbody_radiance_nm(wavelengths_obj, temperature)
+                        emission = radiance * emissivity
+                        reflectance = 1 - np.array(emissivity)
+                        dict_reflectance = object_utils.create_reflectance_material(wavelengths_obj, reflectance)
+                        dict_emission = object_utils.create_spectral_emitter(wavelengths_obj, emission)
                         shape["emitter"] = dict_emission
                         shape['bsdf'] = dict_reflectance
                         object_found = True
@@ -453,11 +424,11 @@ class SceneService:
                 # Para un solo shape
                 shape_id = shapes["string"]["@value"]
                 if shape_id == object_id:
-                    radiance = object_utils.blackbody_radiance_nm(wavelengths, temperature)
-                    emission = radiance * material
-                    reflectance = 1 - np.array(material)
-                    dict_reflectance = object_utils.create_reflectance_material(wavelengths, reflectance)
-                    dict_emission = object_utils.create_spectral_emitter(wavelengths, emission)
+                    radiance = object_utils.blackbody_radiance_nm(wavelengths_obj, temperature)
+                    emission = radiance * emissivity
+                    reflectance = 1 - np.array(emissivity)
+                    dict_reflectance = object_utils.create_reflectance_material(wavelengths_obj, reflectance)
+                    dict_emission = object_utils.create_spectral_emitter(wavelengths_obj, emission)
                     shapes["emitter"] = dict_emission
                     shapes['bsdf'] = dict_reflectance
                     object_found = True
@@ -478,8 +449,6 @@ class SceneService:
         Refresca el espectro del film (sensor espectral) según las nuevas longitudes de onda.
         """
         config_scene = config.get_config_scene_dict()
-        wavelengths = config_scene["wavelengths"]
-        num_bands = config_scene["num_bands"]
 
         scene_dict = self.get_dict_scene(config.SCENE_THERMAL_DIR)
 
@@ -487,22 +456,16 @@ class SceneService:
             raise HTTPException(status_code=404, detail="Escena térmica no encontrada para actualizar aire")
 
         # === Actualizar film spectrum (extraído a helper) ===
-        self.update_film_spectrum(scene_dict, wavelengths, ensure_specfilm=True)
+        self.update_film_spectrum()
 
         # Datos de aire
-        sigma_t_values = config_scene["air"]["sigma_t"]
         t_air = config_scene["air"]["temperature"]
+        wavelengths, sigma_t_values = object_utils.read_air_attenuation_file()
 
         # Recalcular emisión del aire
         emission_air = object_utils.blackbody_radiance_nm(wavelengths, t_air)
         emitter_air_dict = object_utils.create_spectral_emitter(wavelengths, emission_air, "constant")
         scene_dict["scene"]["emitter"] = emitter_air_dict
-
-        if len(sigma_t_values) != num_bands:
-            raise HTTPException(
-                status_code=400,
-                detail=f"Los valores de sigma_t ({len(sigma_t_values)}) no coinciden con el número de bandas ({num_bands})"
-            )
 
         # Medium actualizado
         medium_dict = object_utils.create_homogeneous_medium(
