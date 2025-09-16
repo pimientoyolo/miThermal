@@ -51,7 +51,7 @@ class ObjService:
         )
     
     def validate_object_id_exists(self, object_id: str) -> str:
-        object_path = config.OUTPUT_STATIC_DIR + "/" + object_id
+        object_path = config.OUTPUT_STATIC_DIR / object_id
 
         if not os.path.exists(object_path):
             raise HTTPException(status_code=404, detail=f"Archivo no encontrado: {object_path}")
@@ -62,6 +62,10 @@ class ObjService:
         
         self.validate_object_id_exists(object_id)
         config_scene = config.get_config_scene_dict()
+
+        wavelengths, emissivity = self.object_utils.read_object_emissivity_file(object_id)
+
+        reflection = 1.0 - emissivity
         
         # Buscar el objeto en la configuración de la escena
         object_config = None
@@ -69,24 +73,16 @@ class ObjService:
             if object_id in key or key.endswith(object_id):
                 object_config = config_scene[key]
                 break
+
         
-        # Si no se encuentra en la config, usar valores por defecto
-        if object_config is None:
-            raise HTTPException(status_code=404, detail=f"Configuración no encontrada para el objeto: {object_id}")
-        
-        # Crear listas de emisividad y reflección
-        emission = object_config.get("emissivity")
-        emissivity_array = np.array(emission, dtype=float) if emission else np.array([])
-        emissivity = emissivity_array.tolist()
-        reflection_array = 1.0 - emissivity_array if len(emissivity_array) > 0 else np.array([])
-        reflection = reflection_array.tolist()
         
         # Construir el DTO
         return ObjectDTO(
             id=object_id,
             temperature=object_config.get("temperature"),
-            emissivity=emissivity,
-            reflection=reflection
+            emissivity=emissivity.tolist(),
+            reflection=reflection.tolist(),
+            wavelengths=wavelengths.tolist()
         )
     
     def update_object_info(self, object_data: ObjectDTO) -> ObjectDTO:

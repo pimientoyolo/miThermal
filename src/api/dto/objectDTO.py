@@ -1,8 +1,13 @@
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List
 
 class ObjectDTO(BaseModel):
     id: str
     temperature: float
     emissivity: List[float]
-    reflection: Optional[List[float]] = None
+    reflection: List[float]
+    wavelengths: List[float]
+
+class UpdateObjectDTO(BaseModel):
+    id: str
+    temperature: float

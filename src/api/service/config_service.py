@@ -27,7 +27,7 @@ class ConfigService:
             spp=scene_config["camera"]["spp"],
             width=scene_config["camera"]["width"],
             height=scene_config["camera"]["height"],
-            wavelengths=scene_config["wavelengths"],
+            wavelengths=[w / 1000 for w in scene_config["wavelengths"]],
             num_bands=scene_config["num_bands"]
         )
 
@@ -57,7 +57,7 @@ class ConfigService:
             spp=scene_config["camera"]["spp"],
             width=scene_config["camera"]["width"],
             height=scene_config["camera"]["height"],
-            wavelengths=scene_config["wavelengths"],
+            wavelengths=[w / 1000 for w in scene_config["wavelengths"]],
             num_bands=scene_config["num_bands"]
         )
 
