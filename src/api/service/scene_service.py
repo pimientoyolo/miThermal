@@ -522,55 +522,6 @@ class SceneService:
 
         # Guardar la escena modificada como XML
         self.scene_parser.save_dict_as_xml(scene_dict, config.SCENE_THERMAL_DIR)
-
-    def get_camera_info(self):
-        config_scene = config.get_config_scene_dict()
-        camera_config = config_scene.get("camera", {})
-        if not camera_config:
-            raise HTTPException(status_code=404, detail="Configuración de la cámara no encontrada en la escena")
-        
-        return CameraDTO(
-            spp=camera_config.get("spp"),
-            width=camera_config.get("width"),
-            height=camera_config.get("height")
-        )
-    
-    def update_camera_info(self, camera_data: CameraDTO):
-        config_scene = config.get_config_scene_dict()
-        
-        # Actualizar la configuración de la cámara
-        config_scene["camera"] = {
-            "spp": camera_data.spp,
-            "width": camera_data.width,
-            "height": camera_data.height
-        }
-
-        # Validar valores de la cámara
-        if camera_data.spp <= 0:
-            raise HTTPException(status_code=400, detail="El valor de spp debe ser mayor que 0")
-        
-        if camera_data.width <= 0 or camera_data.height <= 0:
-            raise HTTPException(status_code=400, detail="Los valores de width y height deben ser mayores que 0")
-        
-        # Validar que spp sea una potencia de 2
-        if camera_data.spp & (camera_data.spp - 1) != 0:
-            raise HTTPException(status_code=400, detail="El valor de spp debe ser una potencia de 2 (2, 4, 8, 16, 32, etc.)")
-
-        # Guardar los cambios en el archivo de configuración
-        config.save_config_scene_dict(config_scene)
-
-        # Actualizar la escena RGB
-        self.update_scene_camera_rgb()
-        # Actualizar la escena térmica
-        self.update_scene_camera_thermal()
-
-        # Re hacer el resto
-        self.prepare_depth_scene()
-        self.prepare_transmittance_blackbody_air_scene()
-        self.prepare_blackbody_air_scene()
-
-        # Retornar la configuración actualizada
-        return camera_data
     
     def update_scene_camera_rgb(self):
         scene_dict = self.get_dict_scene(config.SCENE_DIR)

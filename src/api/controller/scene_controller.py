@@ -28,11 +28,3 @@ async def load_scene(file: UploadFile = File(...)) -> FileResponse:
 @scene_router.get("/loaded")
 async def has_loaded_scene() -> bool:
     return scene_service.has_loaded_scene(config.SCENE_DIR)
-
-@scene_router.get("/camera")
-async def get_camera_info() -> CameraDTO:
-    return scene_service.get_camera_info()
-
-@scene_router.put("/camera")
-async def update_camera_info(camera_data: CameraDTO) -> CameraDTO:
-    return scene_service.update_camera_info(camera_data)
