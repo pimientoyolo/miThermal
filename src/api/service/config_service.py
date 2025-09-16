@@ -6,6 +6,8 @@ import numpy as np
 
 from fastapi import HTTPException
 
+from src.mitsuba_core.object_utils import ObjectUtils
+
 
 logger = logging.getLogger(__name__)
 

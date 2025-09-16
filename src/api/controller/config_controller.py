@@ -1,8 +1,13 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, File
+from fastapi.responses import FileResponse, StreamingResponse
+import io
 
 from src.api.dto.cameraDTO import CameraDTO, UpdateCameraDTO
 from src.api.service.config_service import ConfigService
 from fastapi import Query, HTTPException
+
+from src.mitsuba_core.object_utils import ObjectUtils
+import src.config as config
 
 
 config_router = APIRouter(
@@ -11,6 +16,7 @@ config_router = APIRouter(
 )
 
 config_service = ConfigService()
+object_utils = ObjectUtils()
 
 @config_router.get("/camera")
 async def get_config() -> CameraDTO:
@@ -52,3 +58,10 @@ async def set_air_temperature(
     config_service.set_air_temperature(temperature)
 
     return config_service.get_air_temperature()
+
+@config_router.get("/air/attenuation")
+async def get_air_attenuation() -> FileResponse:
+
+    object_utils.valid_exist_file(config.AIR_ATTENUATION_FILE)
+
+    return FileResponse(config.AIR_ATTENUATION_FILE, filename="air.txt")
