@@ -93,7 +93,7 @@ async def get_obj_emissivity_file(
 async def update_obj_emissivity(
     object_id: str = Query(..., description="ID del objeto (ej: 'meshes/objeto.ply', 'Dragon.obj')"),
     file: UploadFile = File(...)
-) -> ObjectDTO:
+) -> str:
     """
     Actualiza la emisividad de un objeto 3D específico.
 
@@ -102,9 +102,9 @@ async def update_obj_emissivity(
         emissivity: Lista de valores de emisividad a actualizar
 
     Returns:
-        Información actualizada del objeto 3D
+        Mensaje de confirmación y advertencias si las hay
     """
-    object_data = object_service.update_object_emissivity(object_id, file)
+    mensaje = object_service.update_object_emissivity(object_id, file)
 
-    return object_data
+    return mensaje
 

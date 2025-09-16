@@ -110,8 +110,8 @@ class ObjService:
         scene_service.prepare_transmittance_blackbody_air_scene()
         
         return self.get_object_info_by_id(object_id)
-    
-    def update_object_emissivity(self, object_id: str, file: UploadFile) -> ObjectDTO:
+
+    def update_object_emissivity(self, object_id: str, file: UploadFile) -> str:
         # Asegurar que el objeto existe en la escena (archivo 3D presente)
         self.validate_object_id_exists(object_id)
 
@@ -145,6 +145,7 @@ class ObjService:
         wavelengths_um = data[:, 0].astype(float)
         reflectance_pct = data[:, 1].astype(float)
 
+
         # Validaciones de contenido
         if np.any(~np.isfinite(wavelengths_um)) or np.any(~np.isfinite(reflectance_pct)):
             raise HTTPException(status_code=400, detail="El archivo contiene valores no numéricos o infinitos")
@@ -168,14 +169,35 @@ class ObjService:
         with open(dst_path, "wb") as f:
             f.write(raw)
 
+        mensaje = ""
+
+        scene_config = config.get_config_scene_dict()
+        wavelengths_scene = scene_config.get("wavelengths")
+        wavelengths_scene = np.array(wavelengths_scene)/1000  # Convertir a µm
+
+        w_min = np.min(wavelengths_scene)
+        w_max = np.max(wavelengths_scene)
+
+        if np.min(wavelengths_um) > w_min and np.max(wavelengths_um) < w_max:
+                mensaje =  "Advertencia: El archivo contiene longitudes de onda que no cubre el rango completo de la cámara. Se recomienda incluir valores entre {:.3f} µm y {:.3f} µm".format(w_min, w_max)
+            
+        elif np.min(wavelengths_um) > w_min:
+            mensaje =  "Advertencia: El archivo contiene longitudes de onda mayores al mínimo de la cámara ({:.3f} µm). Se recomienda incluir valores menores".format(w_min)
+
+        elif np.max(wavelengths_um) < w_max:
+            mensaje =  "Advertencia: El archivo contiene longitudes de onda menores al máximo de la cámara ({:.3f} µm). Se recomienda incluir valores mayores".format(w_max)
+        
+        else:
+            mensaje = "Archivo de atenuación del aire actualizado correctamente" 
+
         # Actualizar escenas afectadas
         scene_service.update_thermal_scene_obj(object_id=object_id)
         scene_service.prepare_depth_scene()
         scene_service.prepare_blackbody_air_scene()
         scene_service.prepare_transmittance_blackbody_air_scene()
 
-        # Devolver DTO actualizado
-        return self.get_object_info_by_id(object_id)
+        # Devolver mensaje
+        return mensaje
 
     def get_object_emissivity_file_by_id(self, object_id: str) -> FileResponse:
         self.validate_object_id_exists(object_id)
