@@ -486,15 +486,8 @@ class SceneService:
         if not scene_dict or "scene" not in scene_dict:
             raise HTTPException(status_code=404, detail="Escena térmica no encontrada para actualizar aire")
 
-        # === Actualizar film spectrum si existe el sensor ===
-        sensor = scene_dict["scene"].get("sensor")
-        if sensor and "film" in sensor:
-            film = sensor["film"]
-            # Asegurar tipo specfilm
-            film["@type"] = "specfilm"
-            # Regenerar bandas espectrales según las longitudes actuales
-            film["spectrum"] = create_specfilm_bands(wavelengths)
-            # Nota: No re-agregamos rfilter aquí para mantenerlo opcional
+        # === Actualizar film spectrum (extraído a helper) ===
+        self.update_film_spectrum(scene_dict, wavelengths, ensure_specfilm=True)
 
         # Datos de aire
         sigma_t_values = config_scene["air"]["sigma_t"]
@@ -522,6 +515,32 @@ class SceneService:
 
         # Guardar la escena modificada como XML
         self.scene_parser.save_dict_as_xml(scene_dict, config.SCENE_THERMAL_DIR)
+
+    def update_film_spectrum(self) -> bool:
+        """
+        Actualiza el film del sensor para que use bandas espectrales acorde a 'wavelengths'.
+        - Asegura el tipo 'specfilm' si ensure_specfilm=True
+
+        Retorna True si se actualizó, False si no se encontró sensor/film.
+        """
+        config_scene = config.get_config_scene_dict()
+        wavelengths = config_scene["wavelengths"]
+
+        scene_dict = self.get_dict_scene(config.SCENE_THERMAL_DIR)
+
+        if not scene_dict or "scene" not in scene_dict:
+            return False
+        sensor = scene_dict["scene"].get("sensor")
+        if not sensor or "film" not in sensor:
+            return False
+
+        film = sensor["film"]
+        film["@type"] = "specfilm"
+        film["spectrum"] = create_specfilm_bands(wavelengths)
+
+        self.scene_parser.save_dict_as_xml(scene_dict, config.SCENE_THERMAL_DIR)
+
+        return True
     
     def update_scene_camera_rgb(self):
         scene_dict = self.get_dict_scene(config.SCENE_DIR)
