@@ -34,12 +34,12 @@ async def update_config(camera_update: UpdateCameraDTO) -> CameraDTO:
 
 @config_router.put("/wavelengths")
 async def update_wavelengths(
-    wavelength_min: int = Query(..., ge=0, description="Longitud de onda minima en nm"),
-    wavelength_max: int = Query(..., gt=0, description="Longitud de onda maxima en nm"),
+    wavelength_min: int = Query(..., ge=0, description="Longitud de onda minima en μm"),
+    wavelength_max: int = Query(..., gt=0, description="Longitud de onda maxima en μm"),
     bands: int = Query(..., gt=2, description="Numero de bandas"),
 ) -> CameraDTO:
 
-    updated_camera = config_service.update_wavelengths(wavelength_min, wavelength_max, bands)
+    updated_camera = config_service.update_wavelengths(wavelength_min*1000, wavelength_max*1000, bands)
 
     return updated_camera
 
