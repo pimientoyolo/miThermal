@@ -1,4 +1,4 @@
-from fastapi import APIRouter, File
+from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 import io
 
@@ -65,3 +65,10 @@ async def get_air_attenuation() -> FileResponse:
     object_utils.valid_exist_file(config.AIR_ATTENUATION_FILE)
 
     return FileResponse(config.AIR_ATTENUATION_FILE, filename="air.txt")
+
+@config_router.put("/air/attenuation")
+async def set_air_attenuation(file: UploadFile = File(...)) -> str:
+
+    mensaje = config_service.set_air_attenuation(file)
+
+    return mensaje

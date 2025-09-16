@@ -469,7 +469,11 @@ class ObjectUtils:
             if not path.exists():
                 raise HTTPException(status_code=404, detail=f"No existe el archivo de atenuación: {path}")
 
-            data = np.loadtxt(path)
+            # Enforce TAB-delimited file
+            try:
+                data = np.loadtxt(path, delimiter='\t')
+            except Exception as e:
+                raise HTTPException(status_code=400, detail=f"Error leyendo archivo (debe estar separado por TABs): {e}")
 
             # Manejar casos de una sola fila
             if data.ndim == 1:
@@ -477,11 +481,18 @@ class ObjectUtils:
                     raise HTTPException(status_code=400, detail="El archivo debe tener al menos dos columnas")
                 data = data.reshape(1, -1)
 
-            if data.shape[1] < 2:
-                raise HTTPException(status_code=400, detail="El archivo debe tener dos columnas: wavelength_um y sigma_t")
+            # Debe tener exactamente dos columnas (wavelength_um, sigma_t)
+            if data.shape[1] != 2:
+                raise HTTPException(status_code=400, detail="El archivo debe tener exactamente dos columnas: wavelength_um y sigma_t")
 
             wavelengths_um = data[:, 0].astype(float)
             sigma_t = data[:, 1].astype(float)
+
+            # Validaciones de valores
+            if np.any(wavelengths_um <= 0):
+                raise HTTPException(status_code=400, detail="Las longitudes de onda deben ser mayores a 0 (en micrómetros)")
+            if np.any(sigma_t < 0):
+                raise HTTPException(status_code=400, detail="Los valores de atenuación (sigma_t) no pueden ser negativos")
 
             wavelengths_nm = wavelengths_um * 1000.0
 
