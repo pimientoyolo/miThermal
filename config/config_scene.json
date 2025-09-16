@@ -1,6 +1,6 @@
 {
     "meshes/Cube.ply": {
-        "temperature": 300
+        "temperature": 400.0
     },
     "meshes/Cube_001.ply": {
         "temperature": 300
