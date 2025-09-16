@@ -36,3 +36,19 @@ async def update_wavelengths(
     updated_camera = config_service.update_wavelengths(wavelength_min, wavelength_max, bands)
 
     return updated_camera
+
+@config_router.get("/air/temperature")
+async def get_air_temperature() -> float:
+
+    temperature = config_service.get_air_temperature()
+
+    return temperature
+
+@config_router.put("/air/temperature")
+async def set_air_temperature(
+    temperature: float = Query(..., description="Temperatura del aire en kelvin")
+) -> float:
+
+    config_service.set_air_temperature(temperature)
+
+    return config_service.get_air_temperature()

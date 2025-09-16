@@ -15,7 +15,7 @@
         "temperature": 300
     },
     "air": {
-        "temperature": 280
+        "temperature": 200.0
     },
     "camera": {
         "spp": 256,
@@ -34,5 +34,6 @@
         11555,
         11777,
         12000
-    ]
+    ],
+    "air_temperature": 200.0
 }

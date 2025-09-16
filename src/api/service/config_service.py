@@ -91,3 +91,24 @@ class ConfigService:
             scene_service.prepare_transmittance_blackbody_air_scene()
 
         return self.get_camera_config()
+    
+    def get_air_temperature(self) -> float:
+        scene_config = config.get_config_scene_dict()
+        return scene_config["air"]["temperature"]
+    
+    def set_air_temperature(self, temperature: float):
+
+        # validar temperatura mayor a 0
+        if temperature <= 0:
+            raise HTTPException(status_code=400, detail="La temperatura debe ser superior a 0 (cero absoluto no permitido)")
+
+        scene_config = config.get_config_scene_dict()
+
+        scene_config["air"]["temperature"] = temperature
+
+        config.save_config_scene_dict(scene_config)
+
+        scene_service.update_thermal_scene_air()
+        scene_service.prepare_blackbody_air_scene()
+        scene_service.prepare_transmittance_blackbody_air_scene()
+        scene_service.prepare_depth_scene()
