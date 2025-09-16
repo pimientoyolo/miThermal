@@ -9,6 +9,8 @@ from src.api.service.render_service import RenderService
 import src.config as config
 import aiofiles
 
+OCTET_STREAM_MEDIA_TYPE = "application/octet-stream"
+
 render_service = RenderService()
 
 render_router = APIRouter(
@@ -28,7 +30,7 @@ async def render_scene_depth() -> StreamingResponse:
         async with aiofiles.open(config.DEPTH_DIR, "rb") as file:
             while chunk := await file.read(1024):
                 yield chunk
-    return StreamingResponse(iterfile(), media_type="application/octet-stream", headers={"Content-Disposition": "attachment; filename=depth.npy"})
+    return StreamingResponse(iterfile(), media_type=OCTET_STREAM_MEDIA_TYPE, headers={"Content-Disposition": "attachment; filename=depth.npy"})
 
 @render_router.get("/thermal")
 async def render_scene_thermal() -> StreamingResponse:
@@ -37,7 +39,7 @@ async def render_scene_thermal() -> StreamingResponse:
         async with aiofiles.open(config.THERMAL_DIR, "rb") as file:
             while chunk := await file.read(1024):
                 yield chunk
-    return StreamingResponse(iterfile(), media_type="application/octet-stream", headers={"Content-Disposition": "attachment; filename=thermal.npy"})
+    return StreamingResponse(iterfile(), media_type=OCTET_STREAM_MEDIA_TYPE, headers={"Content-Disposition": "attachment; filename=thermal.npy"})
 
 @render_router.get("/air/blackbody")
 async def render_scene_blackbody_air() -> StreamingResponse:
@@ -46,7 +48,7 @@ async def render_scene_blackbody_air() -> StreamingResponse:
         async with aiofiles.open(config.BLACKBODY_AIR_DIR, "rb") as file:
             while chunk := await file.read(1024):
                 yield chunk
-    return StreamingResponse(iterfile(), media_type="application/octet-stream", headers={"Content-Disposition": "attachment; filename=blackbody_air.npy"})
+    return StreamingResponse(iterfile(), media_type=OCTET_STREAM_MEDIA_TYPE, headers={"Content-Disposition": "attachment; filename=blackbody_air.npy"})
 
 @render_router.get("/air/transmittance")
 async def render_scene_transmittance_blackbody_air() -> StreamingResponse:
@@ -55,7 +57,7 @@ async def render_scene_transmittance_blackbody_air() -> StreamingResponse:
         async with aiofiles.open(config.TRANSMITTANCE_BLACKBODY_AIR_DIR, "rb") as file:
             while chunk := await file.read(1024):
                 yield chunk
-    return StreamingResponse(iterfile(), media_type="application/octet-stream", headers={"Content-Disposition": "attachment; filename=transmittance_blackbody_air.npy"})
+    return StreamingResponse(iterfile(), media_type=OCTET_STREAM_MEDIA_TYPE, headers={"Content-Disposition": "attachment; filename=transmittance_blackbody_air.npy"})
 
 @render_router.get("/air/contribution")
 async def render_scene_contribution_blackbody_air() -> StreamingResponse:
@@ -64,4 +66,4 @@ async def render_scene_contribution_blackbody_air() -> StreamingResponse:
         async with aiofiles.open(config.CONTRIBUTION_BLACKBODY_AIR_DIR, "rb") as file:
             while chunk := await file.read(1024):
                 yield chunk
-    return StreamingResponse(iterfile(), media_type="application/octet-stream", headers={"Content-Disposition": "attachment; filename=contribution_blackbody_air.npy"})
+    return StreamingResponse(iterfile(), media_type=OCTET_STREAM_MEDIA_TYPE, headers={"Content-Disposition": "attachment; filename=contribution_blackbody_air.npy"})

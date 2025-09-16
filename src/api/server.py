@@ -14,6 +14,7 @@ from ..config import get_config, get_output_path
 from src.api.controller.scene_controller import scene_router
 from src.api.controller.obj_controller import obj_router
 from src.api.controller.render_controller import render_router
+from src.api.controller.config_controller import config_router
 
 
 # Configuración
@@ -54,4 +55,8 @@ app.include_router(
 
 app.include_router(
     render_router
+)
+
+app.include_router(
+    config_router
 )

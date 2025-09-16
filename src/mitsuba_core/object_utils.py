@@ -11,6 +11,8 @@ from fastapi import HTTPException
 from src.mitsuba_core.scene_parser import SceneParser
 from src.api.dto.suggestDTO import SuggestDTO
 from scipy import constants as const
+import shutil
+import src.config as config
 
 class ObjectUtils:
     """
@@ -390,28 +392,25 @@ class ObjectUtils:
             self.logger.error(f"Error creando medium homogéneo: {e}")
             raise HTTPException(status_code=500, detail=f"Error al crear medium homogéneo: {e}")
 
-    def get_attenuation_for_wavelengths(self, wavelengths: np.ndarray, attenuation_file: str = "air") -> np.ndarray:
+    def get_attenuation(self, attenuation_file: str = "air") -> tuple[np.ndarray, np.ndarray]:
         """
-        Obtiene los valores de atenuación (sigma_t) para una lista específica de longitudes de onda.
-        Encuentra los valores más cercanos en el archivo de atenuación.
-        
+        Lee el archivo de atenuación completo y retorna dos arrays alineados:
+        - wavelengths_nm: longitudes de onda en nanómetros (nm) obtenidas del archivo (columna 0 en µm convertida a nm)
+        - sigma_t_neper: coeficientes de extinción en neper (Np), obtenidos de la columna 2 multiplicada por ln(10)/10
+
+        El resultado se ordena de mayor a menor longitud de onda, preservando el pareo (wavelength, sigma_t).
+
         Args:
-            wavelengths (np.ndarray): Array con las longitudes de onda deseadas en nanometros
-            attenuation_file (str): Nombre del archivo de atenuación (sin extensión)
-            
+            attenuation_file (str): Nombre del archivo de atenuación (sin extensión) en assets/reference_data.
+
         Returns:
-            np.ndarray: Array con los valores de atenuación correspondientes
-            
-        Raises:
-            HTTPException: Si el archivo no existe o hay error en el procesamiento
+            tuple[np.ndarray, np.ndarray]: (wavelengths_nm_desc, sigma_t_neper_desc)
         """
-        # Convertir longitudes de onda de nanómetros a micrómetros
-        wavelengths_um = wavelengths / 1000.0
 
         try:
             # Construir la ruta del archivo
             file_path = f"{self.REFERENCE_DATA_BASE_PATH}/{attenuation_file}.txt"
-            
+
             # Validar que el archivo existe
             if not Path(file_path).exists():
                 available_files = [f.replace('.txt', '') for f in self.ATMOSPHERIC_GAS_FILES]
@@ -419,30 +418,182 @@ class ObjectUtils:
                     status_code=404,
                     detail=f"Archivo '{attenuation_file}.txt' no encontrado. Disponibles: {available_files}"
                 )
-            
+
             # Cargar los datos del archivo
             trans_array = np.loadtxt(file_path)
-            
-            # Extraer columnas: [wavelength, transmittance, attenuation]
-            file_wavelengths = trans_array[:, 0]  # Primera columna: longitudes de onda
-            file_attenuation = trans_array[:, 2]  # Tercera columna: atenuación
-            
-            # Encontrar los índices más cercanos para cada longitud de onda deseada
-            attenuation_values = []
-            
-            for target_wavelength in wavelengths_um:
-                # Encontrar el índice del valor más cercano
-                closest_index = np.argmin(np.abs(file_wavelengths - target_wavelength))
-                attenuation_values.append(file_attenuation[closest_index])
-            
-            attenuation_array = np.array(attenuation_values)
-            
-            self.logger.info(f"Atenuación obtenida para {len(wavelengths_um)} longitudes de onda usando '{attenuation_file}.txt'")
-            
-            return attenuation_array
-            
+
+            # Columnas esperadas: [wavelength_um, transmittance, attenuation]
+            wavelengths_um = trans_array[:, 0].astype(float)
+            attenuation_vals = trans_array[:, 2].astype(float)
+
+            # Convertir longitudes de onda a nm
+            wavelengths_nm = wavelengths_um * 1000.0
+
+            # Convertir atenuación a neper: multiplicar por ln(10)/10
+            sigma_t_neper = attenuation_vals * (np.log(10.0) / 10.0)
+
+            # Ordenar de menor a mayor por longitud de onda, manteniendo pares
+            order = np.argsort(wavelengths_nm)
+            wavelengths_nm_desc = wavelengths_nm[order]
+            sigma_t_neper_desc = sigma_t_neper[order]
+
+            # Guardar a archivo tab-delimitado (wavelength_nm, sigma_t_neper)
+            out_path = Path(config.AIR_ATTENUATION_FILE)
+            try:
+                out_path.parent.mkdir(parents=True, exist_ok=True)
+                data = np.column_stack((wavelengths_um, sigma_t_neper))
+                np.savetxt(out_path, data, delimiter='\t')
+            except Exception as save_err:
+                # No detener el flujo si falla el guardado; reportar y continuar
+                self.logger.warning(f"No se pudo guardar archivo de atenuación en '{config.AIR_ATTENUATION_FILE}': {save_err}")
+
+            return wavelengths_nm_desc, sigma_t_neper_desc
+
         except HTTPException:
             raise
         except Exception as e:
             self.logger.error(f"Error obteniendo atenuación de '{attenuation_file}': {e}")
             raise HTTPException(status_code=500, detail=f"Error al procesar archivo de atenuación: {e}")
+
+    def read_air_attenuation_file(self) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Lee el archivo configurado en config.AIR_ATTENUATION_FILE (dos columnas: wavelength, sigma_t),
+        asumiendo que la primera columna está en micrómetros (µm). Convierte las longitudes a nanómetros (nm)
+        y retorna ambas columnas ordenadas de mayor a menor longitud de onda.
+
+        Returns:
+            tuple[np.ndarray, np.ndarray]: (wavelengths_nm_desc, sigma_t_desc)
+        """
+        try:
+            path = Path(config.AIR_ATTENUATION_FILE)
+            if not path.exists():
+                raise HTTPException(status_code=404, detail=f"No existe el archivo de atenuación: {path}")
+
+            data = np.loadtxt(path)
+
+            # Manejar casos de una sola fila
+            if data.ndim == 1:
+                if data.size < 2:
+                    raise HTTPException(status_code=400, detail="El archivo debe tener al menos dos columnas")
+                data = data.reshape(1, -1)
+
+            if data.shape[1] < 2:
+                raise HTTPException(status_code=400, detail="El archivo debe tener dos columnas: wavelength_um y sigma_t")
+
+            wavelengths_um = data[:, 0].astype(float)
+            sigma_t = data[:, 1].astype(float)
+
+            wavelengths_nm = wavelengths_um * 1000.0
+
+            order = np.argsort(wavelengths_nm)
+            wavelengths_nm_desc = wavelengths_nm[order]
+            sigma_t_desc = sigma_t[order]
+
+            return wavelengths_nm_desc, sigma_t_desc
+        except HTTPException:
+            raise
+        except Exception as e:
+            self.logger.error(f"Error leyendo '{config.AIR_ATTENUATION_FILE}': {e}")
+            raise HTTPException(status_code=500, detail=f"Error al leer archivo de atenuación del aire: {e}")
+        
+    def save_default_emissivity(self, object_id: str) -> None:
+        
+        path_default = config.DEFAULT_EMITTIVITY_FILE
+        self.valid_exist_file(path_default)
+        path_static = config.OUTPUT_STATIC_DIR
+
+        try:
+            src_path = Path(path_default)
+            base_out = Path(path_static)
+
+            obj_path = Path(object_id)
+            # Si es absoluta (p.ej., Windows con drive), convertir a relativa respecto a la raíz
+            if obj_path.is_absolute():
+                obj_path = obj_path.relative_to(obj_path.anchor)
+
+            dst_path = base_out / obj_path.with_suffix(".txt")
+            dst_path.parent.mkdir(parents=True, exist_ok=True)
+
+            shutil.copy2(src_path, dst_path)
+        except HTTPException:
+            raise
+        except Exception as e:
+            self.logger.error(f"Error copiando archivo de emisividad por defecto: {e}")
+            raise HTTPException(status_code=500, detail="Error al copiar archivo de emisividad por defecto")
+
+    def read_reflectance_file_as_emissivity(self, file_path: str) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Lee un archivo de dos columnas [wavelength_um, reflectance_%] y retorna:
+        - wavelengths_nm: longitudes de onda en nanómetros (nm)
+        - emissivity: emisividad (1 - reflectancia), en rango [0, 1]
+
+        Reglas de conversión:
+        - λ [µm] -> λ [nm] = λ * 1000
+        - reflectancia en % -> fracción [0,1] y luego emisividad = 1 - reflectancia
+        """
+        # Validar que el archivo exista
+        self.valid_exist_file(file_path)
+
+        try:
+            data = np.loadtxt(file_path)
+
+            # Asegurar que tenga al menos dos columnas
+            if data.ndim == 1:
+                if data.size < 2:
+                    raise HTTPException(status_code=400, detail="El archivo no contiene dos columnas necesarias")
+                # Si es una sola fila, convertir a (1, N)
+                data = data.reshape(1, -1)
+
+            if data.shape[1] < 2:
+                raise HTTPException(status_code=400, detail="El archivo debe tener al menos dos columnas: wavelength_um y reflectance_%")
+
+            wavelengths_um = data[:, 0].astype(float)
+            reflectance_pct = data[:, 1].astype(float)
+
+            # Ordenar de menor a mayor por longitud de onda
+            order = np.argsort(wavelengths_um)
+            wavelengths_um = wavelengths_um[order]
+            reflectance_pct = reflectance_pct[order]
+
+            # Conversión de unidades
+            wavelengths_nm = wavelengths_um * 1000.0
+
+            # De porcentaje a fracción
+            reflectance = reflectance_pct / 100.0
+            emissivity = 1.0 - reflectance
+
+            # Limitar a [0, 1] por robustez numérica
+            emissivity = np.clip(emissivity, 0.0, 1.0)
+
+            self.logger.info(
+                f"Leído archivo espectral '{file_path}': {len(wavelengths_nm)} muestras (um->nm, %->emisividad)"
+            )
+
+            return wavelengths_nm, emissivity
+        except HTTPException:
+            raise
+        except Exception as e:
+            self.logger.error(f"Error leyendo archivo de reflectancia '{file_path}': {e}")
+            raise HTTPException(status_code=500, detail=f"Error al leer archivo de reflectancia: {e}")
+
+    def read_object_emissivity_file(self, object_id: str) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Conveniencia: Dado un object_id (ruta relativa como en la escena),
+        abre el archivo .txt correspondiente en OUTPUT_STATIC_DIR y retorna
+        (wavelengths_nm, emissivity) usando read_reflectance_file_as_emissivity.
+        """
+        try:
+            base_out = Path(config.OUTPUT_STATIC_DIR)
+            obj_path = Path(object_id)
+            if obj_path.is_absolute():
+                obj_path = obj_path.relative_to(obj_path.anchor)
+
+            txt_path = base_out / obj_path.with_suffix(".txt")
+            return self.read_reflectance_file_as_emissivity(str(txt_path))
+        except HTTPException:
+            raise
+        except Exception as e:
+            self.logger.error(f"Error leyendo emisividad para objeto '{object_id}': {e}")
+            raise HTTPException(status_code=500, detail="Error al leer archivo de emisividad del objeto")
+        
+    

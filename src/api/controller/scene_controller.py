@@ -1,4 +1,5 @@
 from fastapi import APIRouter, File, UploadFile
+from src.api.dto.cameraDTO import CameraDTO
 from src.api.service.scene_service import SceneService
 from src.api.service.render_service import RenderService
 from fastapi.responses import FileResponse, StreamingResponse
@@ -27,4 +28,3 @@ async def load_scene(file: UploadFile = File(...)) -> FileResponse:
 @scene_router.get("/loaded")
 async def has_loaded_scene() -> bool:
     return scene_service.has_loaded_scene(config.SCENE_DIR)
-
