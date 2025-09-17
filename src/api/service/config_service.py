@@ -68,7 +68,7 @@ class ConfigService:
         scene_service.prepare_blackbody_air_scene()
         scene_service.prepare_depth_scene()
         scene_service.prepare_transmittance_blackbody_air_scene()
-
+        scene_service.prepare_temperature_map()
 
         return updated_camera
 
@@ -93,6 +93,7 @@ class ConfigService:
             scene_service.prepare_blackbody_air_scene()
             scene_service.prepare_depth_scene()
             scene_service.prepare_transmittance_blackbody_air_scene()
+            scene_service.prepare_temperature_map()
 
         return self.get_camera_config()
     
@@ -116,6 +117,7 @@ class ConfigService:
         scene_service.prepare_blackbody_air_scene()
         scene_service.prepare_transmittance_blackbody_air_scene()
         scene_service.prepare_depth_scene()
+        scene_service.prepare_temperature_map()
 
     def set_air_attenuation(self, file: UploadFile) -> str:
 
@@ -169,6 +171,7 @@ class ConfigService:
             scene_service.prepare_blackbody_air_scene()
             scene_service.prepare_transmittance_blackbody_air_scene()
             scene_service.prepare_depth_scene()
+            scene_service.prepare_temperature_map()
 
             return mensaje
 

@@ -3,16 +3,16 @@
         "temperature": 400.0
     },
     "meshes/Cube_001.ply": {
-        "temperature": 300
+        "temperature": 350.0
     },
     "meshes/Cube_002.ply": {
-        "temperature": 300
+        "temperature": 450.0
     },
     "meshes/Cube_003.ply": {
-        "temperature": 300
+        "temperature": 250.0
     },
     "meshes/Cube_004.ply": {
-        "temperature": 300
+        "temperature": 500.0
     },
     "air": {
         "temperature": 200.0

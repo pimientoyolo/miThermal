@@ -113,3 +113,23 @@ class RenderThermal():
         # Guardar toda la información (todos los canales)
         np.save(config.TRANSMITTANCE_BLACKBODY_AIR_DIR, image_array)
 
+    def render_temperature_map(self):
+        scene = self.mi.load_file(config.SCENE_TEMPERATURE_MAP)
+
+        image = self.mi.render(scene)
+
+        # Convertir la imagen a numpy array
+        image_array = np.array(image)
+
+        # Colapsar bandas: promedio a lo largo del último eje -> [y, x]
+        if image_array.ndim == 3:
+            image_array = image_array.mean(axis=-1)
+        else:
+            image_array = image_array.squeeze()
+
+        # crear carpeta si no existe
+        os.makedirs(config.OUTPUT_STATIC_RESULT_DIR, exist_ok=True)
+
+        # Guardar toda la información (todos los canales)
+        np.save(config.TEMPERATURE_MAP_DIR, image_array)
+

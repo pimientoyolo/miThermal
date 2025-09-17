@@ -29,6 +29,7 @@ SCENE_THERMAL_DIR = str(OUTPUT_DIR / "static" / "scene_thermal.xml")
 SCENE_DEPTH_DIR = str(OUTPUT_DIR / "static" / "scene_depth.xml")
 SCENE_BLACKBODY_AIR = str(OUTPUT_DIR / "static" / "scene_blackbody_air.xml")
 SCENE_TRANSMITTANCE_BLACKBODY_AIR = str(OUTPUT_DIR / "static" / "scene_transmittance_blackbody_air.xml")
+SCENE_TEMPERATURE_MAP = str(OUTPUT_DIR / "static" / "scene_temperature_map.xml")
 
 ## OTHER FILES
 OUTPUT_STATIC_DIR = OUTPUT_DIR / "static"
@@ -45,6 +46,7 @@ THERMAL_DIR = str(OUTPUT_STATIC_RESULT_DIR / "thermal.npy")
 BLACKBODY_AIR_DIR = str(OUTPUT_STATIC_RESULT_DIR / "blackbody_air.npy")
 TRANSMITTANCE_BLACKBODY_AIR_DIR = str(OUTPUT_STATIC_RESULT_DIR / "transmittance_blackbody_air.npy")
 CONTRIBUTION_BLACKBODY_AIR_DIR = str(OUTPUT_STATIC_RESULT_DIR / "contribution_blackbody_air.npy")
+TEMPERATURE_MAP_DIR = str(OUTPUT_STATIC_RESULT_DIR / "temperature_map.npy")
 
 # Configuración de Mitsuba
 MITSUBA_CONFIG = {

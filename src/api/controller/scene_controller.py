@@ -22,6 +22,7 @@ async def load_scene(file: UploadFile = File(...)) -> FileResponse:
     scene_service.prepare_thermal_scene()
     scene_service.prepare_blackbody_air_scene()
     scene_service.prepare_transmittance_blackbody_air_scene()
+    scene_service.prepare_temperature_map()
     return FileResponse(config.IMAGE_DIR, media_type="image/png", filename="rgb.png")
 
 

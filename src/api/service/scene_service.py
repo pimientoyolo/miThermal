@@ -365,9 +365,75 @@ class SceneService:
                     shapes["emitter"] = emitter_air_dict
                     del shapes['bsdf']
 
+        # eliminar emisor de aire
+        if scene_dict and "scene" in scene_dict and "emitter" in scene_dict["scene"]:
+            del scene_dict["scene"]["emitter"]
+
 
         if scene_dict:
             self.scene_parser.save_dict_as_xml(scene_dict, transmittance_blackbody_air_xml)
+
+    def prepare_temperature_map(self):
+        """
+        Prepara la escena para renderización de la temperatura de los objetos.
+        """
+        # Verificar si existe la escena térmica, si no, crearla
+        if not os.path.exists(config.SCENE_THERMAL_DIR):
+            self.prepare_thermal_scene()
+
+        # Crear la escena de transmitancia blackbody air copiando la escena térmica
+        temperature_map_xml = config.SCENE_TEMPERATURE_MAP
+        shutil.copyfile(config.SCENE_THERMAL_DIR, temperature_map_xml)
+        scene_dict = self.get_dict_scene(temperature_map_xml)
+
+        config_scene = config.get_config_scene_dict()
+
+        wavelengths = config_scene["wavelengths"]
+
+
+        if scene_dict and "scene" in scene_dict and "shape" in scene_dict["scene"]:
+                shapes = scene_dict["scene"]["shape"]
+
+                # Agregar emisor diferente a cada shape
+                if isinstance(shapes, list):
+                    for i, shape in enumerate(shapes):
+                        id = shape["string"]["@value"]
+                        temperature = config_scene[id]["temperature"]
+                        emission = [temperature for _ in wavelengths]
+                        shape["emitter"] = object_utils.create_spectral_emitter(wavelengths, emission)
+                        del shape["bsdf"]
+                        
+                elif isinstance(shapes, dict):
+                    # Para un solo shape
+                    id = shapes["string"]["@value"]
+                    temperature = config_scene[id]["temperature"]
+                    emission = [temperature for _ in wavelengths]
+                    shapes["emitter"] = object_utils.create_spectral_emitter(wavelengths, emission)
+                    del shapes['bsdf']
+
+        # Cambiar el integrador a path para reducir ruido
+        if scene_dict and "scene" in scene_dict:
+            scene_dict["scene"]["integrator"] = {
+                "@type": "path",
+                "integer": {
+                    "@name": "max_depth",
+                    "@value": "16"
+                }
+            }
+
+        # Eliminar el medio atenuante
+        if scene_dict and "scene" in scene_dict and "medium" in scene_dict["scene"]:
+            del scene_dict["scene"]["medium"]
+
+        if scene_dict and "scene" in scene_dict and "sensor" in scene_dict["scene"]:
+            del scene_dict["scene"]["sensor"]["ref"]
+
+        # eliminar emisor de aire
+        if scene_dict and "scene" in scene_dict and "emitter" in scene_dict["scene"]:
+            del scene_dict["scene"]["emitter"]
+
+        if scene_dict:
+            self.scene_parser.save_dict_as_xml(scene_dict, temperature_map_xml)
 
     def get_dict_scene(self, scene_xml_path: str):
         """
