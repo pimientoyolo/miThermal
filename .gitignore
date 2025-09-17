@@ -177,6 +177,8 @@ pyrightconfig.json
 "
 "
 
+config/config_scene.json
+
 output/
 outputs/
 

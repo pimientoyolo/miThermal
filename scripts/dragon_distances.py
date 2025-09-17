@@ -46,7 +46,7 @@ distancias = [1, 2, 3, 5, 10]  # Multiplicadores de distancia: 1x, 2x, 3x, 5x, 1
 base_distance = 10  # Distancia base (1x)
 
 # Configuración de muestreo
-desarrollo = True  # Cambiar a False para renderizado final de alta calidad
+desarrollo = True  # Cambiar a False para renderizado final dqe alta calidad
 spp = 1024 if desarrollo else 4096  # Muestras por píxel según desarrollo o final
 
 # Lista para almacenar los resultados
