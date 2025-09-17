@@ -108,6 +108,7 @@ class ObjService:
         scene_service.prepare_depth_scene()
         scene_service.prepare_blackbody_air_scene()
         scene_service.prepare_transmittance_blackbody_air_scene()
+        scene_service.prepare_temperature_map()
         
         return self.get_object_info_by_id(object_id)
 
@@ -195,6 +196,7 @@ class ObjService:
         scene_service.prepare_depth_scene()
         scene_service.prepare_blackbody_air_scene()
         scene_service.prepare_transmittance_blackbody_air_scene()
+        scene_service.prepare_temperature_map()
 
         # Devolver mensaje
         return mensaje

@@ -67,3 +67,12 @@ async def render_scene_contribution_blackbody_air() -> StreamingResponse:
             while chunk := await file.read(1024):
                 yield chunk
     return StreamingResponse(iterfile(), media_type=OCTET_STREAM_MEDIA_TYPE, headers={"Content-Disposition": "attachment; filename=contribution_blackbody_air.npy"})
+
+@render_router.get("/temperature/map")
+async def render_scene_temperature_map() -> StreamingResponse:
+    render_service.render_temperature_map()
+    async def iterfile():
+        async with aiofiles.open(config.TEMPERATURE_MAP_DIR, "rb") as file:
+            while chunk := await file.read(1024):
+                yield chunk
+    return StreamingResponse(iterfile(), media_type=OCTET_STREAM_MEDIA_TYPE, headers={"Content-Disposition": "attachment; filename=temperature_map.npy"})

@@ -91,3 +91,11 @@ class RenderService:
 
         contribution_blackbody_air = blackbody_air - transmittance_blackbody_air
         np.save(config.CONTRIBUTION_BLACKBODY_AIR_DIR, contribution_blackbody_air)
+
+    def render_temperature_map(self):
+        self._validate_scene_file(config.SCENE_TEMPERATURE_MAP, "temperature map")
+        try:
+            self.render_thermal.render_temperature_map()
+        except Exception as e:
+            self.logger.error(f"Error al renderizar la escena del mapa de temperatura: {e}")
+            raise HTTPException(status_code=500, detail="Error al renderizar: prueba bajar spp y resolución")
