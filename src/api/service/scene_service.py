@@ -3,6 +3,7 @@ import logging
 from fastapi import UploadFile
 
 from fastapi import HTTPException
+from fastapi.responses import FileResponse
 
 from src.api.dto.cameraDTO import CameraDTO
 from ...config import get_output_path
@@ -74,8 +75,16 @@ class SceneService:
         # resy -> height
         scene_dict['scene']['default'][2]['@value'] = 256
 
-        # guardar cambios en scene.xml
-        self.scene_parser.save_dict_as_xml(scene_dict, config.SCENE_DIR)
+        # cambiar el tipo de emiter a uno de uniforme luz ambiente
+        if "emitter" in scene_dict["scene"]:
+            scene_dict["scene"]["emitter"] = {
+                "@type": "constant",
+                "rgb": {
+                    "@name": "radiance",
+                    "@value": "1.0"
+                }
+            }
+
 
         # guardar scene_dict como JSON
         json_output_path = os.path.join(config.OUTPUT_DIR, "scene.json")
@@ -122,15 +131,92 @@ class SceneService:
         config_scene["air"] = {
             "temperature": t_air
         }
+        rx = ry = rz = 0.0
+        tx = ty = tz = 0.0
+
+        # obtener sensor y transform
+        sensor = scene_dict["scene"].get("sensor")
+        transform = sensor.get("transform")
+
+        # obtner las rotaciones
+        rotate = transform.get("rotate")
+
+        # Asegurar que exista transform
+        if transform is None:
+            sensor["transform"] = {}
+            transform = sensor["transform"]
+
+        rotate = transform.get("rotate")
+
+        # Leer valores actuales si existen
+        if isinstance(rotate, list):
+            for r in rotate:
+                a = float(r.get("@angle", 0.0))
+                if r.get("@x") == "1":
+                    rx = a
+                elif r.get("@y") == "1":
+                    ry = a
+                elif r.get("@z") == "1":
+                    rz = a
+
+        elif isinstance(rotate, dict):
+            a = float(rotate.get("@angle", 0.0))
+            if rotate.get("@x") == "1":
+                rx = a
+            elif rotate.get("@y") == "1":
+                ry = a
+            elif rotate.get("@z") == "1":
+                rz = a
+
+        # Normalizar/crear rotate como lista de 3 entradas
+        transform["rotate"] = [
+            {"@x": "1", "@angle": str(rx)},
+            {"@y": "1", "@angle": str(ry)},
+            {"@z": "1", "@angle": str(rz)}
+        ]
+
+        # obtener las traslaciones
+        translate = transform.get("translate")
+
+        value = translate.get("@value", "0 0 0")
+        coords = value.split()
+        tx = float(coords[0])
+        ty = float(coords[1])
+        tz = float(coords[2])
+
+        # obtener el fov
+        floats = sensor.get("float")
+
+        fov = 45.0
+
+        if isinstance(floats, list):
+            for f in floats:
+                if f.get("@name") == "fov":
+                    fov = float(f.get("@value"))
+        elif isinstance(floats, dict):
+            if floats.get("@name") == "fov":
+                fov = float(floats.get("@value"))
+
+        angles = mitsuba_cam_to_blender_xyz(rx, ry, rz)
 
         config_scene["camera"] = {
             "spp": 256,
             "width": 256,
-            "height": 256
+            "height": 256,
+            "rotate_x": angles[0], # ajuste para mitsuba
+            "rotate_y": angles[1], # ajuste para mitsuba
+            "rotate_z": angles[2], # ajuste para mitsuba
+            "translate_x": tx, # x mitsuba igual al x blender
+            "translate_y": tz, # y mitsuba igual al z blender
+            "translate_z": -ty, # eje z igual al eje -y de blender
+            "fov": fov
         }
         
         config_scene["num_bands"] = num_bands
         config_scene["wavelengths"] = wavelengths.tolist()
+
+        # guardar cambios en scene.xml
+        self.scene_parser.save_dict_as_xml(scene_dict, config.SCENE_DIR)
 
         # guardar config_scene como JSON
         with open(config.CONFIG_SCENE, 'w') as f:
@@ -583,10 +669,71 @@ class SceneService:
         spp = cam_cfg.get("spp", 256)
         width = cam_cfg.get("width", 256)
         height = cam_cfg.get("height", 256)
+        rx = float(cam_cfg.get("rotate_x", 0.0))
+        ry = float(cam_cfg.get("rotate_y", 0.0))
+        rz = float(cam_cfg.get("rotate_z", 0.0))
+        tx = float(cam_cfg.get("translate_x", 0.0))
+        ty = float(cam_cfg.get("translate_y", 0.0))
+        tz = float(cam_cfg.get("translate_z", 0.0))
+        fov = float(cam_cfg.get("fov", 45.0))
 
         defaults[0]["@value"] = spp      # spp
         defaults[1]["@value"] = width    # resx
         defaults[2]["@value"] = height   # resy
+
+        scene = scene_dict["scene"]
+        sensor = scene.get("sensor")
+        transform = sensor.get("transform")
+
+        angles = blender_cam_to_mitsuba_xyz(rx, ry, rz)
+
+        # set rotate
+        transform["rotate"] = [
+            {
+                "@x": "1",
+                "@angle": str(angles[0])  # ajuste para mitsuba
+            },
+            {
+                "@y": "1",
+                "@angle": str(angles[1])  # ajuste para mitsuba
+            },
+            {
+                "@z": "1",
+                "@angle": str(angles[2])  # ajuste para mitsuba
+            }
+        ]
+
+        # set translate
+        transform["translate"] = {
+            "@value": f"{tx} {tz} {-ty}"  # y mitsuba = z blender, z mitsuba = -y blender
+        }
+
+        # set fov
+        floats = sensor.get("float")
+        if isinstance(floats, list):
+            fov_found = False
+            for f in floats:
+                if f.get("@name") == "fov":
+                    f["@value"] = str(fov)
+                    fov_found = True
+                    break
+            if not fov_found:
+                floats.append({
+                    "@name": "fov",
+                    "@value": str(fov)
+                })
+
+        elif isinstance(floats, dict):
+            if floats.get("@name") == "fov":
+                floats["@value"] = str(fov)
+            else:
+                sensor["float"] = [
+                    floats,
+                    {
+                        "@name": "fov",
+                        "@value": str(fov)
+                    }
+                ]
 
         # Guardar la escena modificada como XML
         if scene_dict:
@@ -604,11 +751,285 @@ class SceneService:
         spp = cam_cfg.get("spp", 256)
         width = cam_cfg.get("width", 256)
         height = cam_cfg.get("height", 256)
+        rx = float(cam_cfg.get("rotate_x", 0.0))
+        ry = float(cam_cfg.get("rotate_y", 0.0))
+        rz = float(cam_cfg.get("rotate_z", 0.0))
+        tx = float(cam_cfg.get("translate_x", 0.0))
+        ty = float(cam_cfg.get("translate_y", 0.0))
+        tz = float(cam_cfg.get("translate_z", 0.0))
+        fov = float(cam_cfg.get("fov", 45.0))
 
         defaults[0]["@value"] = spp      # spp
         defaults[1]["@value"] = width    # resx
         defaults[2]["@value"] = height   # resy
 
+        scene = scene_dict["scene"]
+        sensor = scene.get("sensor")
+        transform = sensor.get("transform")
+
+        angles = blender_cam_to_mitsuba_xyz(rx, ry, rz)
+
+        # set rotate
+        transform["rotate"] = [
+            {
+                "@x": "1",
+                "@angle": str(angles[0])  # ajuste para mitsuba
+            },
+            {
+                "@y": "1",
+                "@angle": str(angles[1])  # ajuste para mitsuba
+            },
+            {
+                "@z": "1",
+                "@angle": str(angles[2])  # ajuste para mitsuba
+            }
+        ]
+
+        # set translate
+        transform["translate"] = {
+            "@value": f"{tx} {tz} {-ty}"  # y mitsuba = z blender, z mitsuba = -y blender
+        }
+
+        # set fov
+        floats = sensor.get("float")
+        if isinstance(floats, list):
+            fov_found = False
+            for f in floats:
+                if f.get("@name") == "fov":
+                    f["@value"] = str(fov)
+                    fov_found = True
+                    break
+            if not fov_found:
+                floats.append({
+                    "@name": "fov",
+                    "@value": str(fov)
+                })
+
+        elif isinstance(floats, dict):
+            if floats.get("@name") == "fov":
+                floats["@value"] = str(fov)
+            else:
+                sensor["float"] = [
+                    floats,
+                    {
+                        "@name": "fov",
+                        "@value": str(fov)
+                    }
+                ]
+
         # Guardar la escena modificada como XML
         if scene_dict:
             self.scene_parser.save_dict_as_xml(scene_dict, config.SCENE_THERMAL_DIR)
+
+    def get_scene_mi_thermal(self) -> FileResponse:
+        
+        path = str(config.OUTPUT_STATIC_DIR)
+        zip_filename = config.MITHERMAL_SCENE_FILE 
+
+        # eliminar el zip si ya existe
+        if os.path.exists(zip_filename):
+            os.remove(zip_filename)
+
+        # crear el zip con zipfile
+        with zipfile.ZipFile(zip_filename, "w", compression=zipfile.ZIP_STORED, compresslevel=0) as zf:
+            for root, _, files in os.walk(path):
+                for file in files:
+                    abs_path = os.path.join(root, file)
+                    rel_path = os.path.relpath(abs_path, path) 
+                    zf.write(abs_path, rel_path)
+
+        # devolverlo como respuesta
+        return FileResponse(zip_filename, media_type="application/zip", filename="miThermal.zip")
+    
+    def upload_mi_thermal_scene(self, file: UploadFile) -> None:
+        path = str(config.OUTPUT_STATIC_DIR)
+        zip_path = config.MITHERMAL_SCENE_FILE
+
+        # Vaciar el directorio 'path' antes de extraer el ZIP
+        if os.path.exists(path):
+            for entry in os.listdir(path):
+                entry_path = os.path.join(path, entry)
+                try:
+                    if os.path.isdir(entry_path):
+                        shutil.rmtree(entry_path)
+                    else:
+                        os.remove(entry_path)
+                except OSError as e:
+                    self.logger.warning(f"Error al eliminar {entry_path}: {e}")
+        else:
+            os.makedirs(path, exist_ok=True)
+        
+        with open(zip_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(config.OUTPUT_STATIC_DIR)
+        
+        os.remove(zip_path)
+    
+    def get_suggested_mi_thermal_scene(self) -> list[str]:
+        
+        path = config.DEFAULT_SCENES_DIR
+
+        if not os.path.isdir(path):
+            return []
+        files = [os.path.basename(p) for p in glob.glob(os.path.join(path, "*.zip")) if os.path.isfile(p)]
+        files.sort(key=str.lower)
+        return files
+    
+    def set_default_scene(self, scene_name: str) -> None:
+        """
+        Copia un archivo ZIP de escena por defecto al directorio de salida y lo descomprime.
+        """
+        default_scene_path = os.path.join(config.DEFAULT_SCENES_DIR, scene_name)
+        if not os.path.isfile(default_scene_path):
+            raise HTTPException(status_code=404, detail=f"No se encontró la escena por defecto: {scene_name}")
+        
+        path = str(config.OUTPUT_STATIC_DIR)
+        zip_filename = config.MITHERMAL_SCENE_FILE 
+
+        # eliminar el zip si ya existe
+        if os.path.exists(zip_filename):
+            os.remove(zip_filename)
+
+        # Vaciar el directorio 'path' antes de extraer el ZIP
+        if os.path.exists(path):
+            for entry in os.listdir(path):
+                entry_path = os.path.join(path, entry)
+                try:
+                    if os.path.isdir(entry_path):
+                        shutil.rmtree(entry_path)
+                    else:
+                        os.remove(entry_path)
+                except OSError as e:
+                    self.logger.warning(f"Error al eliminar {entry_path}: {e}")
+        else:
+            os.makedirs(path, exist_ok=True)
+
+        # copiar el archivo zip
+        shutil.copyfile(default_scene_path, zip_filename)
+
+        # extraer el zip
+        with zipfile.ZipFile(zip_filename, "r") as zf:
+            zf.extractall(path)
+
+
+# --- Rotaciones básicas ---
+def Rx(d): 
+    r=np.deg2rad(d); c,s=np.cos(r),np.sin(r)
+    return np.array([[1,0,0],[0,c,-s],[0,s,c]],float)
+
+def Ry(d):
+    r=np.deg2rad(d); c,s=np.cos(r),np.sin(r)
+    return np.array([[c,0,s],[0,1,0],[-s,0,c]],float)
+
+def Rz(d):
+    r=np.deg2rad(d); c,s=np.cos(r),np.sin(r)
+    return np.array([[c,-s,0],[s,c,0],[0,0,1]],float)
+
+# --- Euler intrínseco XYZ con vectores-columna: R = Rz(z) @ Ry(y) @ Rx(x) ---
+def euler_to_R_intrinsic_xyz(x,y,z):
+    return Rz(z) @ Ry(y) @ Rx(x)
+
+def clamp(v, lo=-1.0, hi=1.0): 
+    return max(lo, min(hi, v))
+
+def R_to_euler_intrinsic_xyz(R):
+    """
+    Descompone R = Rz(z) @ Ry(y) @ Rx(x) -> (x,y,z) en grados, normalizado a [-180,180).
+    """
+    y = np.arcsin(clamp(R[2,0]))
+    cy = np.cos(y); eps=1e-8
+    if abs(cy) > eps:
+        x = np.arctan2(-R[2,1], R[2,2])
+        z = np.arctan2(-R[1,0], R[0,0])
+    else:
+        # gimbal lock (y ≈ ±90°)
+        z = 0.0
+        x = np.arctan2(R[0,1], R[0,2])
+    deg = np.rad2deg([x,y,z])
+    return tuple(((deg+180.0)%360.0 - 180.0).tolist())
+
+def wrap_deg(a): 
+    return ((a + 180.0) % 360.0) - 180.0
+
+# --- Cambio de base Blender→Mitsuba (tu hallazgo): X_M=X_B; Y_M=Z_B; Z_M=-Y_B ---
+T = np.array([[1,0,0],[0,0,1],[0,-1,0]],float)
+Tinv = T.T  # inversa de rotación
+
+def _norm(v):
+    n=np.linalg.norm(v); 
+    return v if n==0 else v/n
+
+# =========================
+#   BLENDER → MITSUBA
+# =========================
+def blender_cam_to_mitsuba_xyz(xb,yb,zb, variant="plugin"):
+    """
+    Recibe Euler XYZ (grados) de cámara en Blender y devuelve 3 ángulos XYZ
+    para Mitsuba. 'variant':
+      - 'canonical': la terna canónica (x,y,z)
+      - 'plugin'   : rama equivalente que usa el add-on: (-x, y, 180 - z)
+    """
+    # 1) Rotación mundo Blender (intrínseco XYZ)
+    RB = euler_to_R_intrinsic_xyz(xb,yb,zb)
+
+    # 2) Base cámara en Blender (en mundo-B): right=+X, up=+Y, forward=-Z
+    right_B   = _norm(RB @ np.array([1,0, 0],float))
+    up_B      = _norm(RB @ np.array([0,1, 0],float))
+    forward_B = _norm(RB @ np.array([0,0,-1],float))
+
+    # 3) Mapea esa base a mundo Mitsuba
+    right_M   = _norm(T @ right_B)
+    up_M      = _norm(T @ up_B)
+    forward_M = _norm(T @ forward_B)  # en Mitsuba la cámara mira +Z
+
+    # 4) Matriz to_world de Mitsuba: columnas = (right, up, forward)
+    RM = np.column_stack([right_M, up_M, forward_M])
+
+    # 5) Descompone a (x,y,z) (intrínseco XYZ)
+    x, y, z = R_to_euler_intrinsic_xyz(RM)
+
+    if variant == "plugin":
+        # Rama equivalente del plugin:
+        x2 = wrap_deg(-x)
+        y2 = wrap_deg( y)
+        z2 = wrap_deg(180.0 - z)
+        return (x2, y2, z2)
+    else:
+        return (x, y, z)
+
+# =========================
+#   MITSUBA → BLENDER
+# =========================
+def mitsuba_cam_to_blender_xyz(xm,ym,zm, assume_variant="plugin"):
+    """
+    Recibe Euler XYZ de Mitsuba (lo que hay en <rotate x/y/z>).
+    Si 'assume_variant'='plugin', primero convierte a canónico usando (x,y,z) = (-xm, ym, 180 - zm),
+    luego hace la conversión Mitsuba→Blender. Devuelve Euler XYZ en Blender.
+    """
+    if assume_variant == "plugin":
+        # Volver a la rama canónica equivalente
+        x_can = wrap_deg(-xm)
+        y_can = wrap_deg( ym)
+        z_can = wrap_deg(180.0 - zm)
+        xm,ym,zm = x_can, y_can, z_can
+
+    # 1) Rotación to_world en Mitsuba
+    RM = euler_to_R_intrinsic_xyz(xm,ym,zm)
+
+    # 2) Base cámara en Mitsuba
+    right_M   = _norm(RM @ np.array([1,0,0],float))
+    up_M      = _norm(RM @ np.array([0,1,0],float))
+    forward_M = _norm(RM @ np.array([0,0,1],float))  # +Z local
+
+    # 3) Llevar esa base a mundo Blender
+    right_B   = _norm(Tinv @ right_M)
+    up_B      = _norm(Tinv @ up_M)
+    forward_B = _norm(Tinv @ forward_M)
+
+    # 4) Reconstruir RB: columnas = (right, up, -forward) (en Blender mira -Z)
+    RB = np.column_stack([right_B, up_B, -forward_B])
+
+    # 5) Euler XYZ de Blender
+    return R_to_euler_intrinsic_xyz(RB)

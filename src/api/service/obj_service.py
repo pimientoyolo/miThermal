@@ -9,6 +9,7 @@ from src.api.dto.objectDTO import ObjectDTO, UpdateObjectDTO
 from src.api.dto.airDTO import AirDTO
 import numpy as np
 from src.api.service.scene_service import SceneService
+import shutil
 
 logger = logging.getLogger(__name__)
 
@@ -200,6 +201,23 @@ class ObjService:
 
         # Devolver mensaje
         return mensaje
+    
+    def get_suggested_object_emissivity(self) -> list[str]:
+        
+        path = config.DEFAULT_EMISIVITY_DIR
+        path = os.fspath(path)  # por si viene como pathlib.Path
+
+        # Validaciones
+        if not os.path.exists(path):
+            raise HTTPException(status_code=404, detail=f"Directorio no encontrado: {path}")
+        if not os.path.isdir(path):
+            raise HTTPException(status_code=400, detail=f"No es un directorio: {path}")
+
+        try:
+            return [f for f in os.listdir(path) if f.lower().endswith(".txt")]
+        except OSError as e:
+            raise HTTPException(status_code=500, detail=f"Error leyendo el directorio: {e}")
+
 
     def get_object_emissivity_file_by_id(self, object_id: str) -> FileResponse:
         self.validate_object_id_exists(object_id)
@@ -216,3 +234,38 @@ class ObjService:
             raise HTTPException(status_code=404, detail=f"No se encontró archivo de emisividad para el objeto: {object_id}")
 
         return FileResponse(dst_path, filename=os.path.basename(dst_path))
+    
+    def update_default_emissivity(self, file_name: str, object_id: str) -> None:
+        path = config.DEFAULT_EMISIVITY_DIR
+        path = os.fspath(path)  # por si viene como pathlib.Path
+
+        # Validaciones
+        if not os.path.exists(path):
+            raise HTTPException(status_code=404, detail=f"Directorio no encontrado: {path}")
+        if not os.path.isdir(path):
+            raise HTTPException(status_code=400, detail=f"No es un directorio: {path}")
+        default_file_path = os.path.join(path, file_name)
+        if not os.path.exists(default_file_path):
+            raise HTTPException(status_code=404, detail=f"Archivo no encontrado: {default_file_path}")
+        
+        self.validate_object_id_exists(object_id)
+
+        # Construir ruta del archivo de emisividad debajo de OUTPUT_STATIC_DIR
+        base_out = config.OUTPUT_STATIC_DIR
+        rel_obj_id = object_id
+        if os.path.isabs(object_id):
+            rel_obj_id = os.path.splitdrive(object_id)[1].lstrip("\\/")
+        dst_no_ext = os.path.splitext(rel_obj_id)[0]
+        dst_path = os.path.join(base_out, dst_no_ext + ".txt")
+        os.makedirs(os.path.dirname(dst_path), exist_ok=True)
+
+        try:
+            shutil.copyfile(default_file_path, dst_path)
+        except OSError as e:
+            raise HTTPException(status_code=500, detail=f"Error copiando el archivo: {e}")
+        
+        scene_service.update_thermal_scene_obj(object_id=object_id)
+        scene_service.prepare_depth_scene()
+        scene_service.prepare_blackbody_air_scene()
+        scene_service.prepare_transmittance_blackbody_air_scene()
+        scene_service.prepare_temperature_map()
