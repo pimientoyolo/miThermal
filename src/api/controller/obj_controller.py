@@ -108,3 +108,24 @@ async def update_obj_emissivity(
 
     return mensaje
 
+@obj_router.get("/suggest/emissivity")
+async def suggest_object_emissivity() -> list[str]:
+    objects = object_service.get_suggested_object_emissivity()
+    return objects
+
+@obj_router.put("/default/emissivity")
+async def update_default_emissivity(
+    file_name: str = Query(..., description="Nombre del archivo de emisividad (ej: 'default.txt')"),
+    object_id: str = Query(..., description="ID del objeto (ej: 'meshes/objeto.ply', 'Dragon.obj')"),
+) -> FileResponse:
+    """
+    Actualiza la emisividad por defecto.
+
+    Args:
+        file: Archivo que contiene la nueva emisividad por defecto
+
+    Returns:
+        Mensaje de confirmación
+    """
+    object_service.update_default_emissivity(file_name, object_id)
+    return object_service.get_object_emissivity_file_by_id(object_id)

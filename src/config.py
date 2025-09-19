@@ -34,9 +34,13 @@ SCENE_TEMPERATURE_MAP = str(OUTPUT_DIR / "static" / "scene_temperature_map.xml")
 ## OTHER FILES
 OUTPUT_STATIC_DIR = OUTPUT_DIR / "static"
 SCENE_ZIP = str(OUTPUT_DIR / "static" / "scene.zip")
-CONFIG_SCENE = str(CONFIG_DIR / "config_scene.json")
+CONFIG_SCENE = str(OUTPUT_DIR / "static" / "config_scene.json")
 DEFAULT_EMITTIVITY_FILE = str(ASSETS_DIR / "materials" / "default.txt")
 AIR_ATTENUATION_FILE = str(OUTPUT_STATIC_DIR / "air.txt")
+MITHERMAL_SCENE_FILE = str(OUTPUT_DIR / "miThermal.zip")
+DEFAULT_SCENES_DIR = str(ASSETS_DIR / "mitsuba_scenes")
+DEFAULT_EMISIVITY_DIR = str(ASSETS_DIR / "signatures")
+DEFAULT_ATTENNUATION_DIR = str(ASSETS_DIR / "reference_data")
 
 # resultados
 OUTPUT_STATIC_RESULT_DIR = OUTPUT_DIR / "static" / "result"

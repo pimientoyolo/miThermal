@@ -5,6 +5,7 @@ import json
 import numpy as np
 from src.mitsuba_core.scene_parser import SceneParser
 import src.config as config
+from PIL import Image
 
 
 class RenderRGB:
@@ -26,9 +27,16 @@ class RenderRGB:
 
         # crear carpeta si no existe
         os.makedirs(config.OUTPUT_STATIC_RESULT_DIR, exist_ok=True)
+
+        # Conversión correcta a RGB uint8 sRGB (sin write_bitmap)
+        bmp = self.mi.Bitmap(image)
+        bmp8 = bmp.convert(self.mi.Bitmap.PixelFormat.RGB,
+                           self.mi.Struct.Type.UInt8,
+                           srgb_gamma=True)
+        arr8 = np.array(bmp8, copy=False)  # [H, W, 3], uint8
         
-        # guardar imagen
-        self.mi.util.write_bitmap(config.IMAGE_DIR, image)
+        img = Image.fromarray(arr8, mode="RGB")
+        img.save(config.IMAGE_DIR, format="PNG")
 
 class RenderDepth():
     def __init__(self):

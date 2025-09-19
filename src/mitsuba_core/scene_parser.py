@@ -11,7 +11,7 @@ class SceneParser:
 
     def xml_to_dict(self, path_xml : str) -> Dict:
 
-     with open(path_xml) as f:
+     with open(path_xml, "r", encoding="utf-8") as f:
             scene_dict = xmltodict.parse(f.read())
             return scene_dict
 

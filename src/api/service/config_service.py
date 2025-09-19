@@ -1,5 +1,7 @@
 import logging
 import io
+import os
+import shutil
 from src.api.dto.cameraDTO import CameraDTO, UpdateCameraDTO
 from src.api.service.scene_service import SceneService
 import src.config as config
@@ -28,7 +30,14 @@ class ConfigService:
             width=scene_config["camera"]["width"],
             height=scene_config["camera"]["height"],
             wavelengths=[w / 1000 for w in scene_config["wavelengths"]],
-            num_bands=scene_config["num_bands"]
+            num_bands=scene_config["num_bands"],
+            rotate_x=scene_config["camera"].get("rotate_x", 0.0),
+            rotate_y=scene_config["camera"].get("rotate_y", 0.0),
+            rotate_z=scene_config["camera"].get("rotate_z", 0.0),
+            translate_x=scene_config["camera"].get("translate_x", 0.0),
+            translate_y=scene_config["camera"].get("translate_y", 0.0),
+            translate_z=scene_config["camera"].get("translate_z", 0.0),
+            fov=scene_config["camera"].get("fov", 45.0)
         )
 
         return camera_dto
@@ -40,6 +49,17 @@ class ConfigService:
         scene_config["camera"]["spp"] = camera_update.spp
         scene_config["camera"]["width"] = camera_update.width
         scene_config["camera"]["height"] = camera_update.height
+        scene_config["camera"]["rotate_x"] = camera_update.rotate_x
+        scene_config["camera"]["rotate_y"] = camera_update.rotate_y
+        scene_config["camera"]["rotate_z"] = camera_update.rotate_z
+        scene_config["camera"]["translate_x"] = camera_update.translate_x
+        scene_config["camera"]["translate_y"] = camera_update.translate_y
+        scene_config["camera"]["translate_z"] = camera_update.translate_z
+        scene_config["camera"]["fov"] = camera_update.fov
+
+        #validar fov entre 1 y 179
+        if camera_update.fov < 1 or camera_update.fov > 179:
+            raise HTTPException(status_code=400, detail="FOV debe estar entre 1 y 179 grados")
 
         # validar spp mayor a 0
         if camera_update.spp <= 0:
@@ -58,7 +78,14 @@ class ConfigService:
             width=scene_config["camera"]["width"],
             height=scene_config["camera"]["height"],
             wavelengths=[w / 1000 for w in scene_config["wavelengths"]],
-            num_bands=scene_config["num_bands"]
+            num_bands=scene_config["num_bands"],
+            rotate_x=scene_config["camera"]["rotate_x"],
+            rotate_y=scene_config["camera"]["rotate_y"],
+            rotate_z=scene_config["camera"]["rotate_z"],
+            translate_x=scene_config["camera"]["translate_x"],
+            translate_y=scene_config["camera"]["translate_y"],
+            translate_z=scene_config["camera"]["translate_z"],
+            fov=scene_config["camera"]["fov"]
         )
 
         config.save_config_scene_dict(scene_config)
@@ -225,4 +252,57 @@ class ConfigService:
         except Exception as e:
             self.logger.error(f"Error parseando archivo de atenuación: {e}")
             raise HTTPException(status_code=500, detail="Error interno al parsear archivo de atenuación")
+    
+    def suggest_air_attenuation(self) -> list[str]:
+
+        path = config.DEFAULT_ATTENNUATION_DIR
+        path = os.fspath(path)
+
+        if not os.path.exists(path):
+            raise HTTPException(status_code=404, detail=f"Directorio no encontrado: {path}")
+        if not os.path.isdir(path):
+            raise HTTPException(status_code=400, detail=f"No es un directorio: {path}")
+
+        try:
+            return [f for f in os.listdir(path) if f.lower().endswith(".txt")]
+        except OSError as e:
+            raise HTTPException(status_code=500, detail=f"Error leyendo el directorio: {e}")
         
+    def set_air_attenuation_by_filename(self, file_name: str) -> str:
+
+        path = config.DEFAULT_ATTENNUATION_DIR
+        path = os.fspath(path)
+
+        # Validaciones de entrada
+        if not file_name:
+            raise HTTPException(status_code=400, detail="Debe proporcionar un nombre de archivo")
+        if not os.path.exists(path):
+            raise HTTPException(status_code=404, detail=f"Directorio no encontrado: {path}")
+        if not os.path.isdir(path):
+            raise HTTPException(status_code=400, detail=f"No es un directorio: {path}")
+
+        # Evitar path traversal y construir ruta completa
+        base_name = os.path.basename(file_name)
+        if not base_name.lower().endswith(".txt"):
+            raise HTTPException(status_code=400, detail="El archivo debe ser .txt")
+
+        src_file = os.path.join(path, base_name)
+
+        if not os.path.exists(src_file) or not os.path.isfile(src_file):
+            raise HTTPException(status_code=404, detail=f"Archivo no encontrado: {src_file}")
+
+        wavelengths_nm, sigma_t = object_utils.get_attenuation(file_name)
+
+        data = np.column_stack((wavelengths_nm / 1000.0, sigma_t))  # Convertir nm a um
+
+        np.savetxt(config.AIR_ATTENUATION_FILE, data, delimiter='\t')
+
+        scene_service.update_thermal_scene_air()
+        scene_service.prepare_blackbody_air_scene()
+        scene_service.prepare_transmittance_blackbody_air_scene()
+        scene_service.prepare_depth_scene()
+        scene_service.prepare_temperature_map()
+
+        
+        
+

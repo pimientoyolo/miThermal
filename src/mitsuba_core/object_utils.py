@@ -392,7 +392,7 @@ class ObjectUtils:
             self.logger.error(f"Error creando medium homogéneo: {e}")
             raise HTTPException(status_code=500, detail=f"Error al crear medium homogéneo: {e}")
 
-    def get_attenuation(self, attenuation_file: str = "air") -> tuple[np.ndarray, np.ndarray]:
+    def get_attenuation(self, attenuation_file: str = "air.txt") -> tuple[np.ndarray, np.ndarray]:
         """
         Lee el archivo de atenuación completo y retorna dos arrays alineados:
         - wavelengths_nm: longitudes de onda en nanómetros (nm) obtenidas del archivo (columna 0 en µm convertida a nm)
@@ -409,7 +409,7 @@ class ObjectUtils:
 
         try:
             # Construir la ruta del archivo
-            file_path = f"{self.REFERENCE_DATA_BASE_PATH}/{attenuation_file}.txt"
+            file_path = f"{config.DEFAULT_ATTENNUATION_DIR}/{attenuation_file}"
 
             # Validar que el archivo existe
             if not Path(file_path).exists():

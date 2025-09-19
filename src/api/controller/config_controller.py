@@ -72,3 +72,19 @@ async def set_air_attenuation(file: UploadFile = File(...)) -> str:
     mensaje = config_service.set_air_attenuation(file)
 
     return mensaje
+
+@config_router.get("/air/suggest/attenuation")
+async def suggest_air_attenuation() -> list[str]:
+
+    air_data = config_service.suggest_air_attenuation()
+
+    return air_data
+
+@config_router.put("/air/attenuation/filename")
+async def set_air_attenuation_by_filename(
+    file_name: str = Query(..., description="Nombre del archivo de atenuación (ej: 'air.txt')")
+) -> FileResponse:
+
+    config_service.set_air_attenuation_by_filename(file_name)
+
+    return FileResponse(config.AIR_ATTENUATION_FILE, filename="air.txt")
