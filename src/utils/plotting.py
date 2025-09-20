@@ -4,6 +4,8 @@ Funciones de utilidad general para el proyecto de análisis espectral.
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+# Usar 'magma' como colormap por defecto para imágenes
+plt.rcParams['image.cmap'] = 'magma'
 
 def lista_a_string(valores):
     """
@@ -42,7 +44,7 @@ def visualize_images(imagenes, distancias, banda=0, title_prefix='', save_path=N
     plt.figure(figsize=(15, 10))
     for i, factor in enumerate(distancias):
         plt.subplot(2, 3, i + 1)
-        plt.imshow(imagenes[i][:, :, banda], cmap='plasma')
+        plt.imshow(imagenes[i][:, :, banda], cmap='magma')
         plt.colorbar()
         plt.title(f'{title_prefix} Distancia: {factor}x')
         plt.axis('off')
@@ -75,7 +77,7 @@ def analyze_spectral_comparison(pixeles, wave_lengths, spd_wavelengths, spd_valu
     # Primero graficar la emisión original del material
     plt.subplot(2, 3, 1)
     plt.plot(spd_wavelengths, spd_values)
-    plt.title(f'Emisión original (test.spd)')
+    plt.title('Emisión original (test.spd)')
     plt.xlabel('Longitud de onda (nm)')
     plt.ylabel('Emisión relativa')
     plt.grid(True)
