@@ -207,8 +207,8 @@ class SceneService:
             "rotate_y": angles[1], # ajuste para mitsuba
             "rotate_z": angles[2], # ajuste para mitsuba
             "translate_x": tx, # x mitsuba igual al x blender
-            "translate_y": tz, # y mitsuba igual al z blender
-            "translate_z": -ty, # eje z igual al eje -y de blender
+            "translate_y": -tz, # y mitsuba igual al z blender
+            "translate_z": ty, # eje z igual al eje -y de blender
             "fov": fov
         }
         
