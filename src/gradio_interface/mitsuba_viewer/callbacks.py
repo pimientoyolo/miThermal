@@ -63,23 +63,28 @@ def _compute_groups(objects: List[Dict]) -> Tuple[Dict[str, List[str]], Dict[str
             base_name = os.path.splitext(os.path.basename(oid))[0]
             label_src = base_name or oid
 
+        # Normalizar base (antes de variantes '-')
         base = label_src.split("-", 1)[0]
 
-        m = re.match(r"^(?P<prefix>.+?)_(?P<num>\d+)$", base)
-        if m:
-            family = m.group("prefix")
-            instance = base
+        # Nueva lógica de familia: primer token antes de '_' si existe.
+        # Ej: lamp_legup_Cube -> family='lamp'; mantiene familias más generales.
+        if "_" in base:
+            primary_family = base.split("_", 1)[0]
         else:
-            m2 = re.match(r"^(?P<prefix>.*?)(?P<num>\d+)$", base)
-            if m2 and m2.group("prefix"):
-                family = m2.group("prefix")
-                instance = base
-            else:
-                family = base
-                instance = base
+            primary_family = base
+
+        # Instancia: usamos el nombre completo base (sin sufijo '-') para granularidad.
+        instance = base
+
+        # Si la heurística anterior (número al final) aporta un prefijo más corto, se ignora porque ya
+        # queremos la familia principal por primer '_'. Sin embargo, para casos sin '_' mantenemos fallback.
+        if "_" not in base:
+            m = re.match(r"^(?P<prefix>.+?)(?P<num>\d+)$", base)
+            if m and m.group("prefix"):
+                primary_family = m.group("prefix")
 
         inst.setdefault(instance, []).append(oid)
-        fam.setdefault(family, []).append(oid)
+        fam.setdefault(primary_family, []).append(oid)
     return inst, fam
 
 
@@ -459,35 +464,99 @@ def create_mitsuba_viewer_interface():
         # para no modificar su valor, solo su etiqueta.
         
 
-        def upload_zip_and_prefill(zip_file):
-            # Ejecutar carga de ZIP
-            out_img, info_text, scene_json, labels1, labels2 = upload_zip_file(zip_file)
-            # Obtener config para prellenar
-            cfg = None
+        def upload_zip_and_prefill(load_type_value, zip_file):
+            """Sube un ZIP (Escena o miTransfer) y retorna 22 outputs.
+
+            Orden de outputs (22):
+              1 image, 2 scene_info(str|update), 3 selector1(update), 4 scene_json(dict),
+              5 selector2(update), 6 air_suggest_list(update), 7-21 (15 config updates), 22 air_plot(fig|None)
+            """
+            # Helpers
+            EMPTY_SELECTOR = gr.update(choices=[], value=None)
+            EMPTY_SUGGEST = gr.update(choices=[], value=None)
+            PLACEHOLDER_CONFIG = [gr.update()]*15  # spp,width,height,rx,ry,rz,tx,ty,tz,fov,wl_min,wl_max,bands,air_temp,config_info
+
+            def _error_tuple(msg: str):
+                return (
+                    None,                      # image
+                    gr.update(value=msg),       # scene_info
+                    EMPTY_SELECTOR,             # selector1
+                    {},                         # scene_json
+                    EMPTY_SELECTOR,             # selector2
+                    EMPTY_SUGGEST,              # air_suggest_list
+                    *PLACEHOLDER_CONFIG,        # 15 updates
+                    None,                       # air_plot
+                )
+
+            if zip_file is None:
+                return _error_tuple("❌ Sube un archivo .zip")
+            path = getattr(zip_file, "name", None)
+            if not path:
+                return _error_tuple("❌ Archivo inválido")
+
+            client = get_client()
+            img_pil = None
+            info_text = ""
+            scene_json = {}
+            labels1: List[str] = []
+            labels2: List[str] = []
             try:
-                cfg = get_client().get_camera_config()
+                if (load_type_value or '').lower().startswith('mit'):
+                    # miTransfer
+                    resp = client.post_mithermal(path)
+                    try:
+                        if isinstance(resp, dict) and resp.get('image_base64'):
+                            import io
+                            import base64
+                            from PIL import Image
+                            img_bytes = base64.b64decode(resp['image_base64'])
+                            img_pil = Image.open(io.BytesIO(img_bytes)).convert('RGB')
+                    except Exception:
+                        img_pil = None
+                else:
+                    img_pil2, info_text_scene, scene_json_scene, labelsA, labelsB = upload_zip_file(zip_file)
+                    img_pil = img_pil2
+                    info_text = info_text_scene
+                    scene_json = scene_json_scene
+                    labels1 = labelsA
+                    labels2 = labelsB
+                if not info_text:
+                    info_text, scene_json, labels_built = _summarize_scene_and_update_state()
+                    labels1 = labels_built
+                    labels2 = labels_built
+            except Exception as e:
+                return _error_tuple(f"❌ Error subiendo: {e}")
+
+            # Config prefill
+            try:
+                cfg = client.get_camera_config()
             except Exception:
                 cfg = None
-            updates = list(_prefill_updates_from_config(cfg))
-            # Temperatura del aire
+            updates = list(_prefill_updates_from_config(cfg))  # esperado 14 (incluye config_info al final)
             try:
-                air_temp = get_client().get_air_temperature()
+                air_temp = client.get_air_temperature()
             except Exception:
                 air_temp = None
-            # Insertar antes del último elemento (config_info)
-            updates.insert(-1, gr.update(value=air_temp))
-            # Precargar sugerencias de atenuación
+            # Asegurar longitud y colocar temperatura antes de config_info
+            if len(updates) == 14:
+                updates.insert(-1, gr.update(value=air_temp))  # ahora 15
+            else:
+                while len(updates) < 14:
+                    updates.append(gr.update())
+                updates.insert(-1, gr.update(value=air_temp))
+            # Sugerencias atenuación
             try:
                 air_suggest_update = air_suggest_cb()
             except Exception:
-                air_suggest_update = gr.update(choices=[], value=None)
-            # Plot actual de atenuación
+                air_suggest_update = EMPTY_SUGGEST
+            # Plot atenuación
             try:
                 air_fig = air_plot_cb()
             except Exception:
                 air_fig = None
+
             return (
-                out_img,
+                img_pil,
                 info_text,
                 gr.update(choices=labels1 or [], value=None),
                 scene_json,
@@ -499,7 +568,7 @@ def create_mitsuba_viewer_interface():
 
         upload_section["upload_btn"].click(
             fn=upload_zip_and_prefill,
-            inputs=[upload_section["zip_file"]],
+            inputs=[upload_section["load_type"], upload_section["zip_file"]],
             outputs=[
                 upload_section["render_image"],
                 upload_section["scene_info"],
@@ -542,53 +611,70 @@ def create_mitsuba_viewer_interface():
             return gr.update(choices=choices, value=choices[0] if choices else None)
 
         def select_default_cb(file_name: str):
+            """Selecciona escena default y retorna 22 outputs consistentes."""
             client = get_client()
-            if not file_name:
+
+            EMPTY_SELECTOR = gr.update(choices=[], value=None)
+            EMPTY_SUGGEST = gr.update(choices=[], value=None)
+            PLACEHOLDER_CONFIG = [gr.update()]*15
+
+            def _empty(msg: str):
                 return (
-                    None,
-                    "❌ Seleccione una escena predeterminada",
-                    {},
-                    [],
-                    [],
-                    gr.update(),
-                    gr.update(), gr.update(), gr.update(),
-                    gr.update(), gr.update(), gr.update(),
-                    gr.update(), gr.update(), gr.update(),
-                    gr.update(), gr.update(), gr.update(),
-                    gr.update(),
-                    None,
+                    None,                  # image
+                    msg,                   # scene_info
+                    EMPTY_SELECTOR,        # selector1
+                    {},                    # scene_json
+                    EMPTY_SELECTOR,        # selector2
+                    EMPTY_SUGGEST,         # air_suggest_list
+                    *PLACEHOLDER_CONFIG,   # 15 config updates
+                    None,                  # air_plot
                 )
+
+            if not file_name:
+                return _empty("❌ Seleccione una escena predeterminada")
             try:
-                _ = client.select_default_scene(file_name)
+                client.select_default_scene(file_name)
             except Exception:
+                # Seguimos aunque falle selección
                 pass
-            # Tras seleccionar, refrescar como en load_server_and_prefill (reutilizamos lógica)
-            out_img, info_text, scene_json, labels1, labels2 = load_server_scene("")
-            cfg = None
+            # Actualizar estado objetos
             try:
-                cfg = get_client().get_camera_config()
+                info_text, scene_json, labels = _summarize_scene_and_update_state()
+            except Exception:
+                info_text, scene_json, labels = "⚠️ No se pudo refrescar escena", {}, []
+            img_pil = None  # No siempre hay render inmediato
+            # Config
+            try:
+                cfg = client.get_camera_config()
             except Exception:
                 cfg = None
             updates = list(_prefill_updates_from_config(cfg))
             try:
-                air_temp = get_client().get_air_temperature()
+                air_temp = client.get_air_temperature()
             except Exception:
                 air_temp = None
-            updates.insert(-1, gr.update(value=air_temp))
+            if len(updates) == 14:
+                updates.insert(-1, gr.update(value=air_temp))
+            else:
+                while len(updates) < 14:
+                    updates.append(gr.update())
+                updates.insert(-1, gr.update(value=air_temp))
+            # Sugerencias
             try:
                 air_suggest_update = air_suggest_cb()
             except Exception:
-                air_suggest_update = gr.update(choices=[], value=None)
+                air_suggest_update = EMPTY_SUGGEST
+            # Plot
             try:
                 air_fig = air_plot_cb()
             except Exception:
                 air_fig = None
             return (
-                out_img,
+                img_pil,
                 info_text,
-                gr.update(choices=labels1 or [], value=None),
+                gr.update(choices=labels or [], value=None),
                 scene_json,
-                gr.update(choices=labels2 or [], value=None),
+                gr.update(choices=labels or [], value=None),
                 air_suggest_update,
                 *updates,
                 air_fig,
@@ -645,44 +731,7 @@ def create_mitsuba_viewer_interface():
             ],
         )
 
-        # Descargar miThermal actual como archivo
-        def mithermal_get_cb():
-            client = get_client()
-            try:
-                r = client.get_mithermal_zip()
-                if r.get("status") == "ok":
-                    import tempfile
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tf:
-                        tf.write(r.get("zip_bytes", b""))
-                        return tf.name
-            except Exception:
-                pass
-            return None
-
-        upload_section["mithermal_get_btn"].click(
-            fn=mithermal_get_cb,
-            inputs=[],
-            outputs=[upload_section["zip_file"]],
-        )
-
-        # Subir miThermal.zip completo
-        def mithermal_post_cb(file):
-            client = get_client()
-            path = getattr(file, "name", None)
-            if not path:
-                return gr.update(value="❌ Archivo inválido")
-            try:
-                res = client.post_mithermal(path)
-                msg = res.get("message") if isinstance(res, dict) else "OK"
-                return gr.update(value=f"✅ Enviado miThermal: {msg}")
-            except Exception as e:
-                return gr.update(value=f"❌ Error enviando miThermal: {e}")
-
-        upload_section["mithermal_post_btn"].click(
-            fn=mithermal_post_cb,
-            inputs=[upload_section["mithermal_upload"]],
-            outputs=[upload_section["scene_info"]],
-        )
+        # (Eliminados) callbacks específicos de miThermal (post/get) tras unificación de carga.
         if upload_section["load_btn"] and upload_section["server_path"]:
             def load_server_and_prefill(scene_path: str):
                 out_img, info_text, scene_json, labels1, labels2 = load_server_scene(scene_path)
@@ -815,84 +864,69 @@ def create_mitsuba_viewer_interface():
             ],
         )
 
-        def og_apply_temp(mode: str, selection: str, temp_value):
-            if temp_value is None:
-                return gr.update(value="❌ Ingrese temperatura")
-            mode_l = (mode or "").lower()
-            client = get_client()
-            targets: List[str] = []
-            if mode_l.startswith("obj"):
-                oid = viewer_state.object_id_mapping.get(selection)
-                if oid:
-                    targets = [oid]
-            elif mode_l.startswith("inst"):
-                targets = viewer_state.object_groups_instance.get(selection, [])
-            else:
-                targets = viewer_state.object_groups_family.get(selection, [])
-            if not targets:
-                return gr.update(value="❌ Nada que aplicar")
-            ok = 0
-            err = 0
-            for oid in targets:
-                try:
-                    r = client.update_object_temperature(oid, float(temp_value))
-                    if r.get("status") == "error":
-                        err += 1
-                    else:
-                        ok += 1
-                except Exception:
-                    err += 1
-            msg = f"✅ Temperatura aplicada a {ok}."
-            if err:
-                msg += f" ⚠️ Fallos: {err}"
-            return gr.update(value=msg)
+        def og_apply_update(mode: str, selection: str, temp_value, emissivity_file):
+            """Actualiza objeto(s) (temperatura + emisividad) usando update_with_emissivity.
 
-        og_section["apply_temp_btn"].click(
-            fn=og_apply_temp,
-            inputs=[og_section["mode_radio"], og_section["selector"], og_section["temp_input"]],
-            outputs=[og_section["info_text"]],
-        )
-
-        def og_apply_emissivity(mode: str, selection: str, emissivity_file):
-            if emissivity_file is None:
-                return gr.update(value="❌ Suba archivo")
-            mode_l = (mode or "").lower()
+            - Objeto: si no se ingresa temperatura, leer la actual del backend.
+            - Instancia: igual que objeto para cada miembro (si no hay input, se intenta leer cada una; fallback 300K).
+            - Familia: temperatura por defecto 300K salvo que usuario provea otra.
+            El archivo de emisividad es obligatorio.
+            """
+            mode_l = (mode or '').lower()
             client = get_client()
-            path = getattr(emissivity_file, "name", None)
+            path = getattr(emissivity_file, 'name', None)
             if not path:
-                return gr.update(value="❌ Archivo inválido")
-            targets: List[str] = []
-            if mode_l.startswith("obj"):
+                return gr.update(value='❌ Suba archivo de emisividad')
+            # targets
+            if mode_l.startswith('obj'):
                 oid = viewer_state.object_id_mapping.get(selection)
-                if oid:
-                    targets = [oid]
-            elif mode_l.startswith("inst"):
+                targets = [oid] if oid else []
+            elif mode_l.startswith('inst'):
                 targets = viewer_state.object_groups_instance.get(selection, [])
             else:
                 targets = viewer_state.object_groups_family.get(selection, [])
             if not targets:
-                return gr.update(value="❌ Nada que aplicar")
-            ok = 0
-            err = 0
+                return gr.update(value='❌ Nada seleccionado')
+            # parse user temp
+            try:
+                user_temp = float(temp_value) if temp_value not in (None, '') else None
+            except Exception:
+                user_temp = None
+            objs_payload = []
             for oid in targets:
-                try:
-                    r = client.upload_emissivity_file(oid, path)
-                    if r.get("status") == "error":
-                        err += 1
+                if mode_l.startswith('fam'):
+                    t = user_temp if user_temp is not None else 300.0
+                else:
+                    if user_temp is not None:
+                        t = user_temp
                     else:
-                        ok += 1
-                except Exception:
-                    err += 1
-            msg = f"✅ Emisividad aplicada a {ok}."
-            if err:
-                msg += f" ⚠️ Fallos: {err}"
-            return gr.update(value=msg)
+                        # obtener del backend
+                        try:
+                            obj_resp = client.get_object(oid)
+                            if obj_resp.get('status') == 'success':
+                                odata = obj_resp.get('object', {})
+                            else:
+                                odata = obj_resp.get('object', obj_resp)
+                            if odata and odata.get('temperature') is not None:
+                                t = float(odata.get('temperature'))
+                            else:
+                                t = 300.0
+                        except Exception:
+                            t = 300.0
+                objs_payload.append({'id': oid, 'temperature': t})
+            res = client.update_objects_with_emissivity(objs_payload, path)
+            if res.get('status') == 'error':
+                return gr.update(value=f"❌ Error: {res.get('detail')}")
+            msg = res.get('message') if isinstance(res, dict) else 'OK'
+            return gr.update(value=f"✅ Actualizados {len(objs_payload)} objeto(s). {msg}")
 
-        og_section["apply_emissivity_btn"].click(
-            fn=og_apply_emissivity,
-            inputs=[og_section["mode_radio"], og_section["selector"], og_section["emissivity_file"]],
-            outputs=[og_section["info_text"]],
+        og_section['apply_update_btn'].click(
+            fn=og_apply_update,
+            inputs=[og_section['mode_radio'], og_section['selector'], og_section['temp_input'], og_section['emissivity_file']],
+            outputs=[og_section['info_text']],
         )
+
+        # Batch update con atenuación eliminado según requerimiento del usuario.
 
         def preview_emissivity_file(emissivity_file):
             if emissivity_file is None:

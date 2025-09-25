@@ -1,10 +1,9 @@
 from fastapi import APIRouter, File, UploadFile
-from fastapi.responses import FileResponse, StreamingResponse
-import io
+from fastapi.responses import FileResponse
 
 from src.api.dto.cameraDTO import CameraDTO, UpdateCameraDTO
 from src.api.service.config_service import ConfigService
-from fastapi import Query, HTTPException
+from fastapi import Query
 
 from src.mitsuba_core.object_utils import ObjectUtils
 import src.config as config

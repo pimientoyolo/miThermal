@@ -1,7 +1,6 @@
 import logging
 import io
 import os
-import shutil
 from src.api.dto.cameraDTO import CameraDTO, UpdateCameraDTO
 from src.api.service.scene_service import SceneService
 import src.config as config

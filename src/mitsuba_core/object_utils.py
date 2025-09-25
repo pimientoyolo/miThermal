@@ -495,10 +495,44 @@ class ObjectUtils:
         except Exception as e:
             self.logger.error(f"Error leyendo '{config.AIR_ATTENUATION_FILE}': {e}")
             raise HTTPException(status_code=500, detail=f"Error al leer archivo de atenuación del aire: {e}")
-        
+    
+    def save_new_emissivity(self, object_id: str, wavelengths_nm: np.ndarray, emissivity: np.ndarray) -> None:
+        """
+        Guarda un nuevo archivo de emisividad para un objeto específico.
+        El archivo se guarda en OUTPUT_STATIC_DIR con la misma estructura que DEFAULT_EMISSIVITY_FILE.
+
+        Args:
+            object_id (str): Identificador del objeto (ruta relativa como en la escena)
+            wavelengths_nm (np.ndarray): Array con las longitudes de onda en nanómetros
+            emissivity (np.ndarray): Array con los valores de emisividad correspondientes
+
+        Raises:
+            HTTPException: Si ocurre algún error durante el guardado
+        """
+        try:
+            path_static = config.OUTPUT_STATIC_DIR
+            base_out = Path(path_static)
+
+            obj_path = Path(object_id)
+            # Si es absoluta (p.ej., Windows con drive), convertir a relativa respecto a la raíz
+            if obj_path.is_absolute():
+                obj_path = obj_path.relative_to(obj_path.anchor)
+
+            dst_path = base_out / obj_path.with_suffix(".txt")
+            dst_path.parent.mkdir(parents=True, exist_ok=True)
+
+            # Guardar a archivo tab-delimitado (wavelength_nm, emissivity)
+            data = np.column_stack((wavelengths_nm, emissivity))
+            np.savetxt(dst_path, data, delimiter='\t')
+
+            self.logger.info(f"Archivo de emisividad guardado en '{dst_path}' para objeto '{object_id}'")
+        except Exception as e:
+            self.logger.error(f"Error guardando archivo de emisividad para objeto '{object_id}': {e}")
+            raise HTTPException(status_code=500, detail=f"Error al guardar archivo de emisividad: {e}")
+    
     def save_default_emissivity(self, object_id: str) -> None:
         
-        path_default = config.DEFAULT_EMITTIVITY_FILE
+        path_default = config.DEFAULT_EMISSIVITY_FILE
         self.valid_exist_file(path_default)
         path_static = config.OUTPUT_STATIC_DIR
 
@@ -582,18 +616,24 @@ class ObjectUtils:
         abre el archivo .txt correspondiente en OUTPUT_STATIC_DIR y retorna
         (wavelengths_nm, emissivity) usando read_reflectance_file_as_emissivity.
         """
-        try:
-            base_out = Path(config.OUTPUT_STATIC_DIR)
-            obj_path = Path(object_id)
-            if obj_path.is_absolute():
-                obj_path = obj_path.relative_to(obj_path.anchor)
+        config_scene = config.get_config_scene_dict()
+        emissivity_file = config_scene["objects"].get(object_id, {}).get("emissivity_file", None)
 
-            txt_path = base_out / obj_path.with_suffix(".txt")
-            return self.read_reflectance_file_as_emissivity(str(txt_path))
-        except HTTPException:
-            raise
-        except Exception as e:
-            self.logger.error(f"Error leyendo emisividad para objeto '{object_id}': {e}")
-            raise HTTPException(status_code=500, detail="Error al leer archivo de emisividad del objeto")
+        if emissivity_file is None:
+            self.logger.warning(f"No se encontró archivo de emisividad para objeto '{object_id}'")
+            raise HTTPException(status_code=404, detail="Archivo de emisividad no encontrado")
+
+        return self.read_reflectance_file_as_emissivity(emissivity_file)
+        #     obj_path = Path(object_id)
+        #     if obj_path.is_absolute():
+        #         obj_path = obj_path.relative_to(obj_path.anchor)
+
+        #     txt_path = base_out / obj_path.with_suffix(".txt")
+        #     return self.read_reflectance_file_as_emissivity(str(txt_path))
+        # except HTTPException:
+        #     raise
+        # except Exception as e:
+        #     self.logger.error(f"Error leyendo emisividad para objeto '{object_id}': {e}")
+        #     raise HTTPException(status_code=500, detail="Error al leer archivo de emisividad del objeto")
         
     

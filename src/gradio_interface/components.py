@@ -35,61 +35,50 @@ def format_object_label(obj: Dict[str, Any]) -> str:
 
 
 def build_upload_section(show_server_path: bool = False) -> Dict[str, gr.components.Component]:
-    """Construye la sección de carga/render de escena.
+	"""Construye la sección de carga/render de escena.
 
-    Args:
-        show_server_path: Si se desea incluir input para cargar desde ruta servidor.
-    Returns:
-        Diccionario con referencias a componentes clave.
-    """
-    with gr.Row():
-        with gr.Column(scale=1):
-            zip_file = gr.File(label="Escena Mitsuba (.zip)", file_types=[".zip"])
-            upload_btn = gr.Button("📤 Subir Escena", variant="primary")
+	Args:
+		show_server_path: Si se desea incluir input para cargar desde ruta servidor.
+	Returns:
+		Diccionario con referencias a componentes clave.
+	"""
+	with gr.Row():
+		with gr.Column(scale=1):
+			load_type = gr.Radio(label="Tipo de carga", choices=["Escena", "miTransfer"], value="Escena")
+			zip_file = gr.File(label="Archivo (.zip)", file_types=[".zip"])
+			upload_btn = gr.Button("📤 Subir", variant="primary")
+			server_path = None
+			load_btn = None
+			if show_server_path:
+				server_path = gr.Textbox(label="Ruta en servidor (solo Escena)", placeholder="/ruta/a/escena.zip")
+				load_btn = gr.Button("📥 Cargar del Servidor")
+			scene_info = gr.Textbox(label="Info Escena", lines=6, interactive=False)
+			scene_json = gr.JSON(label="Objetos (JSON)", visible=False)
+		with gr.Column(scale=2):
+			render_image = gr.Image(label="Render RGB", type="pil", height=400)
 
-            server_path = None
-            load_btn = None
-            if show_server_path:
-                server_path = gr.Textbox(label="Ruta en servidor", placeholder="/ruta/a/escena.zip")
-                load_btn = gr.Button("📥 Cargar del Servidor")
+	with gr.Row():
+		with gr.Column(scale=3):
+			default_suggest = gr.Dropdown(label="Escenas predeterminadas", choices=[], interactive=True)
+		with gr.Column(scale=1):
+			reload_default_btn = gr.Button("🔄 Recargar escenas predeterminadas", variant="secondary")
+	with gr.Row():
+		with gr.Column(scale=1):
+			select_default_btn = gr.Button("✅ Seleccionar por defecto", variant="secondary")
 
-            scene_info = gr.Textbox(label="Info Escena", lines=6, interactive=False)
-            scene_json = gr.JSON(label="Objetos (JSON)", visible=False)
-
-        with gr.Column(scale=2):
-            render_image = gr.Image(label="Render", type="pil", height=400)
-
-    with gr.Row():
-        with gr.Column(scale=3):
-            # Escenas predeterminadas (miThermal)
-            default_suggest = gr.Dropdown(label="Escenas predeterminadas", choices=[], interactive=True)
-        with gr.Column(scale=1):
-			# boton para recargar escena por defecto
-            reload_default_btn = gr.Button("🔄 Recargar escenas predeterminadas", variant="secondary")
-    with gr.Row():
-        with gr.Column(scale=1):
-            select_default_btn = gr.Button("✅ Seleccionar por defecto", variant="secondary")
-
-            # Subir/Descargar miThermal completa
-            mithermal_upload = gr.File(label="Subir escena completa (miThermal.zip)", file_types=[".zip"])
-            mithermal_post_btn = gr.Button("📤 Enviar miThermal", variant="secondary")
-            mithermal_get_btn = gr.Button("💾 Descargar miThermal actual", variant="secondary")
-
-    return {
-        "zip_file": zip_file,
-        "upload_btn": upload_btn,
-        "default_suggest": default_suggest,
+	return {
+		"load_type": load_type,
+		"zip_file": zip_file,
+		"upload_btn": upload_btn,
+		"default_suggest": default_suggest,
 		"reload_default_btn": reload_default_btn,
-        "select_default_btn": select_default_btn,
-        "mithermal_upload": mithermal_upload,
-        "mithermal_post_btn": mithermal_post_btn,
-        "mithermal_get_btn": mithermal_get_btn,
-        "server_path": server_path,
-        "load_btn": load_btn,
-        "scene_info": scene_info,
-        "scene_json": scene_json,
-        "render_image": render_image,
-    }
+		"select_default_btn": select_default_btn,
+		"server_path": server_path,
+		"load_btn": load_btn,
+		"scene_info": scene_info,
+		"scene_json": scene_json,
+		"render_image": render_image,
+	}
 
 
 
@@ -166,9 +155,10 @@ def build_object_group_section() -> Dict[str, gr.components.Component]:
 			members = gr.Dropdown(label="Miembros", choices=[], multiselect=True, interactive=False)
 			# Controles de propiedades
 			temp_input = gr.Number(label="Temperatura (K)", value=None, precision=2)
-			apply_temp_btn = gr.Button("Aplicar Temperatura", variant="secondary")
 			emissivity_file = gr.File(label="Archivo Emisividad", file_types=[".txt", ".tbs"], interactive=True)
-			apply_emissivity_btn = gr.Button("Aplicar Emisividad", variant="secondary")
+			apply_update_btn = gr.Button("Actualizar Objeto(s)", variant="secondary")
+			# Batch update objetos + atenuación
+			# (Eliminado) batch_attenuation_file y batch_update_btn relacionados con atenuación masiva
 			info_text = gr.Textbox(label="Info", lines=12, interactive=False)
 		with gr.Column(scale=2):
 			model_viewer = gr.Model3D(label="Vista 3D", height=600)
@@ -178,9 +168,9 @@ def build_object_group_section() -> Dict[str, gr.components.Component]:
 		"selector": selector,
 		"members": members,
 		"temp_input": temp_input,
-		"apply_temp_btn": apply_temp_btn,
 		"emissivity_file": emissivity_file,
-		"apply_emissivity_btn": apply_emissivity_btn,
+		"apply_update_btn": apply_update_btn,
+		# Campos eliminados: batch_attenuation_file, batch_update_btn
 		"info_text": info_text,
 		"model_viewer": model_viewer,
 		"emissivity_plot": emissivity_plot,
