@@ -166,9 +166,10 @@ def build_object_group_section() -> Dict[str, gr.components.Component]:
 			members = gr.Dropdown(label="Miembros", choices=[], multiselect=True, interactive=False)
 			# Controles de propiedades
 			temp_input = gr.Number(label="Temperatura (K)", value=None, precision=2)
-			apply_temp_btn = gr.Button("Aplicar Temperatura", variant="secondary")
 			emissivity_file = gr.File(label="Archivo Emisividad", file_types=[".txt", ".tbs"], interactive=True)
-			apply_emissivity_btn = gr.Button("Aplicar Emisividad", variant="secondary")
+			apply_update_btn = gr.Button("Actualizar Objeto(s)", variant="secondary")
+			# Batch update objetos + atenuación
+			# (Eliminado) batch_attenuation_file y batch_update_btn relacionados con atenuación masiva
 			info_text = gr.Textbox(label="Info", lines=12, interactive=False)
 		with gr.Column(scale=2):
 			model_viewer = gr.Model3D(label="Vista 3D", height=600)
@@ -178,9 +179,9 @@ def build_object_group_section() -> Dict[str, gr.components.Component]:
 		"selector": selector,
 		"members": members,
 		"temp_input": temp_input,
-		"apply_temp_btn": apply_temp_btn,
 		"emissivity_file": emissivity_file,
-		"apply_emissivity_btn": apply_emissivity_btn,
+		"apply_update_btn": apply_update_btn,
+		# Campos eliminados: batch_attenuation_file, batch_update_btn
 		"info_text": info_text,
 		"model_viewer": model_viewer,
 		"emissivity_plot": emissivity_plot,

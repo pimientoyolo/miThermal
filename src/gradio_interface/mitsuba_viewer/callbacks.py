@@ -63,23 +63,28 @@ def _compute_groups(objects: List[Dict]) -> Tuple[Dict[str, List[str]], Dict[str
             base_name = os.path.splitext(os.path.basename(oid))[0]
             label_src = base_name or oid
 
+        # Normalizar base (antes de variantes '-')
         base = label_src.split("-", 1)[0]
 
-        m = re.match(r"^(?P<prefix>.+?)_(?P<num>\d+)$", base)
-        if m:
-            family = m.group("prefix")
-            instance = base
+        # Nueva lógica de familia: primer token antes de '_' si existe.
+        # Ej: lamp_legup_Cube -> family='lamp'; mantiene familias más generales.
+        if "_" in base:
+            primary_family = base.split("_", 1)[0]
         else:
-            m2 = re.match(r"^(?P<prefix>.*?)(?P<num>\d+)$", base)
-            if m2 and m2.group("prefix"):
-                family = m2.group("prefix")
-                instance = base
-            else:
-                family = base
-                instance = base
+            primary_family = base
+
+        # Instancia: usamos el nombre completo base (sin sufijo '-') para granularidad.
+        instance = base
+
+        # Si la heurística anterior (número al final) aporta un prefijo más corto, se ignora porque ya
+        # queremos la familia principal por primer '_'. Sin embargo, para casos sin '_' mantenemos fallback.
+        if "_" not in base:
+            m = re.match(r"^(?P<prefix>.+?)(?P<num>\d+)$", base)
+            if m and m.group("prefix"):
+                primary_family = m.group("prefix")
 
         inst.setdefault(instance, []).append(oid)
-        fam.setdefault(family, []).append(oid)
+        fam.setdefault(primary_family, []).append(oid)
     return inst, fam
 
 
@@ -815,84 +820,69 @@ def create_mitsuba_viewer_interface():
             ],
         )
 
-        def og_apply_temp(mode: str, selection: str, temp_value):
-            if temp_value is None:
-                return gr.update(value="❌ Ingrese temperatura")
-            mode_l = (mode or "").lower()
-            client = get_client()
-            targets: List[str] = []
-            if mode_l.startswith("obj"):
-                oid = viewer_state.object_id_mapping.get(selection)
-                if oid:
-                    targets = [oid]
-            elif mode_l.startswith("inst"):
-                targets = viewer_state.object_groups_instance.get(selection, [])
-            else:
-                targets = viewer_state.object_groups_family.get(selection, [])
-            if not targets:
-                return gr.update(value="❌ Nada que aplicar")
-            ok = 0
-            err = 0
-            for oid in targets:
-                try:
-                    r = client.update_object_temperature(oid, float(temp_value))
-                    if r.get("status") == "error":
-                        err += 1
-                    else:
-                        ok += 1
-                except Exception:
-                    err += 1
-            msg = f"✅ Temperatura aplicada a {ok}."
-            if err:
-                msg += f" ⚠️ Fallos: {err}"
-            return gr.update(value=msg)
+        def og_apply_update(mode: str, selection: str, temp_value, emissivity_file):
+            """Actualiza objeto(s) (temperatura + emisividad) usando update_with_emissivity.
 
-        og_section["apply_temp_btn"].click(
-            fn=og_apply_temp,
-            inputs=[og_section["mode_radio"], og_section["selector"], og_section["temp_input"]],
-            outputs=[og_section["info_text"]],
-        )
-
-        def og_apply_emissivity(mode: str, selection: str, emissivity_file):
-            if emissivity_file is None:
-                return gr.update(value="❌ Suba archivo")
-            mode_l = (mode or "").lower()
+            - Objeto: si no se ingresa temperatura, leer la actual del backend.
+            - Instancia: igual que objeto para cada miembro (si no hay input, se intenta leer cada una; fallback 300K).
+            - Familia: temperatura por defecto 300K salvo que usuario provea otra.
+            El archivo de emisividad es obligatorio.
+            """
+            mode_l = (mode or '').lower()
             client = get_client()
-            path = getattr(emissivity_file, "name", None)
+            path = getattr(emissivity_file, 'name', None)
             if not path:
-                return gr.update(value="❌ Archivo inválido")
-            targets: List[str] = []
-            if mode_l.startswith("obj"):
+                return gr.update(value='❌ Suba archivo de emisividad')
+            # targets
+            if mode_l.startswith('obj'):
                 oid = viewer_state.object_id_mapping.get(selection)
-                if oid:
-                    targets = [oid]
-            elif mode_l.startswith("inst"):
+                targets = [oid] if oid else []
+            elif mode_l.startswith('inst'):
                 targets = viewer_state.object_groups_instance.get(selection, [])
             else:
                 targets = viewer_state.object_groups_family.get(selection, [])
             if not targets:
-                return gr.update(value="❌ Nada que aplicar")
-            ok = 0
-            err = 0
+                return gr.update(value='❌ Nada seleccionado')
+            # parse user temp
+            try:
+                user_temp = float(temp_value) if temp_value not in (None, '') else None
+            except Exception:
+                user_temp = None
+            objs_payload = []
             for oid in targets:
-                try:
-                    r = client.upload_emissivity_file(oid, path)
-                    if r.get("status") == "error":
-                        err += 1
+                if mode_l.startswith('fam'):
+                    t = user_temp if user_temp is not None else 300.0
+                else:
+                    if user_temp is not None:
+                        t = user_temp
                     else:
-                        ok += 1
-                except Exception:
-                    err += 1
-            msg = f"✅ Emisividad aplicada a {ok}."
-            if err:
-                msg += f" ⚠️ Fallos: {err}"
-            return gr.update(value=msg)
+                        # obtener del backend
+                        try:
+                            obj_resp = client.get_object(oid)
+                            if obj_resp.get('status') == 'success':
+                                odata = obj_resp.get('object', {})
+                            else:
+                                odata = obj_resp.get('object', obj_resp)
+                            if odata and odata.get('temperature') is not None:
+                                t = float(odata.get('temperature'))
+                            else:
+                                t = 300.0
+                        except Exception:
+                            t = 300.0
+                objs_payload.append({'id': oid, 'temperature': t})
+            res = client.update_objects_with_emissivity(objs_payload, path)
+            if res.get('status') == 'error':
+                return gr.update(value=f"❌ Error: {res.get('detail')}")
+            msg = res.get('message') if isinstance(res, dict) else 'OK'
+            return gr.update(value=f"✅ Actualizados {len(objs_payload)} objeto(s). {msg}")
 
-        og_section["apply_emissivity_btn"].click(
-            fn=og_apply_emissivity,
-            inputs=[og_section["mode_radio"], og_section["selector"], og_section["emissivity_file"]],
-            outputs=[og_section["info_text"]],
+        og_section['apply_update_btn'].click(
+            fn=og_apply_update,
+            inputs=[og_section['mode_radio'], og_section['selector'], og_section['temp_input'], og_section['emissivity_file']],
+            outputs=[og_section['info_text']],
         )
+
+        # Batch update con atenuación eliminado según requerimiento del usuario.
 
         def preview_emissivity_file(emissivity_file):
             if emissivity_file is None:

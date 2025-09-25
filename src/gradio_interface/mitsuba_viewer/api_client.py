@@ -411,3 +411,30 @@ class MitsubaAPIClient:
         except Exception as e:
             logger.error(f"Select default scene error (file_name={file_name}): {e}")
             return {"status": "error", "detail": str(e)}
+
+    # ---------------------- Batch update objetos + emisividad ----------------------
+    def update_objects_with_emissivity(self, objects: list[dict], emissivity_file_path: str) -> Dict:
+        """PUT /object/update-with-emissivity
+
+        Envía una lista de objetos (id, temperature) y un archivo de emisividad.
+        Form fields:
+          - object_data_json: JSON serializado de la lista
+          - emissivity_file: archivo de emisividad (.tbs, .txt)
+        """
+        import json
+        try:
+            payload_json = json.dumps(objects)
+            with open(emissivity_file_path, 'rb') as f:
+                files = {
+                    'object_data_json': (None, payload_json, 'application/json'),
+                    'emissivity_file': (Path(emissivity_file_path).name, f, 'text/plain'),
+                }
+                r = self.session.put(f"{self.base_url}/object/update-with-emissivity", files=files)
+                r.raise_for_status()
+                try:
+                    return {"status": "success", "message": r.json()}
+                except Exception:
+                    return {"status": "success", "message": r.text}
+        except Exception as e:
+            logger.error(f"Batch update objects with emissivity error: {e}")
+            return {"status": "error", "detail": str(e)}
