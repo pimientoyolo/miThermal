@@ -185,3 +185,5 @@ outputs/
 .vscode
 
 *.zip
+diagrams/
+*.puml
