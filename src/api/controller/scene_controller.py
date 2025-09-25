@@ -1,14 +1,9 @@
 from fastapi import APIRouter, File, UploadFile
 from fastapi import Query
-from src.api.dto.cameraDTO import CameraDTO
-from src.api.dto.suggestDTO import SuggestDTO
 from src.api.service.scene_service import SceneService
 from src.api.service.render_service import RenderService
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse
 import src.config as config
-import os
-import os, tempfile, zipfile, uuid
-from fastapi import HTTPException, BackgroundTasks
 
 scene_service = SceneService()
 render_service = RenderService()

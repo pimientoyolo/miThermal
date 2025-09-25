@@ -2,17 +2,15 @@
 Object Controller - Placeholder
 Controller para manejo de objetos 3D
 """
-from src.api.dto.airDTO import AirDTO
 from src.api.dto.objectDTO import ObjectDTO, UpdateObjectDTO
 from src.api.dto.suggestDTO import SuggestDTO
 from src.mitsuba_core.object_utils import ObjectUtils
 from src.api.service.obj_service import ObjService
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse
 from fastapi import APIRouter, File, Query, UploadFile, Form
-from src.config import SCENE_DIR, get_output_path
+from src.config import SCENE_DIR
 import json
 
-from typing import List
 
 object_utils = ObjectUtils()
 object_service = ObjService()

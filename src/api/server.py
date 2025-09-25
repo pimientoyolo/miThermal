@@ -5,7 +5,6 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 import logging
-from typing import List, Dict, Optional
 
 # Imports del proyecto
 from ..config import get_config, get_output_path

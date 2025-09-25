@@ -1,9 +1,7 @@
 import logging
 import os
-from typing import Dict, Any, Optional
 from fastapi import HTTPException
 
-from src.mitsuba_core.scenes import Scene
 from src.mitsuba_core.render_mitsuba import RenderRGB, RenderDepth, RenderThermal
 import src.config as config
 import numpy as np
