@@ -10,7 +10,7 @@ import numpy as np
 from src.api.service.scene_service import SceneService
 import shutil
 import io
-import uuid
+import hashlib
 
 logger = logging.getLogger(__name__)
 
@@ -252,7 +252,8 @@ class ObjService:
                 raise HTTPException(status_code=400, detail=f"La temperatura de {obj_data.id} debe ser superior a 0")
 
         # 3. Guardar archivo de emisividad solo una vez
-        unique_name = f"emissivity_{uuid.uuid4().hex[:8]}.txt"
+        hash_value = hashlib.md5(raw).hexdigest()[:16]
+        unique_name = f"emissivity_{hash_value}.txt"
         dst_path = os.path.join(config.OUTPUT_STATIC_DIR, unique_name)
         os.makedirs(os.path.dirname(dst_path), exist_ok=True)
         with open(dst_path, "wb") as f:
