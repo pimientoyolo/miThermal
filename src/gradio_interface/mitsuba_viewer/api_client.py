@@ -375,8 +375,15 @@ class MitsubaAPIClient:
                 files = {"file": (Path(file_path).name, f, "application/zip")}
                 r = self.session.post(f"{self.base_url}/scene/miThermal", files=files)
                 r.raise_for_status()
+                ctype = r.headers.get("Content-Type", "").lower()
+                if "image" in ctype:
+                    import base64
+                    img_b64 = base64.b64encode(r.content).decode("utf-8")
+                    return {"status": "ok", "image_base64": img_b64}
+                # Intentar JSON
                 try:
-                    return {"status": "success", "message": r.json()}
+                    data = r.json()
+                    return {"status": "success", "message": data}
                 except Exception:
                     return {"status": "success", "message": r.text}
         except Exception as e:
