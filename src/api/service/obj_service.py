@@ -6,10 +6,11 @@ from fastapi import HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 import src.config as config
 from src.api.dto.objectDTO import ObjectDTO, UpdateObjectDTO
-from src.api.dto.airDTO import AirDTO
 import numpy as np
 from src.api.service.scene_service import SceneService
 import shutil
+import io
+import uuid
 
 logger = logging.getLogger(__name__)
 
@@ -69,13 +70,15 @@ class ObjService:
         reflection = 1.0 - emissivity
         
         # Buscar el objeto en la configuración de la escena
-        object_config = None
-        for key in config_scene.keys():
-            if object_id in key or key.endswith(object_id):
-                object_config = config_scene[key]
-                break
+        # object_config = None
+        # for key in config_scene.keys():
+        #     if object_id in key or key.endswith(object_id):
+        #         object_config = config_scene[key]
+        #         break
 
-        wavelengths = wavelengths/1000
+        # wavelengths = wavelengths/1000
+        
+        object_config = config_scene.get("objects", {}).get(object_id)
         
         # Construir el DTO
         return ObjectDTO(
@@ -200,6 +203,99 @@ class ObjService:
         scene_service.prepare_temperature_map()
 
         # Devolver mensaje
+        return mensaje
+    
+    # from fastapi import UploadFile, HTTPException
+
+    def update_objects_with_emissivity(self, object_data_list: list[UpdateObjectDTO], file: UploadFile) -> str:
+        """
+        Actualiza múltiples objetos 3D con sus temperaturas y un archivo de emisividad/atenuación único.
+        """
+        # 1. Validar archivo de emisividad
+        if not file or not file.filename:
+            raise HTTPException(status_code=400, detail="No se envió archivo de emisividad")
+        if not file.filename.lower().endswith(".txt"):
+            raise HTTPException(status_code=400, detail="El archivo debe ser .txt")
+
+        raw = file.file.read()
+        if not raw or len(raw) == 0:
+            raise HTTPException(status_code=400, detail="El archivo está vacío")
+
+        try:
+            data = np.loadtxt(io.StringIO(raw.decode("utf-8")), delimiter="\t")
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Error leyendo el archivo (TAB-delimited esperado): {e}")
+
+        # Normalizar a 2D si viene una sola fila
+        if data.ndim == 1:
+            if data.size < 2:
+                raise HTTPException(status_code=400, detail="El archivo debe tener dos columnas: wavelength_um y reflectance_%")
+            data = data.reshape(1, -1)
+
+        if data.shape[1] != 2:
+            raise HTTPException(status_code=400, detail="El archivo debe tener dos columnas: wavelength_um y reflectance_%")
+
+        wavelengths_um = data[:, 0].astype(float)
+        reflectance_pct = data[:, 1].astype(float)
+
+        # Validaciones físicas
+        if np.any(~np.isfinite(wavelengths_um)) or np.any(~np.isfinite(reflectance_pct)):
+            raise HTTPException(status_code=400, detail="El archivo contiene valores no numéricos o infinitos")
+        if np.any(wavelengths_um <= 0.0):
+            raise HTTPException(status_code=400, detail="Las longitudes de onda deben ser mayores a 0")
+        if np.any(reflectance_pct < 0.0) or np.any(reflectance_pct > 100.0):
+            raise HTTPException(status_code=400, detail="La reflectancia (%) debe estar entre 0 y 100")
+
+        # 2. Validar temperaturas
+        for obj_data in object_data_list:
+            if obj_data.temperature <= 0:
+                raise HTTPException(status_code=400, detail=f"La temperatura de {obj_data.id} debe ser superior a 0")
+
+        # 3. Guardar archivo de emisividad solo una vez
+        unique_name = f"emissivity_{uuid.uuid4().hex[:8]}.txt"
+        dst_path = os.path.join(config.OUTPUT_STATIC_DIR, unique_name)
+        os.makedirs(os.path.dirname(dst_path), exist_ok=True)
+        with open(dst_path, "wb") as f:
+            f.write(raw)
+
+        # 4. Actualizar configuración
+        config_scene = config.get_config_scene_dict()
+
+        for obj_data in object_data_list:
+            self.validate_object_id_exists(obj_data.id)
+
+            if obj_data.id not in config_scene["objects"]:
+                raise HTTPException(status_code=404, detail=f"Configuración no encontrada para el objeto: {obj_data.id}")
+
+            # Actualizar temperatura y emisividad
+            config_scene["objects"][obj_data.id]["temperature"] = obj_data.temperature
+            config_scene["objects"][obj_data.id]["emissivity_file"] = dst_path
+
+        config.save_config_scene_dict(config_scene)
+
+        # 5. Validar rango espectral frente a la cámara
+        mensaje = ""
+        scene_config = config.get_config_scene_dict()
+        wavelengths_scene = np.array(scene_config.get("wavelengths")) / 1000.0  # µm
+        w_min, w_max = np.min(wavelengths_scene), np.max(wavelengths_scene)
+
+        if np.min(wavelengths_um) > w_min and np.max(wavelengths_um) < w_max:
+            mensaje = f"Advertencia: El archivo no cubre el rango completo de la cámara ({w_min:.3f}–{w_max:.3f} µm)."
+        elif np.min(wavelengths_um) > w_min:
+            mensaje = f"Advertencia: Faltan valores menores a {w_min:.3f} µm."
+        elif np.max(wavelengths_um) < w_max:
+            mensaje = f"Advertencia: Faltan valores mayores a {w_max:.3f} µm."
+        else:
+            mensaje = "Objetos y archivo de atenuación actualizados correctamente."
+
+        # 6. Actualizar escenas
+        obj_ids = [obj_data.id for obj_data in object_data_list]
+        scene_service.update_thermal_scene_shapes(object_ids=obj_ids)
+        scene_service.prepare_depth_scene()
+        scene_service.prepare_blackbody_air_scene()
+        scene_service.prepare_transmittance_blackbody_air_scene()
+        scene_service.prepare_temperature_map()
+
         return mensaje
     
     def get_suggested_object_emissivity(self) -> list[str]:

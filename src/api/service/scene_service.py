@@ -5,24 +5,22 @@ from fastapi import UploadFile
 from fastapi import HTTPException
 from fastapi.responses import FileResponse
 
-from src.api.dto.cameraDTO import CameraDTO
-from ...config import get_output_path
 import os
 import glob
 import zipfile
 import shutil
 import json
-from fastapi import UploadFile, HTTPException
 from src.mitsuba_core.object_utils import ObjectUtils
 from src.mitsuba_core.scene_parser import SceneParser
 from src.mitsuba_core.sensor_utils import create_specfilm_bands
 import numpy as np
-import random
 import src.config as config
 
 object_utils = ObjectUtils()
 
 logger = logging.getLogger(__name__)
+
+_emission_cache: dict[tuple[str, float], tuple[dict, dict]] = {}
 
 
 class SceneService:
@@ -90,17 +88,25 @@ class SceneService:
         json_output_path = os.path.join(config.OUTPUT_DIR, "scene.json")
         with open(json_output_path, 'w') as json_file:
             json.dump(scene_dict, json_file, indent=2)
+            
+        logger.warning(f"guardado json en {json_output_path}")
 
         # revisar si se encuentran los archivos de los objetos y crear firmas
         if scene_dict and "scene" in scene_dict and "shape" in scene_dict["scene"]:
             shapes = scene_dict["scene"]["shape"]
+            config_scene["objects"] = {}  # inicializar como diccionario
+            emissivity_file = config.DEFAULT_EMISSIVITY_FILE
+            logger.warning(f"Usando archivo de emisividad por defecto: {emissivity_file}")
+
             if isinstance(shapes, list):
                 for shape in shapes:
                     id = shape["string"]["@value"]
-                    object_utils.save_default_emissivity(id)
-                    obj = {}
-                    obj["temperature"] = T
-                    config_scene[id] = obj
+                    # object_utils.save_default_emissivity(id)
+
+                    config_scene["objects"][id] = {
+                        "temperature": T,
+                        "emissivity_file": emissivity_file
+                    }
 
                     dir_file = os.path.join(config.OUTPUT_STATIC_DIR, id)
                     if not os.path.exists(dir_file):
@@ -108,14 +114,14 @@ class SceneService:
 
             elif isinstance(shapes, dict):
                 id = shapes["string"]["@value"]
-                object_utils.save_default_emissivity(id)
-                obj = {}
-                obj["id"] = id
-                obj["temperature"] = T
-                config_scene["objects"].append(obj)
+                # object_utils.save_default_emissivity(id)
+
+                config_scene["objects"][id] = {
+                    "temperature": T,
+                    "emissivity_file": emissivity_file
+                }
 
                 dir_file = os.path.join(config.OUTPUT_STATIC_DIR, id)
-
                 if not os.path.exists(dir_file):
                     raise HTTPException(status_code=400, detail=f"No se encontró el archivo del objeto: {id}")
 
@@ -222,6 +228,8 @@ class SceneService:
         with open(config.CONFIG_SCENE, 'w') as f:
             json.dump(config_scene, f, indent=4)
 
+        logger.warning(f"Escena cargada con éxito. Configuración guardada en {config.CONFIG_SCENE}")
+
     def has_loaded_scene(self, scene_dir: str) -> bool:
         """
         Verifica si se ha cargado una escena en el directorio especificado.
@@ -315,9 +323,9 @@ class SceneService:
                 if isinstance(shapes, list):
                     for i, shape in enumerate(shapes):
                         # para cada objeto
-                        id = shape["string"]["@value"]
-                        wavelengths_obj, emissivity = object_utils.read_object_emissivity_file(id)
-                        temperature = config_scene[id]["temperature"]
+                        object_id = shape["string"]["@value"]
+                        wavelengths_obj, emissivity = object_utils.read_object_emissivity_file(object_id)
+                        temperature = config_scene["objects"][object_id]["temperature"]
                         radiance = object_utils.blackbody_radiance_nm(wavelengths_obj, temperature)
                         emission = radiance * emissivity
                         reflectance = 1 - np.array(emissivity)
@@ -328,9 +336,9 @@ class SceneService:
                         
                 elif isinstance(shapes, dict):
                     # Para un solo shape
-                    id = shapes["string"]["@value"]
-                    wavelengths_obj, emissivity = object_utils.read_object_emissivity_file(id)
-                    temperature = config_scene[id]["temperature"]
+                    object_id = shapes["string"]["@value"]
+                    wavelengths_obj, emissivity = object_utils.read_object_emissivity_file(object_id)
+                    temperature = config_scene["objects"][object_id]["temperature"]
                     radiance = object_utils.blackbody_radiance_nm(wavelengths_obj, temperature)
                     emission = radiance * emissivity
                     reflectance = 1 - np.array(emissivity)
@@ -484,7 +492,7 @@ class SceneService:
                 if isinstance(shapes, list):
                     for i, shape in enumerate(shapes):
                         id = shape["string"]["@value"]
-                        temperature = config_scene[id]["temperature"]
+                        temperature = config_scene["objects"][id]["temperature"]
                         emission = [temperature for _ in wavelengths]
                         shape["emitter"] = object_utils.create_spectral_emitter(wavelengths, emission)
                         del shape["bsdf"]
@@ -492,7 +500,7 @@ class SceneService:
                 elif isinstance(shapes, dict):
                     # Para un solo shape
                     id = shapes["string"]["@value"]
-                    temperature = config_scene[id]["temperature"]
+                    temperature = config_scene["objects"][id]["temperature"]
                     emission = [temperature for _ in wavelengths]
                     shapes["emitter"] = object_utils.create_spectral_emitter(wavelengths, emission)
                     del shapes['bsdf']
@@ -547,10 +555,11 @@ class SceneService:
             )
         
         # Obtener las propiedades del objeto específico
+        emissivity_file = config_scene["objects"][object_id]["emissivity_file"]
         wavelengths_obj, emissivity = object_utils.read_object_emissivity_file(object_id)
-        temperature = config_scene[object_id]["temperature"]
-        
-        
+        temperature = config_scene["objects"][object_id]["temperature"]
+
+
         object_found = False
         
         if scene_dict and "scene" in scene_dict and "shape" in scene_dict["scene"]:
@@ -561,12 +570,20 @@ class SceneService:
                 for i, shape in enumerate(shapes):
                     shape_id = shape["string"]["@value"]
                     if shape_id == object_id:
+                        cache_key = (emissivity_file, temperature)
+                        if cache_key in _emission_cache:
+                            # Cargar de cache
+                            dict_reflectance, dict_emission = _emission_cache[cache_key]
+                        else:
+                            # Calcular y guardar en cache
+                            radiance = object_utils.blackbody_radiance_nm(wavelengths_obj, temperature)
+                            emission = radiance * emissivity
+                            reflectance = 1 - np.array(emissivity)
+                            dict_reflectance = object_utils.create_reflectance_material(wavelengths_obj, reflectance)
+                            dict_emission = object_utils.create_spectral_emitter(wavelengths_obj, emission)
+                            _emission_cache[cache_key] = (dict_reflectance, dict_emission)
+
                         # Actualizar solo este objeto
-                        radiance = object_utils.blackbody_radiance_nm(wavelengths_obj, temperature)
-                        emission = radiance * emissivity
-                        reflectance = 1 - np.array(emissivity)
-                        dict_reflectance = object_utils.create_reflectance_material(wavelengths_obj, reflectance)
-                        dict_emission = object_utils.create_spectral_emitter(wavelengths_obj, emission)
                         shape["emitter"] = dict_emission
                         shape['bsdf'] = dict_reflectance
                         object_found = True
@@ -576,11 +593,17 @@ class SceneService:
                 # Para un solo shape
                 shape_id = shapes["string"]["@value"]
                 if shape_id == object_id:
-                    radiance = object_utils.blackbody_radiance_nm(wavelengths_obj, temperature)
-                    emission = radiance * emissivity
-                    reflectance = 1 - np.array(emissivity)
-                    dict_reflectance = object_utils.create_reflectance_material(wavelengths_obj, reflectance)
-                    dict_emission = object_utils.create_spectral_emitter(wavelengths_obj, emission)
+                    cache_key = (emissivity_file, temperature)
+                    if cache_key in _emission_cache:
+                        # Cargar de cache
+                        dict_reflectance, dict_emission = _emission_cache[cache_key]
+                    else:
+                        # Calcular y guardar en cache
+                        radiance = object_utils.blackbody_radiance_nm(wavelengths_obj, temperature)
+                        emission = radiance * emissivity
+                        reflectance = 1 - np.array(emissivity)
+                        dict_reflectance = object_utils.create_reflectance_material(wavelengths_obj, reflectance)
+                        dict_emission = object_utils.create_spectral_emitter(wavelengths_obj, emission)
                     shapes["emitter"] = dict_emission
                     shapes['bsdf'] = dict_reflectance
                     object_found = True
@@ -594,6 +617,67 @@ class SceneService:
         # Guardar la escena térmica actualizada
         if scene_dict:
             self.scene_parser.save_dict_as_xml(scene_dict, config.SCENE_THERMAL_DIR)
+
+    # Caché global en memoria
+
+    def update_thermal_scene_shapes(self, object_ids: list[str]):
+        """
+        Actualiza todos los objetos en la escena térmica con sus propiedades actuales
+        (temperatura + emisividad) en una sola pasada.
+        Si la combinación (emisividad, temperatura) ya fue calculada, se carga de caché.
+        """
+
+        # Cargar configuración y escena térmica
+        config_scene = config.get_config_scene_dict()
+        scene_dict = self.get_dict_scene(config.SCENE_THERMAL_DIR)
+
+        if not (scene_dict and "scene" in scene_dict and "shape" in scene_dict["scene"]):
+            raise HTTPException(status_code=404, detail="No se encontró la escena térmica")
+
+        shapes = scene_dict["scene"]["shape"]
+
+        # Normalizar: shapes puede ser dict o lista
+        if isinstance(shapes, dict):
+            shapes = [shapes]
+
+        for shape in shapes:
+            object_id = shape["string"]["@value"]
+
+            if object_id not in config_scene["objects"]:
+                continue  # ignorar shapes sin config
+
+            if object_id not in object_ids:
+                continue  # ignorar shapes no en la lista de IDs
+
+            # Obtener propiedades del objeto
+            emissivity_file = config_scene["objects"][object_id]["emissivity_file"]
+            temperature = config_scene["objects"][object_id]["temperature"]
+
+            # Clave única para el cache
+            cache_key = (emissivity_file, temperature)
+
+            if cache_key in _emission_cache:
+                # Cargar de cache
+                dict_reflectance, dict_emission = _emission_cache[cache_key]
+            else:
+                # Calcular y guardar en cache
+                wavelengths_obj, emissivity = object_utils.read_object_emissivity_file(object_id)
+
+                radiance = object_utils.blackbody_radiance_nm(wavelengths_obj, temperature)
+                emission = radiance * emissivity
+                reflectance = 1 - np.array(emissivity)
+
+                dict_reflectance = object_utils.create_reflectance_material(wavelengths_obj, reflectance)
+                dict_emission = object_utils.create_spectral_emitter(wavelengths_obj, emission)
+
+                _emission_cache[cache_key] = (dict_reflectance, dict_emission)
+
+            # Actualizar shape
+            shape["emitter"] = dict_emission
+            shape["bsdf"] = dict_reflectance
+
+        # Guardar la escena actualizada
+        self.scene_parser.save_dict_as_xml(scene_dict, config.SCENE_THERMAL_DIR)
 
     def update_thermal_scene_air(self):
         """
@@ -915,17 +999,20 @@ class SceneService:
 
 
 # --- Rotaciones básicas ---
-def Rx(d): 
-    r=np.deg2rad(d); c,s=np.cos(r),np.sin(r)
-    return np.array([[1,0,0],[0,c,-s],[0,s,c]],float)
+def Rx(d):
+    r = np.deg2rad(d)
+    c, s = np.cos(r), np.sin(r)
+    return np.array([[1, 0, 0], [0, c, -s], [0, s, c]], float)
 
 def Ry(d):
-    r=np.deg2rad(d); c,s=np.cos(r),np.sin(r)
-    return np.array([[c,0,s],[0,1,0],[-s,0,c]],float)
+    r = np.deg2rad(d)
+    c, s = np.cos(r), np.sin(r)
+    return np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]], float)
 
 def Rz(d):
-    r=np.deg2rad(d); c,s=np.cos(r),np.sin(r)
-    return np.array([[c,-s,0],[s,c,0],[0,0,1]],float)
+    r = np.deg2rad(d)
+    c, s = np.cos(r), np.sin(r)
+    return np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]], float)
 
 # --- Euler intrínseco XYZ con vectores-columna: R = Rz(z) @ Ry(y) @ Rx(x) ---
 def euler_to_R_intrinsic_xyz(x,y,z):
@@ -939,7 +1026,8 @@ def R_to_euler_intrinsic_xyz(R):
     Descompone R = Rz(z) @ Ry(y) @ Rx(x) -> (x,y,z) en grados, normalizado a [-180,180).
     """
     y = np.arcsin(clamp(R[2,0]))
-    cy = np.cos(y); eps=1e-8
+    cy = np.cos(y)
+    eps = 1e-8
     if abs(cy) > eps:
         x = np.arctan2(-R[2,1], R[2,2])
         z = np.arctan2(-R[1,0], R[0,0])
@@ -958,7 +1046,7 @@ T = np.array([[1,0,0],[0,0,1],[0,-1,0]],float)
 Tinv = T.T  # inversa de rotación
 
 def _norm(v):
-    n=np.linalg.norm(v); 
+    n=np.linalg.norm(v) 
     return v if n==0 else v/n
 
 # =========================

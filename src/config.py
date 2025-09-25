@@ -35,7 +35,7 @@ SCENE_TEMPERATURE_MAP = str(OUTPUT_DIR / "static" / "scene_temperature_map.xml")
 OUTPUT_STATIC_DIR = OUTPUT_DIR / "static"
 SCENE_ZIP = str(OUTPUT_DIR / "static" / "scene.zip")
 CONFIG_SCENE = str(OUTPUT_DIR / "static" / "config_scene.json")
-DEFAULT_EMITTIVITY_FILE = str(ASSETS_DIR / "materials" / "default.txt")
+DEFAULT_EMISSIVITY_FILE = str(ASSETS_DIR / "materials" / "default.txt")  # (mantener por retrocompatibilidad con código existente)
 AIR_ATTENUATION_FILE = str(OUTPUT_STATIC_DIR / "air.txt")
 MITHERMAL_SCENE_FILE = str(OUTPUT_DIR / "miThermal.zip")
 DEFAULT_SCENES_DIR = str(ASSETS_DIR / "mitsuba_scenes")
@@ -147,9 +147,27 @@ def get_output_path(subfolder: str = "") -> Path:
     return path
 
 def get_config_scene_dict() -> dict:
-    with open(CONFIG_SCENE, 'r') as f:
-        config_scene = json.load(f)
-    return config_scene
+    cfg_path = Path(CONFIG_SCENE)
+    if not cfg_path.exists():
+        # crear estructura mínima por defecto
+        minimal = {
+            "objects": {},
+            "air": {"temperature": 280},
+            "camera": {
+                "spp": 256, "width": 256, "height": 256,
+                "rotate_x": 0.0, "rotate_y": 0.0, "rotate_z": 0.0,
+                "translate_x": 0.0, "translate_y": 0.0, "translate_z": 0.0,
+                "fov": 45.0
+            },
+            "num_bands": 0,
+            "wavelengths": []
+        }
+        cfg_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(cfg_path, 'w') as fw:
+            json.dump(minimal, fw, indent=4)
+        return minimal
+    with open(cfg_path, 'r') as f:
+        return json.load(f)
 
 def save_config_scene_dict(config_scene: dict) -> None:
     with open(CONFIG_SCENE, 'w') as f:

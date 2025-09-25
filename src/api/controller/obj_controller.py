@@ -8,8 +8,11 @@ from src.api.dto.suggestDTO import SuggestDTO
 from src.mitsuba_core.object_utils import ObjectUtils
 from src.api.service.obj_service import ObjService
 from fastapi.responses import FileResponse, StreamingResponse
-from fastapi import APIRouter, File, Query, UploadFile
+from fastapi import APIRouter, File, Query, UploadFile, Form
 from src.config import SCENE_DIR, get_output_path
+import json
+
+from typing import List
 
 object_utils = ObjectUtils()
 object_service = ObjService()
@@ -72,6 +75,23 @@ async def update_obj_info(
     object_data = object_service.update_object_info(object_data)
     
     return object_data
+
+@obj_router.put("/update-with-emissivity")
+async def update_with_emissivity(
+    object_data_json: str = Form(..., description="JSON con la lista de objetos y temperaturas"),
+    emissivity_file: UploadFile = File(..., description="Archivo de emisividad")
+) -> str:
+    """
+    Actualiza la temperatura de varios objetos 3D y sube un archivo de emisividad.
+    """
+    try:
+        object_data_list = [UpdateObjectDTO(**obj) for obj in json.loads(object_data_json)]
+    except Exception as e:
+        return f"Error al parsear el JSON: {e}"
+
+    result = object_service.update_objects_with_emissivity(object_data_list, emissivity_file)
+    return result
+
 
 @obj_router.get("/emissivity/id")
 async def get_obj_emissivity_file(
