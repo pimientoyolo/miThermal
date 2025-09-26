@@ -256,13 +256,12 @@ def create_specfilm_bands(wavelengths: np.ndarray) -> list:
 
     for i, wave_length in enumerate(wavelengths):
 
-        if i == len(wavelengths) - 1:
-            wmin_band = int(wave_length-1)
-            wmax_band = int(wave_length)
-
-        else:
+        if i == 0:  # Primera banda
             wmin_band = int(wave_length)
             wmax_band = int(wave_length+1)
+        else:    
+            wmin_band = int(wave_length-1)
+            wmax_band = int(wave_length)
 
         band_list.append({
             "@type": "regular",
