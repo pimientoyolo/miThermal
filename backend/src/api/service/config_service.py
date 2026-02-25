@@ -287,6 +287,8 @@ class ConfigService:
 
         src_file = os.path.join(path, base_name)
 
+        logger.info(f"Intentando establecer atenuación del aire desde archivo: {src_file}")
+
         if not os.path.exists(src_file) or not os.path.isfile(src_file):
             raise HTTPException(status_code=404, detail=f"Archivo no encontrado: {src_file}")
 

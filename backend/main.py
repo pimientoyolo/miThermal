@@ -4,9 +4,9 @@ Script para lanzar el servidor FastAPI de Mitsuba Scene Viewer
 import sys
 from pathlib import Path
 
-# Agregar el directorio src al path para imports
+# Agregar el directorio raiz al path para imports
 project_root = Path(__file__).parent
-sys.path.insert(0, str(project_root / "src"))
+sys.path.insert(0, str(project_root))
 
 if __name__ == "__main__":
     import uvicorn

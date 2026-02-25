@@ -11,6 +11,7 @@ from src.api.service.scene_service import SceneService
 import shutil
 import io
 import hashlib
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -24,6 +25,8 @@ class ObjService:
     def get_object_file_by_id(self, object_id: str) -> FileResponse:
 
         object_path = self.validate_object_id_exists(object_id)
+
+        logger.info(f"Archivo solicitado: {object_path}")
 
         if not os.path.exists(object_path):
             raise HTTPException(status_code=404, detail=f"Archivo no encontrado: {object_path}")
@@ -55,6 +58,8 @@ class ObjService:
     def validate_object_id_exists(self, object_id: str) -> str:
         object_path = config.OUTPUT_STATIC_DIR / object_id
 
+        logger.debug(f"Validando existencia del objeto: {object_id} en ruta: {object_path}")
+
         if not os.path.exists(object_path):
             raise HTTPException(status_code=404, detail=f"Archivo no encontrado: {object_path}")
         
@@ -79,7 +84,31 @@ class ObjService:
         # wavelengths = wavelengths/1000
         
         object_config = config_scene.get("objects", {}).get(object_id)
-        
+
+        # Si la configuración del objeto no existe, crear entrada por defecto
+        if object_config is None:
+            default_temp = 300
+            # Intentar crear archivo de emisividad por defecto bajo OUTPUT_STATIC_DIR
+            try:
+                self.object_utils.save_default_emissivity(object_id)
+            except Exception:
+                # Si falla la copia, igual proseguimos con el archivo por defecto global
+                pass
+
+            # Construir ruta del archivo de emisividad relativo al OUTPUT_STATIC_DIR
+            base_out = Path(config.OUTPUT_STATIC_DIR)
+            rel_obj = Path(object_id)
+            if rel_obj.is_absolute():
+                rel_obj = rel_obj.relative_to(rel_obj.anchor)
+            emissivity_path = str((base_out / rel_obj.with_suffix('.txt')))
+
+            config_scene.setdefault("objects", {})[object_id] = {
+                "temperature": default_temp,
+                "emissivity_file": emissivity_path
+            }
+            config.save_config_scene_dict(config_scene)
+            object_config = config_scene["objects"][object_id]
+
         # Construir el DTO
         return ObjectDTO(
             id=object_id,
@@ -335,6 +364,8 @@ class ObjService:
     def update_default_emissivity(self, file_name: str, object_id: str) -> None:
         path = config.DEFAULT_EMISIVITY_DIR
         path = os.fspath(path)  # por si viene como pathlib.Path
+
+        logger.info(f"Actualizando emisividad del objeto {object_id} con el archivo {file_name} desde el directorio {path}")
 
         # Validaciones
         if not os.path.exists(path):

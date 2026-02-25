@@ -42,6 +42,9 @@ class SceneService:
                 self.logger.warning(f"Error al limpiar directorio {config.OUTPUT_STATIC_DIR}: {e}")
                 os.makedirs(config.OUTPUT_STATIC_DIR)
 
+        # Recrear subdirectorios necesarios
+        os.makedirs(os.path.join(config.OUTPUT_STATIC_DIR, "result"), exist_ok=True)
+
         # guardar archivo zip
         with open(config.SCENE_ZIP, "wb") as buffer:
             buffer.write(file.file.read())
@@ -52,7 +55,9 @@ class SceneService:
 
         # buscar y renombrar .xml
         xml_files = glob.glob(os.path.join(config.OUTPUT_STATIC_DIR, "*.xml"))
+        logger.info(f"Archivos XML encontrados: {xml_files}")
         if len(xml_files) != 1:
+            logger.error(f"Se esperaba exactamente 1 archivo XML, pero se encontraron {len(xml_files)}")
             raise HTTPException(status_code=400, detail="Debe haber exactamente un archivo XML en el ZIP")
 
         xml_file = xml_files[0]
@@ -109,7 +114,11 @@ class SceneService:
                     }
 
                     dir_file = os.path.join(config.OUTPUT_STATIC_DIR, id)
+                    logger.info(f"Buscando archivo del objeto '{id}' en: {dir_file}")
                     if not os.path.exists(dir_file):
+                        # Listar archivos disponibles para debug
+                        available = os.listdir(config.OUTPUT_STATIC_DIR)
+                        logger.error(f"No se encontró '{id}'. Archivos disponibles: {available}")
                         raise HTTPException(status_code=400, detail=f"No se encontró el archivo del objeto: {id}")
 
             elif isinstance(shapes, dict):
@@ -122,7 +131,11 @@ class SceneService:
                 }
 
                 dir_file = os.path.join(config.OUTPUT_STATIC_DIR, id)
+                logger.info(f"Buscando archivo del objeto '{id}' en: {dir_file}")
                 if not os.path.exists(dir_file):
+                    # Listar archivos disponibles para debug
+                    available = os.listdir(config.OUTPUT_STATIC_DIR)
+                    logger.error(f"No se encontró '{id}'. Archivos disponibles: {available}")
                     raise HTTPException(status_code=400, detail=f"No se encontró el archivo del objeto: {id}")
 
         # air values
@@ -943,6 +956,15 @@ class SceneService:
         else:
             os.makedirs(path, exist_ok=True)
         
+        # Recrear subdirectorios necesarios
+        os.makedirs(os.path.join(path, "result"), exist_ok=True)
+        
+        # Recrear archivo air.txt si no existe
+        air_file = os.path.join(path, "air.txt")
+        air_default = os.path.join(config.ASSETS_DIR, "reference_data", "air.txt")
+        if not os.path.exists(air_file) and os.path.exists(air_default):
+            shutil.copy(air_default, air_file)
+        
         with open(zip_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
@@ -989,6 +1011,15 @@ class SceneService:
                     self.logger.warning(f"Error al eliminar {entry_path}: {e}")
         else:
             os.makedirs(path, exist_ok=True)
+        
+        # Recrear subdirectorios necesarios
+        os.makedirs(os.path.join(path, "result"), exist_ok=True)
+        
+        # Recrear archivo air.txt si no existe
+        air_file = os.path.join(path, "air.txt")
+        air_default = os.path.join(config.ASSETS_DIR, "reference_data", "air.txt")
+        if not os.path.exists(air_file) and os.path.exists(air_default):
+            shutil.copy(air_default, air_file)
 
         # copiar el archivo zip
         shutil.copyfile(default_scene_path, zip_filename)

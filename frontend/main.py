@@ -7,7 +7,7 @@ from pathlib import Path
 
 # Agregar el directorio src al path para imports
 project_root = Path(__file__).parent
-sys.path.insert(0, str(project_root / "src"))
+sys.path.insert(0, str(project_root))
 
 if __name__ == "__main__":
     from src.gradio_interface.mitsuba_viewer.callbacks import create_mitsuba_viewer_interface

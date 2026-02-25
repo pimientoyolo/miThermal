@@ -1,9 +1,4 @@
 import logging
-from re import S
-
-import open3d
-
-import trimesh
 import json
 import numpy as np
 from pathlib import Path
@@ -13,6 +8,13 @@ from src.api.dto.suggestDTO import SuggestDTO
 from scipy import constants as const
 import shutil
 import src.config as config
+
+# open3d es opcional; importarlo de forma segura
+try:
+    import open3d
+except Exception:
+    open3d = None
+
 
 class ObjectUtils:
     """
@@ -61,6 +63,8 @@ class ObjectUtils:
             ply_path = Path(ply_file_path)
             obj_file_path = ply_path.with_suffix('.obj')
             
+            if open3d is None:
+                raise HTTPException(status_code=500, detail="Dependencia open3d no disponible")
             mesh = open3d.io.read_triangle_mesh(ply_file_path)
             if len(mesh.vertices) == 0:
                 raise HTTPException(status_code=400, detail=f"El archivo {ply_file_path} no contiene geometría válida")
@@ -89,6 +93,8 @@ class ObjectUtils:
             obj_path = Path(obj_file_path)
             ply_file_path = obj_path.with_suffix('.ply')
             
+            if open3d is None:
+                raise HTTPException(status_code=500, detail="Dependencia open3d no disponible")
             mesh = open3d.io.read_triangle_mesh(obj_file_path)
             if len(mesh.vertices) == 0:
                 raise HTTPException(status_code=400, detail=f"El archivo {obj_file_path} no contiene geometría válida")
@@ -111,6 +117,9 @@ class ObjectUtils:
         Returns:
             True si el archivo existe, False en caso contrario
         """
+
+        logging.debug(f"Validando existencia del archivo: {path}")
+
         try:
             file_path = Path(path)
             if not (file_path.exists() and file_path.is_file()):
@@ -172,16 +181,14 @@ class ObjectUtils:
             if len(material_indices) == 0:
                 available_materials = database_names[:10]  # Mostrar algunos ejemplos
                 raise HTTPException(
-                    status_code=404, 
+                    status_code=404,
                     detail=f"Material '{material_name}' no encontrado. Materiales disponibles (ejemplos): {list(available_materials)}"
                 )
-            
-            # Obtener la firma espectral
+
             material_index = material_indices[0]
             material_signature = database_lib[:, material_index]
-            
             self.logger.info(f"Firma espectral obtenida para material '{material_name}': shape {material_signature.shape}")
-            
+
             return material_signature
             
         except HTTPException:
@@ -207,10 +214,9 @@ class ObjectUtils:
 
             # Cargar librería de materiales
             database_lib = np.load(self.MATERIAL_LIB_DB_PATH, allow_pickle=True).item()["matLib"]
-            database_lib = database_lib[::-1, :]  # Reverso el orden de la base de datos
 
             self.logger.info(f"Base de datos cargada: {database_names.shape} nombres, {database_lib.shape} firmas espectrales")
-            
+
             return database_names, database_lib
             
         except Exception as e:
@@ -617,13 +623,32 @@ class ObjectUtils:
         (wavelengths_nm, emissivity) usando read_reflectance_file_as_emissivity.
         """
         config_scene = config.get_config_scene_dict()
-        emissivity_file = config_scene["objects"].get(object_id, {}).get("emissivity_file", None)
+        emissivity_file = config_scene.get("objects", {}).get(object_id, {}).get("emissivity_file", None)
 
-        if emissivity_file is None:
-            self.logger.warning(f"No se encontró archivo de emisividad para objeto '{object_id}'")
-            raise HTTPException(status_code=404, detail="Archivo de emisividad no encontrado")
+        # Si la configuración tiene un archivo asociado y existe, úsalo
+        if emissivity_file and Path(emissivity_file).exists():
+            return self.read_reflectance_file_as_emissivity(emissivity_file)
 
-        return self.read_reflectance_file_as_emissivity(emissivity_file)
+        # Intentar localizar un archivo .txt bajo OUTPUT_STATIC_DIR siguiendo el object_id
+        base_out = Path(config.OUTPUT_STATIC_DIR)
+        obj_path = Path(object_id)
+        if obj_path.is_absolute():
+            obj_path = obj_path.relative_to(obj_path.anchor)
+        candidate = base_out / obj_path.with_suffix('.txt')
+        if candidate.exists():
+            return self.read_reflectance_file_as_emissivity(str(candidate))
+
+        # Intentar crear un archivo de emisividad por defecto para el objeto
+        try:
+            self.save_default_emissivity(object_id)
+            if candidate.exists():
+                return self.read_reflectance_file_as_emissivity(str(candidate))
+        except Exception:
+            # fallthrough al error final
+            pass
+
+        self.logger.warning(f"No se encontró archivo de emisividad para objeto '{object_id}'")
+        raise HTTPException(status_code=404, detail="Archivo de emisividad no encontrado")
         #     obj_path = Path(object_id)
         #     if obj_path.is_absolute():
         #         obj_path = obj_path.relative_to(obj_path.anchor)

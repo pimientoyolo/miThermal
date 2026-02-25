@@ -7,6 +7,8 @@ from fastapi import Query
 
 from src.mitsuba_core.object_utils import ObjectUtils
 import src.config as config
+import os
+import shutil
 
 
 config_router = APIRouter(
@@ -61,6 +63,13 @@ async def set_air_temperature(
 @config_router.get("/air/attenuation")
 async def get_air_attenuation() -> FileResponse:
 
+    # Si el archivo no existe, copiarlo desde assets
+    if not os.path.exists(config.AIR_ATTENUATION_FILE):
+        air_default = os.path.join(config.ASSETS_DIR, "reference_data", "air.txt")
+        if os.path.exists(air_default):
+            os.makedirs(os.path.dirname(config.AIR_ATTENUATION_FILE), exist_ok=True)
+            shutil.copy(air_default, config.AIR_ATTENUATION_FILE)
+    
     object_utils.valid_exist_file(config.AIR_ATTENUATION_FILE)
 
     return FileResponse(config.AIR_ATTENUATION_FILE, filename="air.txt")

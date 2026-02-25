@@ -3,6 +3,7 @@ Configuración global del proyecto
 """
 
 import json
+import shutil
 from pathlib import Path
 from typing import Dict, Any
 
@@ -14,6 +15,7 @@ OUTPUT_DIR = PROJECT_ROOT / "output"
 CONFIG_DIR = PROJECT_ROOT / "config"
 NOTEBOOKS_DIR = PROJECT_ROOT / "notebooks"
 TESTS_DIR = PROJECT_ROOT / "tests"
+SCRIPTS_DIR = PROJECT_ROOT / "scripts"
 
 # Crear directorios de salida si no existen
 OUTPUT_DIR.mkdir(exist_ok=True)
@@ -22,6 +24,13 @@ OUTPUT_DIR.mkdir(exist_ok=True)
 (OUTPUT_DIR / "logs").mkdir(exist_ok=True)
 (OUTPUT_DIR / "exports").mkdir(exist_ok=True)
 (OUTPUT_DIR / "static").mkdir(exist_ok=True)
+(OUTPUT_DIR / "static" / "result").mkdir(exist_ok=True)
+
+# Copiar archivo air.txt por defecto si no existe
+_air_output = OUTPUT_DIR / "static" / "air.txt"
+_air_default = ASSETS_DIR / "reference_data" / "air.txt"
+if not _air_output.exists() and _air_default.exists():
+    shutil.copy(_air_default, _air_output)
 
 # scenes dir
 SCENE_DIR = str(OUTPUT_DIR / "static" / "scene.xml")
