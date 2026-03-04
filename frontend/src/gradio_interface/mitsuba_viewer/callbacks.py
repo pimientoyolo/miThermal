@@ -10,10 +10,6 @@ import numpy as np
 import plotly.graph_objects as go
 
 from ..components import (
-    build_object_group_section,
-    build_unified_config_section,
-    build_upload_section,
-    build_visualization_section,
     build_camera_interpolation_section,
     build_cache_management_section,
     build_spectral_plot_section,
@@ -279,29 +275,230 @@ def create_mitsuba_viewer_interface():
         #viz_gallery_wrap { max-height: 70vh; overflow-y: auto; }
         /* Ajuste del botón superior */
         .gradio-container button { white-space: nowrap; }
+        /* Tabs secundarias con estilo más discreto */
+        .secondary-tabs { font-size: 0.9em; }
         </style>
         """
         )
         gr.HTML(
             """
             <h1 style='text-align:center;color:#2e86de;'>🎨 MiThermal</h1>
+            <p style='text-align:center;color:#666;'>Simulador de Escenas Térmicas con Mitsuba</p>
             """
         )
         with gr.Tabs():
-            with gr.Tab("📁 Cargar Escena"):
-                upload_section = build_upload_section(show_server_path=False)
-            with gr.Tab("🖼️ Visualización"):
-                visualization_section = build_visualization_section()
-            with gr.Tab("🎯 Objetos y Grupos"):
-                og_section = build_object_group_section()
-            with gr.Tab("⚙️ Config"):
-                config_section = build_unified_config_section()
-            with gr.Tab("🎥 Interpolación Cámara"):
-                camera_interp_section = build_camera_interpolation_section()
-            with gr.Tab("💾 Gestión de Cache"):
-                cache_section = build_cache_management_section()
-            with gr.Tab("📊 Datos Espectrales"):
-                spectral_section = build_spectral_plot_section()
+            # ==================== TAB 1: 🏠 ESCENA ====================
+            with gr.Tab("🏠 Escena"):
+                gr.Markdown("### Carga y Simulación de Escenas")
+                
+                # Sección de carga
+                with gr.Row():
+                    with gr.Column(scale=1):
+                        load_type = gr.Radio(label="Tipo de carga", choices=["Escena", "miTransfer"], value="Escena")
+                        zip_file = gr.File(label="Archivo (.zip)", file_types=[".zip"])
+                        with gr.Row():
+                            upload_btn = gr.Button("📤 Cargar Escena", variant="primary", size="lg")
+                        with gr.Row():
+                            default_suggest = gr.Dropdown(label="Escenas predeterminadas", choices=[], interactive=True)
+                        with gr.Row():
+                            reload_default_btn = gr.Button("🔄 Recargar", variant="secondary", scale=1)
+                            select_default_btn = gr.Button("✅ Seleccionar", variant="secondary", scale=1)
+                        scene_info = gr.Textbox(label="Estado de la Escena", lines=8, interactive=False)
+                    
+                    with gr.Column(scale=2):
+                        render_image = gr.Image(label="Preview RGB", type="pil", height=400)
+                
+                gr.Markdown("---")
+                gr.Markdown("### Simulación Completa")
+                
+                with gr.Row():
+                    run_sim_btn = gr.Button("▶️ Ejecutar Simulación Completa", variant="primary", size="lg")
+                
+                with gr.Row():
+                    with gr.Column(scale=2, elem_id="viz_gallery_wrap"):
+                        gallery = gr.Gallery(label="Resultados de la Simulación", show_label=True, columns=2, rows=3)
+                
+                with gr.Row():
+                    download_zip = gr.File(label="💾 Descargar Todos los Resultados (.zip)")
+                
+                # Referencias section combinadas
+                upload_section = {
+                    "load_type": load_type,
+                    "zip_file": zip_file,
+                    "upload_btn": upload_btn,
+                    "default_suggest": default_suggest,
+                    "reload_default_btn": reload_default_btn,
+                    "select_default_btn": select_default_btn,
+                    "scene_info": scene_info,
+                    "render_image": render_image,
+                    "scene_json": gr.JSON(visible=False),
+                    "server_path": None,
+                    "load_btn": None,
+                }
+                
+                visualization_section = {
+                    "run_sim_btn": run_sim_btn,
+                    "gallery": gallery,
+                    "download_zip": download_zip,
+                }
+            
+            # ==================== TAB 2: 🎯 OBJETOS ====================
+            with gr.Tab("🎯 Objetos"):
+                with gr.Tabs(elem_classes=["secondary-tabs"]):
+                    # Subtab: Explorador
+                    with gr.Tab("🔍 Explorador"):
+                        with gr.Row():
+                            with gr.Column(scale=1):
+                                mode_radio = gr.Radio(label="Modo", choices=["Objeto", "Instancia", "Familia"], value="Objeto")
+                                selector = gr.Dropdown(label="Selecciona", choices=[], interactive=True)
+                                members = gr.Dropdown(label="Miembros", choices=[], multiselect=True, interactive=False)
+                                gr.Markdown("#### Propiedades")
+                                temp_input = gr.Number(label="Temperatura (K)", value=None, precision=2)
+                                emissivity_file = gr.File(label="Archivo Emisividad", file_types=[".txt", ".tbs"], interactive=True)
+                                apply_update_btn = gr.Button("✅ Aplicar Cambios", variant="primary")
+                                info_text = gr.Textbox(label="Información del Objeto", lines=10, interactive=False)
+                            
+                            with gr.Column(scale=2):
+                                model_viewer = gr.Model3D(label="Vista 3D", height=400)
+                                emissivity_plot = gr.Plot(label="📊 Espectro de Emisividad")
+                        
+                        og_section = {
+                            "mode_radio": mode_radio,
+                            "selector": selector,
+                            "members": members,
+                            "temp_input": temp_input,
+                            "emissivity_file": emissivity_file,
+                            "apply_update_btn": apply_update_btn,
+                            "info_text": info_text,
+                            "model_viewer": model_viewer,
+                            "emissivity_plot": emissivity_plot,
+                        }
+            
+            # ==================== TAB 3: 📊 ANÁLISIS ====================
+            with gr.Tab("📊 Análisis"):
+                with gr.Tabs(elem_classes=["secondary-tabs"]):
+                    # Subtab: Espectros
+                    with gr.Tab("📈 Espectros"):
+                        spectral_section = build_spectral_plot_section()
+            
+            # ==================== TAB 4: ⚙️ CONFIGURACIÓN ====================
+            with gr.Tab("⚙️ Configuración"):
+                with gr.Tabs(elem_classes=["secondary-tabs"]):
+                    # Subtab: Cámara
+                    with gr.Tab("📷 Cámara"):
+                        gr.Markdown("### Parámetros de Renderizado")
+                        with gr.Row():
+                            with gr.Column(scale=1):
+                                gr.Markdown("#### Calidad y Resolución")
+                                camera_spp = gr.Slider(label="SPP (2^k)", minimum=1, maximum=13, step=1, value=4)
+                                camera_width = gr.Number(label="Ancho (px)", precision=0, value=640)
+                                camera_height = gr.Number(label="Alto (px)", precision=0, value=480)
+                                fov = gr.Number(label="FOV (deg)", precision=3, value=45)
+                            
+                            with gr.Column(scale=1):
+                                gr.Markdown("#### Transformaciones")
+                                with gr.Row():
+                                    rotate_x = gr.Number(label="Rotar X (°)", precision=3, value=0)
+                                    rotate_y = gr.Number(label="Rotar Y (°)", precision=3, value=0)
+                                    rotate_z = gr.Number(label="Rotar Z (°)", precision=3, value=0)
+                                with gr.Row():
+                                    translate_x = gr.Number(label="Trasladar X", precision=6, value=0)
+                                    translate_y = gr.Number(label="Trasladar Y", precision=6, value=0)
+                                    translate_z = gr.Number(label="Trasladar Z", precision=6, value=0)
+                        
+                        gr.Markdown("---")
+                        gr.Markdown("### Interpolación de Cámara (Animaciones)")
+                        camera_interp_section = build_camera_interpolation_section()
+                    
+                    # Subtab: Espectro
+                    with gr.Tab("🌈 Espectro"):
+                        gr.Markdown("### Configuración Espectral")
+                        with gr.Row():
+                            with gr.Column(scale=1):
+                                wl_min = gr.Number(label="λ mínima (nm)", precision=0, value=8000)
+                                wl_max = gr.Number(label="λ máxima (nm)", precision=0, value=12000)
+                                bands = gr.Number(label="Número de bandas", precision=0, value=50)
+                                spectrum_apply_btn = gr.Button("✅ Aplicar Configuración Espectral", variant="primary")
+                            
+                            with gr.Column(scale=2):
+                                gr.Markdown("#### Información")
+                                gr.Markdown("""
+                                - **Rango espectral**: Define el intervalo de longitudes de onda para la simulación
+                                - **Bandas**: Mayor número = mayor precisión pero más tiempo de cómputo
+                                - **Rango típico IR térmico**: 8000-14000 nm
+                                """)
+                                spectrum_status = gr.Textbox(label="Estado", lines=3, interactive=False)
+                    
+                    # Subtab: Atmósfera
+                    with gr.Tab("🌫️ Atmósfera"):
+                        gr.Markdown("### Atenuación Atmosférica")
+                        with gr.Row():
+                            air_plot = gr.Plot(label="Diagrama de Atenuación del Aire")
+                        
+                        with gr.Row():
+                            with gr.Column(scale=1):
+                                air_temperature = gr.Number(label="Temperatura del aire (K)", precision=2, value=300)
+                                air_file = gr.File(label="Archivo de Atenuación (.txt)", file_types=[".txt", ".dat", ".csv"], interactive=True)
+                                with gr.Row():
+                                    air_suggest_list = gr.Dropdown(label="Archivos sugeridos", choices=[], interactive=True)
+                                    air_apply_suggest_btn = gr.Button("✅ Aplicar", variant="primary")
+                            
+                            with gr.Column(scale=1):
+                                gr.Markdown("#### Gases disponibles")
+                                gr.Markdown("""
+                                - **air.txt**: Atmósfera estándar
+                                - **H2O.txt**: Vapor de agua
+                                - **CO2.txt**: Dióxido de carbono
+                                - **O3.txt**: Ozono
+                                - **CH4.txt**: Metano
+                                """)
+                                atm_status = gr.Textbox(label="Estado", lines=4, interactive=False)
+                    
+                    # Subtab: Avanzado
+                    with gr.Tab("🔧 Avanzado"):
+                        gr.Markdown("### Aplicar Toda la Configuración")
+                        with gr.Row():
+                            load_config_btn = gr.Button("📥 Cargar Config Actual", variant="secondary")
+                            apply_all_btn = gr.Button("✅ Aplicar Toda la Config", variant="primary", size="lg")
+                        
+                        with gr.Row():
+                            config_status = gr.Textbox(label="Estado de Configuración", lines=4, interactive=False)
+                        
+                        with gr.Row():
+                            config_info = gr.JSON(label="Configuración Completa (JSON)")
+                        
+                        gr.Markdown("---")
+                        gr.Markdown("### Gestión de Cache")
+                        cache_section = build_cache_management_section()
+                
+                # Unified config section para compatibilidad con callbacks
+                config_section = {
+                    "camera_spp": camera_spp,
+                    "camera_width": camera_width,
+                    "camera_height": camera_height,
+                    "rotate_x": rotate_x,
+                    "rotate_y": rotate_y,
+                    "rotate_z": rotate_z,
+                    "translate_x": translate_x,
+                    "translate_y": translate_y,
+                    "translate_z": translate_z,
+                    "fov": fov,
+                    "wl_min": wl_min,
+                    "wl_max": wl_max,
+                    "bands": bands,
+                    "spectrum_apply_btn": spectrum_apply_btn,
+                    "spectrum_status": spectrum_status,
+                    "air_temperature": air_temperature,
+                    "air_file": air_file,
+                    "air_suggest_list": air_suggest_list,
+                    "air_apply_suggest_btn": air_apply_suggest_btn,
+                    "air_plot": air_plot,
+                    "atm_status": atm_status,
+                    "load_config_btn": load_config_btn,
+                    "apply_all_btn": apply_all_btn,
+                    "config_status": config_status,
+                    "config_info": config_info,
+                }
 
         # Visualización: ejecutar todos los renders y mostrarlos en galería
         def run_simulation_cb():
@@ -855,6 +1052,27 @@ def create_mitsuba_viewer_interface():
                 )
             if mode_l.startswith("obj"):
                 mv, info, _of, _t, plot = view_object_3d(selection)
+                
+                # Agregar información de familia si pertenece a una
+                oid = viewer_state.object_id_mapping.get(selection)
+                if oid:
+                    try:
+                        client = get_client()
+                        preview = client.session.get(
+                            f"{client.base_url}/object/families/preview/{oid}"
+                        ).json()
+                        
+                        if preview.get("has_family"):
+                            family_info = (
+                                f"\n\n👨‍👩‍👧‍👦 **Familia:** {preview['family_name']}\n"
+                                f"**Miembros:** {preview['count']} objetos\n"
+                                f"💡 *Cambia a modo 'Familia' para actualizar "
+                                f"todos a la vez*"
+                            )
+                            info = info + family_info if info else family_info
+                    except Exception as e:
+                        logger.debug(f"Error obteniendo info de familia: {e}")
+                
                 return (
                     gr.update(choices=[selection], value=[selection]),
                     gr.update(value=info),
@@ -865,12 +1083,25 @@ def create_mitsuba_viewer_interface():
                 oids = viewer_state.object_groups_instance.get(selection, [])
             else:
                 oids = viewer_state.object_groups_family.get(selection, [])
-            labels = [label for label, oid in viewer_state.object_id_mapping.items() if oid in oids]
+            labels = [
+                label for label, oid in viewer_state.object_id_mapping.items()
+                if oid in oids
+            ]
             labels_sorted = sorted(labels)
             if labels_sorted:
                 mv, info, _of, _t, plot = view_object_3d(labels_sorted[0])
-                return gr.update(choices=labels_sorted, value=[]), gr.update(value=info), mv, plot
-            return gr.update(choices=[], value=[]), gr.update(value=f"Sin miembros para {selection}"), None, None
+                return (
+                    gr.update(choices=labels_sorted, value=[]),
+                    gr.update(value=info),
+                    mv,
+                    plot
+                )
+            return (
+                gr.update(choices=[], value=[]),
+                gr.update(value=f"Sin miembros para {selection}"),
+                None,
+                None
+            )
 
         og_section["selector"].change(
             fn=og_selector_changed,
@@ -884,60 +1115,131 @@ def create_mitsuba_viewer_interface():
         )
 
         def og_apply_update(mode: str, selection: str, temp_value, emissivity_file):
-            """Actualiza objeto(s) (temperatura + emisividad) usando update_with_emissivity.
-
-            - Objeto: si no se ingresa temperatura, leer la actual del backend.
-            - Instancia: igual que objeto para cada miembro (si no hay input, se intenta leer cada una; fallback 300K).
-            - Familia: temperatura por defecto 300K salvo que usuario provea otra.
-            El archivo de emisividad es obligatorio.
+            """
+            Actualiza objeto(s) según el modo seleccionado.
+            
+            - Objeto: Actualiza solo el objeto seleccionado
+            - Familia: Actualiza todos los miembros de la familia
+            
+            Args:
+                mode: "Objeto", "Instancia", o "Familia"
+                selection: Objeto/grupo seleccionado
+                temp_value: Nueva temperatura (opcional)
+                emissivity_file: Archivo de emisividad (opcional)
             """
             mode_l = (mode or '').lower()
             client = get_client()
-            path = getattr(emissivity_file, 'name', None)
-            if not path:
-                return gr.update(value='❌ Suba archivo de emisividad')
-            # targets
+            
+            # Validar que hay algo que actualizar
+            if not selection:
+                return gr.update(value='❌ Debe seleccionar un objeto')
+            
+            # Obtener el object_id
             if mode_l.startswith('obj'):
                 oid = viewer_state.object_id_mapping.get(selection)
-                targets = [oid] if oid else []
+                if not oid:
+                    return gr.update(value='❌ Objeto no encontrado')
             elif mode_l.startswith('inst'):
+                # Para instancia, usar el antiguo método
                 targets = viewer_state.object_groups_instance.get(selection, [])
-            else:
-                targets = viewer_state.object_groups_family.get(selection, [])
-            if not targets:
-                return gr.update(value='❌ Nada seleccionado')
-            # parse user temp
-            try:
-                user_temp = float(temp_value) if temp_value not in (None, '') else None
-            except Exception:
-                user_temp = None
-            objs_payload = []
-            for oid in targets:
-                if mode_l.startswith('fam'):
-                    t = user_temp if user_temp is not None else 300.0
-                else:
+                if not targets:
+                    return gr.update(value='❌ No hay instancias seleccionadas')
+                # Fallback al método antiguo para instancias
+                path = getattr(emissivity_file, 'name', None)
+                if not path:
+                    return gr.update(value='❌ Suba archivo de emisividad')
+                try:
+                    user_temp = (
+                        float(temp_value) if temp_value not in (None, '') else None
+                    )
+                except Exception:
+                    user_temp = None
+                
+                objs_payload = []
+                for target_oid in targets:
                     if user_temp is not None:
                         t = user_temp
                     else:
-                        # obtener del backend
                         try:
-                            obj_resp = client.get_object(oid)
+                            obj_resp = client.get_object(target_oid)
                             if obj_resp.get('status') == 'success':
                                 odata = obj_resp.get('object', {})
                             else:
                                 odata = obj_resp.get('object', obj_resp)
-                            if odata and odata.get('temperature') is not None:
-                                t = float(odata.get('temperature'))
-                            else:
-                                t = 300.0
+                            t = float(odata.get('temperature', 300.0))
                         except Exception:
                             t = 300.0
-                objs_payload.append({'id': oid, 'temperature': t})
-            res = client.update_objects_with_emissivity(objs_payload, path)
-            if res.get('status') == 'error':
-                return gr.update(value=f"❌ Error: {res.get('detail')}")
-            msg = res.get('message') if isinstance(res, dict) else 'OK'
-            return gr.update(value=f"✅ Actualizados {len(objs_payload)} objeto(s). {msg}")
+                    objs_payload.append({'id': target_oid, 'temperature': t})
+                
+                res = client.update_objects_with_emissivity(objs_payload, path)
+                if res.get('status') == 'error':
+                    return gr.update(value=f"❌ Error: {res.get('detail')}")
+                msg = res.get('message') if isinstance(res, dict) else 'OK'
+                return gr.update(
+                    value=f"✅ Actualizados {len(objs_payload)} objeto(s). {msg}"
+                )
+            else:
+                # Modo Familia
+                targets = viewer_state.object_groups_family.get(selection, [])
+                if not targets:
+                    return gr.update(value='❌ No hay objetos en esta familia')
+                oid = targets[0] if targets else None
+                if not oid:
+                    return gr.update(value='❌ Familia vacía')
+            
+            # Preparar parámetros para el nuevo endpoint
+            params = {"mode": "Familia" if mode_l.startswith("fam") else "Objeto"}
+            
+            if temp_value not in (None, ''):
+                try:
+                    params["temperature"] = float(temp_value)
+                except ValueError:
+                    return gr.update(value='❌ Temperatura inválida')
+            
+            # Manejar archivo de emisividad (TODO: subir primero al backend)
+            emissivity_file_path = getattr(emissivity_file, 'name', None)
+            if emissivity_file_path:
+                # Por ahora, usar el nombre del archivo
+                # En una versión futura, se debería subir el archivo primero
+                params["emissivity_file"] = emissivity_file_path
+            
+            # Validar que hay al menos una propiedad para actualizar
+            if "temperature" not in params and "emissivity_file" not in params:
+                return gr.update(
+                    value='❌ Debe especificar temperatura o archivo de emisividad'
+                )
+            
+            try:
+                # Llamar al nuevo endpoint
+                response = client.session.put(
+                    f"{client.base_url}/object/update-with-mode/{oid}",
+                    params=params
+                )
+                response.raise_for_status()
+                result = response.json()
+                
+                # Construir mensaje de éxito
+                count = result.get("count", 0)
+                mode_text = result.get("mode", "")
+                
+                if mode_text == "family":
+                    family_name = result.get("family_name", "")
+                    msg = (
+                        f"✅ Familia '{family_name}' actualizada\n"
+                        f"📦 {count} objetos modificados"
+                    )
+                else:
+                    msg = f"✅ Objeto '{oid}' actualizado"
+                
+                props_updated = result.get("properties_updated", [])
+                if props_updated:
+                    msg += f"\n🔧 Propiedades: {', '.join(props_updated)}"
+                
+                return gr.update(value=msg)
+                
+            except Exception as e:
+                logger.error(f"Error en og_apply_update: {e}")
+                return gr.update(value=f"❌ Error: {str(e)}")
 
         og_section['apply_update_btn'].click(
             fn=og_apply_update,
@@ -1212,6 +1514,34 @@ def create_mitsuba_viewer_interface():
             fn=_update_spp_label,
             inputs=[config_section["camera_spp"]],
             outputs=[config_section["camera_spp"]],
+        )
+
+        # Callback para aplicar solo configuración espectral
+        def apply_spectrum_config_cb(wl_min, wl_max, bands):
+            """Actualiza solo los parámetros espectrales."""
+            try:
+                client = get_client()
+                result = client.update_camera_config(
+                    wavelength_min=int(wl_min),
+                    wavelength_max=int(wl_max),
+                    num_bands=int(bands)
+                )
+                if result.get("status") == "success":
+                    msg = f"✅ Configuración espectral actualizada:\n• λ: {wl_min}-{wl_max} nm\n• Bandas: {bands}"
+                else:
+                    msg = f"❌ Error: {result.get('detail', 'Error desconocido')}"
+                return msg
+            except Exception as e:
+                return f"❌ Error: {str(e)}"
+        
+        config_section["spectrum_apply_btn"].click(
+            fn=apply_spectrum_config_cb,
+            inputs=[
+                config_section["wl_min"],
+                config_section["wl_max"],
+                config_section["bands"],
+            ],
+            outputs=[config_section["spectrum_status"]],
         )
 
         

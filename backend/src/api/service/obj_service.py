@@ -1,5 +1,6 @@
 import logging
 from src.utils.objects.objects import ObjectUtils
+from src.utils.objects.family_manager import FamilyManager
 import os
 from fastapi.responses import FileResponse
 from fastapi import HTTPException, UploadFile
@@ -13,6 +14,7 @@ import shutil
 import io
 import hashlib
 from pathlib import Path
+from typing import Dict, Any, List
 
 logger = logging.getLogger(__name__)
 path_manager = PathManager
@@ -322,7 +324,7 @@ class ObjService:
         return mensaje
     
     @log_execution()
-    @handle_file_errors(default_return=[])
+    @handle_file_errors()
     def get_suggested_object_emissivity(self) -> list[str]:
         path = os.fspath(DEFAULT_EMISIVITY_DIR)
         return [f for f in os.listdir(path) if f.lower().endswith(".txt")]
@@ -367,10 +369,161 @@ class ObjService:
         try:
             shutil.copyfile(default_file_path, dst_path)
         except OSError as e:
-            raise HTTPException(status_code=500, detail=f"Error copiando el archivo: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error copiando el archivo: {e}"
+            )
         
         scene_service.update_thermal_scene_obj(object_id=object_id)
         scene_service.prepare_depth_scene()
         scene_service.prepare_blackbody_air_scene()
         scene_service.prepare_transmittance_blackbody_air_scene()
         scene_service.prepare_temperature_map()
+    
+    def get_families(self) -> Dict[str, Any]:
+        """
+        Lista todas las familias de objetos detectadas.
+        
+        Returns:
+            Dict con información de familias
+        """
+        config = get_config_scene_dict()
+        family_mgr = FamilyManager(config)
+        
+        families = [
+            {
+                "base_name": f.base_name,
+                "members": f.members,
+                "count": f.count,
+                "shared_properties": f.shared_properties
+            }
+            for f in family_mgr.list_all_families()
+        ]
+        
+        stats = family_mgr.get_statistics()
+        
+        return {
+            "families": families,
+            "statistics": stats,
+            "total_families": len(families)
+        }
+    
+    def preview_family_update(self, object_id: str) -> Dict[str, Any]:
+        """
+        Previsualiza qué objetos se actualizarían en modo familia.
+        
+        Args:
+            object_id: ID del objeto seleccionado
+            
+        Returns:
+            Dict con información de la familia
+        """
+        config = get_config_scene_dict()
+        family_mgr = FamilyManager(config)
+        
+        return family_mgr.preview_family_update(object_id)
+    
+    def update_object_with_mode(
+        self,
+        object_id: str,
+        mode: str,
+        temperature: float = None,
+        emissivity_file: str = None
+    ) -> Dict[str, Any]:
+        """
+        Actualiza objeto(s) según modo seleccionado.
+        
+        Args:
+            object_id: ID del objeto seleccionado
+            mode: "Objeto" para individual, "Familia" para toda la familia
+            temperature: Nueva temperatura en Kelvin (opcional)
+            emissivity_file: Nueva emisividad (opcional)
+            
+        Returns:
+            Dict con objects_updated, count, mode y family_name
+            
+        Raises:
+            HTTPException: Si el objeto no existe o el modo es inválido
+        """
+        if mode not in ["Objeto", "Familia"]:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Modo inválido: '{mode}'. Debe ser 'Objeto' o 'Familia'"
+            )
+        
+        config = get_config_scene_dict()
+        
+        # Validar que el objeto existe
+        if object_id not in config.get("objects", {}):
+            raise HTTPException(
+                status_code=404,
+                detail=f"Objeto '{object_id}' no encontrado"
+            )
+        
+        # Preparar propiedades a actualizar
+        properties = {}
+        if temperature is not None:
+            properties["temperature"] = temperature
+        if emissivity_file is not None:
+            properties["emissivity_file"] = emissivity_file
+        
+        if not properties:
+            raise HTTPException(
+                status_code=400,
+                detail="Debe proporcionar al menos una propiedad a actualizar"
+            )
+        
+        updated_objects = []
+        family_name = None
+        
+        if mode == "Objeto":
+            # Actualizar solo el objeto individual
+            config["objects"][object_id].update(properties)
+            updated_objects = [object_id]
+            logger.info(f"Objeto '{object_id}' actualizado")
+        
+        elif mode == "Familia":
+            # Actualizar toda la familia
+            family_mgr = FamilyManager(config)
+            family = family_mgr.get_family(object_id)
+            
+            if not family:
+                # El objeto no tiene familia, actualizar solo él
+                logger.warning(
+                    f"Objeto '{object_id}' no pertenece a familia, "
+                    f"actualizando solo este objeto"
+                )
+                config["objects"][object_id].update(properties)
+                updated_objects = [object_id]
+            else:
+                # Actualizar todos los miembros de la familia
+                family_name = family.base_name
+                updated_objects = family_mgr.update_family(
+                    family.base_name,
+                    properties
+                )
+                logger.info(
+                    f"Familia '{family_name}' actualizada: "
+                    f"{len(updated_objects)} objetos"
+                )
+        
+        # Guardar cambios
+        save_config_scene_dict(config)
+        
+        # Regenerar escenas térmicas para todos los objetos actualizados
+        for obj_id in updated_objects:
+            scene_service.update_thermal_scene_obj(object_id=obj_id)
+        
+        # Preparar escenas auxiliares
+        scene_service.prepare_depth_scene()
+        scene_service.prepare_blackbody_air_scene()
+        scene_service.prepare_transmittance_blackbody_air_scene()
+        scene_service.prepare_temperature_map()
+        
+        return {
+            "objects_updated": updated_objects,
+            "count": len(updated_objects),
+            "mode": mode.lower(),
+            "family_name": family_name,
+            "properties_updated": list(properties.keys())
+        }

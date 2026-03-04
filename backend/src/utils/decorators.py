@@ -6,7 +6,7 @@ Reduce repetición de código en servicios y controllers.
 import functools
 import logging
 import os
-from typing import Callable, Any, Optional
+from typing import Callable
 from fastapi import HTTPException
 
 
@@ -114,7 +114,10 @@ def validate_file_extension(param_name: str, allowed_extensions: list):
                 if ext.lower() not in [e.lower() for e in allowed_extensions]:
                     raise HTTPException(
                         status_code=400,
-                        detail=f"Extensión no permitida: {ext}. Permitidas: {allowed_extensions}"
+                        detail=(
+                            f"Extensión no permitida: {ext}. "
+                            f"Permitidas: {allowed_extensions}"
+                        )
                     )
             
             return func(*args, **kwargs)
@@ -139,7 +142,10 @@ def log_execution(level: int = logging.INFO):
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             func_name = func.__qualname__
-            logger.log(level, f"Iniciando: {func_name} con args={args[1:]} kwargs={kwargs}")
+            logger.log(
+                level,
+                f"Iniciando: {func_name} con args={args[1:]} kwargs={kwargs}"
+            )
             try:
                 result = func(*args, **kwargs)
                 logger.log(level, f"✓ Completado: {func_name}")
@@ -151,13 +157,13 @@ def log_execution(level: int = logging.INFO):
     return decorator
 
 
-def handle_file_errors(default_return: Optional[Any] = None):
+def handle_file_errors():
     """
     Decorador que maneja errores de archivo comúnes y los convierte a HTTPException.
     
     Uso:
     ```python
-    @handle_file_errors(default_return=[])
+    @handle_file_errors()
     def list_files(self, directory):
         ...
     ```
@@ -171,21 +177,31 @@ def handle_file_errors(default_return: Optional[Any] = None):
                 return func(*args, **kwargs)
             except FileNotFoundError as e:
                 logger.error(f"Archivo no encontrado: {e}")
-                raise HTTPException(status_code=404, detail=f"Archivo no encontrado: {e}")
+                raise HTTPException(
+                    status_code=404, detail=f"Archivo no encontrado: {e}"
+                )
             except IsADirectoryError as e:
                 logger.error(f"Es un directorio, no un archivo: {e}")
-                raise HTTPException(status_code=400, detail=f"Es un directorio, no un archivo: {e}")
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Es un directorio, no un archivo: {e}"
+                )
             except PermissionError as e:
                 logger.error(f"Permiso denegado: {e}")
-                raise HTTPException(status_code=403, detail=f"Permiso denegado: {e}")
+                raise HTTPException(
+                    status_code=403, detail=f"Permiso denegado: {e}"
+                )
             except OSError as e:
                 logger.error(f"Error de sistema de archivos: {e}")
-                raise HTTPException(status_code=500, detail=f"Error de sistema de archivos: {e}")
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"Error de sistema de archivos: {e}"
+                )
         return wrapper
     return decorator
 
 
-def require_scene_loaded(parameter: str = "scene_path"):
+def require_scene_loaded():
     """
     Decorador que valida que una escena está cargada (archivo existe).
     

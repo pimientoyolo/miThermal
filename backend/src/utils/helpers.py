@@ -80,7 +80,7 @@ def clean_directory(dir_path: str, keep_subdirs: bool = False) -> None:
             pass  # Continuar si hay error
 
 
-def get_relative_path(absolute_path: str, base_path: Optional[str] = None) -> str:
+def get_relative_path(absolute_path: str) -> str:
     """
     Convierte ruta absoluta a relativa.
     Maneja diferencias entre sistemas (Windows vs Unix).

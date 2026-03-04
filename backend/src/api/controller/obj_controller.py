@@ -135,8 +135,14 @@ async def suggest_object_emissivity() -> list[str]:
 
 @obj_router.put("/default/emissivity")
 async def update_default_emissivity(
-    file_name: str = Query(..., description="Nombre del archivo de emisividad (ej: 'default.txt')"),
-    object_id: str = Query(..., description="ID del objeto (ej: 'meshes/objeto.ply', 'Dragon.obj')"),
+    file_name: str = Query(
+        ...,
+        description="Nombre del archivo de emisividad (ej: 'default.txt')"
+    ),
+    object_id: str = Query(
+        ...,
+        description="ID del objeto (ej: 'meshes/objeto.ply', 'Dragon.obj')"
+    ),
 ) -> FileResponse:
     """
     Actualiza la emisividad por defecto.
@@ -149,3 +155,91 @@ async def update_default_emissivity(
     """
     object_service.update_default_emissivity(file_name, object_id)
     return object_service.get_object_emissivity_file_by_id(object_id)
+
+
+@obj_router.get("/families")
+async def list_families():
+    """
+    Lista todas las familias de objetos detectadas.
+    
+    Detecta automáticamente familias usando patrones de nomenclatura:
+    - Blender: object.001, object.002
+    - General: object_001, object_002
+    
+    Returns:
+        {
+            "families": [
+                {
+                    "base_name": "tree_leaf",
+                    "members": ["tree_leaf.001", "tree_leaf.002", ...],
+                    "count": 50,
+                    "shared_properties": {"temperature": 300, ...}
+                },
+                ...
+            ],
+            "statistics": {
+                "total_families": 15,
+                "total_objects_in_families": 200,
+                "avg_family_size": 13.3,
+                "largest_family": {"base_name": "tree_leaf", "count": 50}
+            },
+            "total_families": 15
+        }
+    """
+    return object_service.get_families()
+
+
+@obj_router.get("/families/preview/{object_id}")
+async def preview_family_update(object_id: str):
+    """
+    Previsualiza qué objetos se actualizarían en modo familia.
+    
+    Args:
+        object_id: ID del objeto para el que se quiere ver la familia
+        
+    Returns:
+        Información de la familia y cuántos objetos se actualizarían
+    """
+    return object_service.preview_family_update(object_id)
+
+
+@obj_router.put("/update-with-mode/{object_id}")
+async def update_object_with_mode(
+    object_id: str,
+    mode: str = Query(
+        ...,
+        description="Modo de actualización: 'Objeto' o 'Familia'"
+    ),
+    temperature: float = Query(
+        None,
+        description="Nueva temperatura en Kelvin"
+    ),
+    emissivity_file: str = Query(
+        None,
+        description="Archivo de emisividad"
+    )
+):
+    """
+    Actualiza objeto o familia según modo seleccionado.
+    
+    Args:
+        object_id: ID del objeto seleccionado
+        mode: "Objeto" para actualizar solo este, "Familia" para toda la familia
+        temperature: Nueva temperatura (opcional)
+        emissivity_file: Nueva emisividad (opcional)
+        
+    Returns:
+        {
+            "objects_updated": ["obj1", "obj2", ...],
+            "count": 5,
+            "mode": "family",
+            "family_name": "tree_leaf",
+            "properties_updated": ["temperature", "emissivity_file"]
+        }
+    """
+    return object_service.update_object_with_mode(
+        object_id=object_id,
+        mode=mode,
+        temperature=temperature,
+        emissivity_file=emissivity_file
+    )
