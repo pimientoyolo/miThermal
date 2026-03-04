@@ -41,8 +41,17 @@ class ObjService:
             return self.get_obj_response(object_path)
         
         elif file_extension == '.ply':
-            path_obj = self.object_utils.ply2obj(object_path)
-            return self.get_obj_response(path_obj)
+            try:
+                path_obj = self.object_utils.ply2obj(object_path)
+                return self.get_obj_response(path_obj)
+            except HTTPException as exc:
+                logger.warning(
+                    "No se pudo convertir PLY a OBJ para '%s': %s. "
+                    "Se enviará el PLY original.",
+                    object_id,
+                    exc.detail,
+                )
+                return self.get_obj_response(object_path)
 
         else:
             raise HTTPException(status_code=400, detail="Solo se soporta archivos .obj y .ply")

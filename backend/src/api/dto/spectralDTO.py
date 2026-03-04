@@ -26,27 +26,6 @@ class SpectralDataResponse(BaseModel):
         }
 
 
-class MultiSpectralDataResponse(BaseModel):
-    """Respuesta con múltiples espectros para comparación."""
-    wavelengths: List[float]  # Array común de longitudes de onda
-    spectra: List[dict]  # Lista de {"name": str, "values": List[float]}
-    unit: str
-    title: str
-    
-    class Config:
-        json_schema_extra = {
-            "example": {
-                "wavelengths": [8000, 8100, 8200],
-                "spectra": [
-                    {"name": "Concreto", "values": [0.85, 0.87, 0.89]},
-                    {"name": "Asfalto", "values": [0.92, 0.94, 0.96]}
-                ],
-                "unit": "Emisividad (0-1)",
-                "title": "Comparación de emisividades"
-            }
-        }
-
-
 class AtmosphericDataResponse(BaseModel):
     """Respuesta con datos atmosféricos (atenuación, transmitancia)."""
     wavelengths: List[float]  # nm

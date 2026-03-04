@@ -3,6 +3,7 @@ Controller para endpoints de datos espectrales (JSON para plotear en frontend).
 """
 
 import logging
+from typing import Optional
 from fastapi import APIRouter, HTTPException, Query
 from src.api.dto.spectralDTO import (
     SpectralDataResponse, 
@@ -24,19 +25,29 @@ router = APIRouter(prefix="/spectral", tags=["spectral"])
 
 
 @router.get("/emissivity/{object_id}", response_model=SpectralDataResponse)
-async def get_emissivity_spectrum(object_id: str):
+async def get_emissivity_spectrum(
+    object_id: str,
+    wavelength_min_nm: Optional[int] = Query(None, description="Longitud de onda mínima (nm)"),
+    wavelength_max_nm: Optional[int] = Query(None, description="Longitud de onda máxima (nm)")
+):
     """
     Retorna espectro de emisividad de un objeto para plotear en el frontend.
     
     Args:
         object_id: ID del objeto (ej: "concrete.solid")
+        wavelength_min_nm: Longitud de onda mínima en nm (opcional)
+        wavelength_max_nm: Longitud de onda máxima en nm (opcional)
         
     Returns:
         SpectralDataResponse con wavelengths, values, unit, label
     """
     try:
         emissivity_file = f"{OUTPUT_STATIC_DIR}/{object_id}.txt"
-        wavelengths, emissivity = load_emissivity_spectrum(emissivity_file)
+        wavelengths, emissivity = load_emissivity_spectrum(
+            emissivity_file,
+            wavelength_min_nm=wavelength_min_nm,
+            wavelength_max_nm=wavelength_max_nm
+        )
         
         return SpectralDataResponse(
             wavelengths=wavelengths.tolist(),
@@ -57,19 +68,29 @@ async def get_emissivity_spectrum(object_id: str):
 
 
 @router.get("/reflectance/{object_id}", response_model=SpectralDataResponse)
-async def get_reflectance_spectrum(object_id: str):
+async def get_reflectance_spectrum(
+    object_id: str,
+    wavelength_min_nm: Optional[int] = Query(None, description="Longitud de onda mínima (nm)"),
+    wavelength_max_nm: Optional[int] = Query(None, description="Longitud de onda máxima (nm)")
+):
     """
     Retorna espectro de reflectancia de un objeto para plotear.
     
     Args:
         object_id: ID del objeto
+        wavelength_min_nm: Longitud de onda mínima en nm (opcional)
+        wavelength_max_nm: Longitud de onda máxima en nm (opcional)
         
     Returns:
         SpectralDataResponse con datos de reflectancia
     """
     try:
         reflectance_file = f"{OUTPUT_STATIC_DIR}/{object_id}_reflectance.txt"
-        wavelengths, reflectance = load_reflectance_spectrum(reflectance_file)
+        wavelengths, reflectance = load_reflectance_spectrum(
+            reflectance_file,
+            wavelength_min_nm=wavelength_min_nm,
+            wavelength_max_nm=wavelength_max_nm
+        )
         
         return SpectralDataResponse(
             wavelengths=wavelengths.tolist(),
@@ -91,19 +112,27 @@ async def get_reflectance_spectrum(object_id: str):
 
 @router.get("/atmosphere", response_model=AtmosphericDataResponse)
 async def get_atmospheric_spectrum(
-    gas: str = Query("air", description="Tipo de gas: air, H2O, CO2, CH4, O3")
+    gas: str = Query("air", description="Tipo de gas: air, H2O, CO2, CH4, O3"),
+    wavelength_min_nm: Optional[int] = Query(None, description="Longitud de onda mínima (nm)"),
+    wavelength_max_nm: Optional[int] = Query(None, description="Longitud de onda máxima (nm)")
 ):
     """
     Retorna datos de atenuación/transmitancia atmosférica.
     
     Args:
         gas: Tipo de gas atmosférico
+        wavelength_min_nm: Longitud de onda mínima en nm (opcional)
+        wavelength_max_nm: Longitud de onda máxima en nm (opcional)
         
     Returns:
         AtmosphericDataResponse con atenuación y transmitancia
     """
     try:
-        wavelengths_nm, attenuation, transmittance = calculate_atmospheric_spectrum(gas)
+        wavelengths_nm, attenuation, transmittance = calculate_atmospheric_spectrum(
+            gas=gas,
+            wavelength_min_nm=wavelength_min_nm,
+            wavelength_max_nm=wavelength_max_nm
+        )
         
         return AtmosphericDataResponse(
             wavelengths=wavelengths_nm.tolist(),

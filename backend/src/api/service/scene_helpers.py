@@ -1,5 +1,6 @@
 """
-Scene Helpers - Enums y utilities para manejo centralizado de tipos y preparación de escenas
+Scene Helpers - Utilities para manejo centralizado de tipos
+y preparación de escenas
 """
 
 from enum import Enum
@@ -194,15 +195,21 @@ class ValidationMixin:
         if os.path.exists(path) and not os.path.isdir(path):
             raise ValueError(f"No es un directorio: {path}")
     
-    def validate_file_extension(self, path: str, allowed_extensions: List[str]) -> None:
+    def validate_file_extension(
+        self, path: str, allowed_extensions: List[str]
+    ) -> None:
         """
         Valida que archivo tiene extensión permitida.
         
         Args:
             path: Ruta del archivo
-            allowed_extensions: Lista de extensiones permitidas (ej: ['.txt', '.csv'])
+            allowed_extensions: Lista de extensiones permitidas
+                (ej: ['.txt', '.csv'])
         """
         import os
         _, ext = os.path.splitext(path)
         if ext.lower() not in [e.lower() for e in allowed_extensions]:
-            raise ValueError(f"Extensión no permitida: {ext}. Permitidas: {allowed_extensions}")
+            raise ValueError(
+                f"Extensión no permitida: {ext}. "
+                f"Permitidas: {allowed_extensions}"
+            )

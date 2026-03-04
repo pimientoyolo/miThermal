@@ -112,3 +112,30 @@ async def render_camera_animation(
         media_type="application/zip",
         filename="camera_animation.zip"
     )
+
+
+@scene_router.post("/camera/animation/preview")
+async def render_camera_animation_preview(
+    data: CameraInterpolationDTO = Body(...)
+) -> FileResponse:
+    """
+    Genera un preview rápido en GIF de la trayectoria de cámara.
+
+    - Mitad de frames
+    - Baja resolución y SPP
+    - Render RGB únicamente
+    """
+    camera_frames = scene_service.generate_camera_animation(
+        origin=data.origin,
+        end=data.end,
+        tracked_point=data.tracked_point,
+        num_steps=data.num_steps
+    )
+
+    gif_path = scene_service.render_camera_path_preview_gif(camera_frames)
+
+    return FileResponse(
+        gif_path,
+        media_type="image/gif",
+        filename="camera_path_preview.gif"
+    )

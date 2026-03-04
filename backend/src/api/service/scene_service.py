@@ -1038,6 +1038,123 @@ class SceneService(BaseService):
             self.logger.error(f"Error al generar interpolación de cámara: {e}")
             raise HTTPException(status_code=500, detail=f"Error al generar interpolación: {str(e)}")
 
+    def render_camera_path_preview_gif(self, camera_frames: list[dict]) -> str:
+        """
+        Renderiza un preview rápido de la trayectoria de cámara como GIF RGB.
+
+        Estrategia:
+        - Usa la mitad de los frames (submuestreo uniforme)
+        - Reduce resolución y SPP para render rápido
+        - Restaura configuración original de cámara al finalizar
+
+        Args:
+            camera_frames: Lista de configuraciones de cámara
+
+        Returns:
+            Ruta del GIF generado
+        """
+        from PIL import Image
+        from src.api.service.render_service import RenderService
+        from src.config import save_config_scene_dict
+
+        if not camera_frames:
+            raise HTTPException(
+                status_code=400,
+                detail="No hay frames para generar el preview"
+            )
+
+        render_service = RenderService()
+        config_scene = get_config_scene_dict()
+
+        original_camera = dict(config_scene.get("camera", {}))
+        original_spp = int(original_camera.get("spp", 256))
+        original_width = int(original_camera.get("width", 256))
+        original_height = int(original_camera.get("height", 256))
+
+        preview_frame_count = max(2, int(np.ceil(len(camera_frames) / 2)))
+        preview_indices = np.linspace(
+            0,
+            len(camera_frames) - 1,
+            preview_frame_count,
+            dtype=int
+        )
+        preview_frames = [camera_frames[idx] for idx in preview_indices]
+
+        preview_spp = max(4, min(32, original_spp // 8 if original_spp > 8 else 4))
+        preview_width = max(160, original_width // 2)
+        preview_height = max(120, original_height // 2)
+
+        gif_frames: list[Image.Image] = []
+        rgb_path = path_manager.get_result_path("rgb")
+        gif_path = OUTPUT_DIR / "renders" / "camera_path_preview.gif"
+        gif_path.parent.mkdir(parents=True, exist_ok=True)
+
+        try:
+            config_scene["camera"].update({
+                "spp": int(preview_spp),
+                "width": int(preview_width),
+                "height": int(preview_height),
+            })
+            save_config_scene_dict(config_scene)
+
+            for frame_config in preview_frames:
+                config_scene["camera"].update({
+                    "translate_x": frame_config["translate_x"],
+                    "translate_y": frame_config["translate_y"],
+                    "translate_z": frame_config["translate_z"],
+                    "rotate_x": frame_config["rotate_x"],
+                    "rotate_y": frame_config["rotate_y"],
+                    "rotate_z": frame_config["rotate_z"],
+                })
+                save_config_scene_dict(config_scene)
+
+                self.update_scene_camera_rgb()
+                render_service.render_basic_scene()
+
+                if os.path.exists(rgb_path):
+                    frame = Image.open(rgb_path).convert("RGB")
+                    gif_frames.append(frame.copy())
+
+            if not gif_frames:
+                raise HTTPException(
+                    status_code=500,
+                    detail="No se pudieron generar frames RGB para el preview"
+                )
+
+            gif_frames[0].save(
+                gif_path,
+                save_all=True,
+                append_images=gif_frames[1:],
+                duration=120,
+                loop=0,
+            )
+            self.logger.info(
+                f"Preview GIF generado con {len(gif_frames)} frames: {gif_path}"
+            )
+            return str(gif_path)
+
+        finally:
+            config_scene["camera"].update({
+                "spp": int(original_spp),
+                "width": int(original_width),
+                "height": int(original_height),
+                "rotate_x": float(original_camera.get("rotate_x", 0.0)),
+                "rotate_y": float(original_camera.get("rotate_y", 0.0)),
+                "rotate_z": float(original_camera.get("rotate_z", 0.0)),
+                "translate_x": float(original_camera.get("translate_x", 0.0)),
+                "translate_y": float(original_camera.get("translate_y", 0.0)),
+                "translate_z": float(original_camera.get("translate_z", 0.0)),
+                "fov": float(original_camera.get("fov", 45.0)),
+            })
+            save_config_scene_dict(config_scene)
+            try:
+                self.update_scene_camera_rgb()
+                self.update_scene_camera_thermal()
+            except Exception as restore_err:
+                self.logger.warning(
+                    f"No se pudo restaurar XML de cámara tras preview: {restore_err}"
+                )
+
     def render_camera_animation_sequence(self, camera_frames: list[dict]) -> str:
         """
         Renderiza una secuencia completa de frames de animación.

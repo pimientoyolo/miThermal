@@ -8,17 +8,23 @@ from pathlib import Path
 from typing import Tuple, Optional
 from fastapi import HTTPException
 
-from src.atmosphere import read_air_attenuation_file
+from src.atmosphere import get_attenuation
 
 logger = logging.getLogger(__name__)
 
 
-def load_emissivity_spectrum(emissivity_file: str) -> Tuple[np.ndarray, np.ndarray]:
+def load_emissivity_spectrum(
+    emissivity_file: str,
+    wavelength_min_nm: Optional[int] = None,
+    wavelength_max_nm: Optional[int] = None
+) -> Tuple[np.ndarray, np.ndarray]:
     """
     Carga espectro de emisividad desde archivo.
     
     Args:
         emissivity_file: Ruta al archivo de emisividad
+        wavelength_min_nm: Longitud de onda mínima en nm (opcional)
+        wavelength_max_nm: Longitud de onda máxima en nm (opcional)
         
     Returns:
         (wavelengths_nm, emissivity_values)
@@ -40,6 +46,19 @@ def load_emissivity_spectrum(emissivity_file: str) -> Tuple[np.ndarray, np.ndarr
         if wavelengths[0] < 100:  # Asumimos µm si son valores pequeños
             wavelengths = wavelengths * 1000.0
         
+        # Filtrar por rango de longitud de onda si se especifica
+        if wavelength_min_nm is not None or wavelength_max_nm is not None:
+            mask = np.ones(len(wavelengths), dtype=bool)
+            
+            if wavelength_min_nm is not None:
+                mask &= (wavelengths >= wavelength_min_nm)
+            
+            if wavelength_max_nm is not None:
+                mask &= (wavelengths <= wavelength_max_nm)
+            
+            wavelengths = wavelengths[mask]
+            emissivity = emissivity[mask]
+        
         return wavelengths, emissivity
         
     except Exception as e:
@@ -47,12 +66,18 @@ def load_emissivity_spectrum(emissivity_file: str) -> Tuple[np.ndarray, np.ndarr
         raise HTTPException(status_code=400, detail=f"Error cargando emisividad: {e}")
 
 
-def load_reflectance_spectrum(reflectance_file: str) -> Tuple[np.ndarray, np.ndarray]:
+def load_reflectance_spectrum(
+    reflectance_file: str,
+    wavelength_min_nm: Optional[int] = None,
+    wavelength_max_nm: Optional[int] = None
+) -> Tuple[np.ndarray, np.ndarray]:
     """
     Carga espectro de reflectancia desde archivo.
     
     Args:
         reflectance_file: Ruta al archivo de reflectancia
+        wavelength_min_nm: Longitud de onda mínima en nm (opcional)
+        wavelength_max_nm: Longitud de onda máxima en nm (opcional)
         
     Returns:
         (wavelengths_nm, reflectance_values)
@@ -74,6 +99,19 @@ def load_reflectance_spectrum(reflectance_file: str) -> Tuple[np.ndarray, np.nda
         if wavelengths[0] < 100:
             wavelengths = wavelengths * 1000.0
         
+        # Filtrar por rango de longitud de onda si se especifica
+        if wavelength_min_nm is not None or wavelength_max_nm is not None:
+            mask = np.ones(len(wavelengths), dtype=bool)
+            
+            if wavelength_min_nm is not None:
+                mask &= (wavelengths >= wavelength_min_nm)
+            
+            if wavelength_max_nm is not None:
+                mask &= (wavelengths <= wavelength_max_nm)
+            
+            wavelengths = wavelengths[mask]
+            reflectance = reflectance[mask]
+        
         return wavelengths, reflectance
         
     except Exception as e:
@@ -81,28 +119,52 @@ def load_reflectance_spectrum(reflectance_file: str) -> Tuple[np.ndarray, np.nda
         raise HTTPException(status_code=400, detail=f"Error cargando reflectancia: {e}")
 
 
-def get_atmospheric_spectrum(gas: str = "air") -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]:
+def get_atmospheric_spectrum(
+    gas: str = "air",
+    wavelength_min_nm: Optional[int] = None,
+    wavelength_max_nm: Optional[int] = None
+) -> Tuple[np.ndarray, np.ndarray, Optional[np.ndarray]]:
     """
     Obtiene espectro de atenuación/transmitancia atmosférica.
     
     Args:
         gas: Tipo de gas ("air", "H2O", "CO2", "CH4", "O3")
+        wavelength_min_nm: Longitud de onda mínima en nm (opcional)
+        wavelength_max_nm: Longitud de onda máxima en nm (opcional)
         
     Returns:
         (wavelengths_nm, attenuation, transmittance_optional)
     """
     try:
-        wavelengths_nm, sigma_t = read_air_attenuation_file()
-        attenuation = sigma_t  # Ya está en unidades adecuadas
+        # Construir nombre de archivo del gas
+        gas_file = f"{gas}.txt"
+        
+        # Cargar datos del gas específico USANDO EL PARÁMETRO
+        wavelengths_nm, sigma_t = get_attenuation(gas_file)
+        attenuation = sigma_t  # Ya está en unidades adecuadas (neper)
         
         # Calcular transmitancia como exp(-sigma_t)
         # Asumiendo 1 km de distancia atmosférica estándar
         transmittance = np.exp(-sigma_t) * 100.0
         
+        # Filtrar por rango de longitud de onda si se especifica
+        if wavelength_min_nm is not None or wavelength_max_nm is not None:
+            mask = np.ones(len(wavelengths_nm), dtype=bool)
+            
+            if wavelength_min_nm is not None:
+                mask &= (wavelengths_nm >= wavelength_min_nm)
+            
+            if wavelength_max_nm is not None:
+                mask &= (wavelengths_nm <= wavelength_max_nm)
+            
+            wavelengths_nm = wavelengths_nm[mask]
+            attenuation = attenuation[mask]
+            transmittance = transmittance[mask]
+        
         return wavelengths_nm, attenuation, transmittance
         
     except Exception as e:
-        logger.error(f"Error cargando datos atmosféricos: {e}")
+        logger.error(f"Error cargando datos atmosféricos para gas '{gas}': {e}")
         raise HTTPException(status_code=400, detail=f"Error cargando datos atmosféricos: {e}")
 
 
