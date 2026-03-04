@@ -7,7 +7,7 @@ from src.api.dto.suggestDTO import SuggestDTO
 from src.utils.objects.objects import ObjectUtils
 from src.api.service.obj_service import ObjService
 from fastapi.responses import FileResponse
-from fastapi import APIRouter, File, Query, UploadFile, Form
+from fastapi import APIRouter, File, Query, UploadFile, Form, HTTPException
 from src.config import PathManager
 import json
 
@@ -189,7 +189,7 @@ async def list_families():
     return object_service.get_families()
 
 
-@obj_router.get("/families/preview/{object_id}")
+@obj_router.get("/families/preview/{object_id:path}")
 async def preview_family_update(object_id: str):
     """
     Previsualiza qué objetos se actualizarían en modo familia.
@@ -203,9 +203,12 @@ async def preview_family_update(object_id: str):
     return object_service.preview_family_update(object_id)
 
 
-@obj_router.put("/update-with-mode/{object_id}")
+@obj_router.put("/update-with-mode")
 async def update_object_with_mode(
-    object_id: str,
+    object_id: str | None = Query(
+        None,
+        description="ID del objeto (query param, recomendado para IDs con '/')",
+    ),
     mode: str = Query(
         ...,
         description="Modo de actualización: 'Objeto' o 'Familia'"
@@ -237,6 +240,12 @@ async def update_object_with_mode(
             "properties_updated": ["temperature", "emissivity_file"]
         }
     """
+    if not object_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Debe proporcionar object_id en query",
+        )
+
     return object_service.update_object_with_mode(
         object_id=object_id,
         mode=mode,

@@ -1244,8 +1244,9 @@ def create_mitsuba_viewer_interface():
             
             try:
                 # Llamar al nuevo endpoint
+                params["object_id"] = oid
                 response = client.session.put(
-                    f"{client.base_url}/object/update-with-mode/{oid}",
+                    f"{client.base_url}/object/update-with-mode",
                     params=params
                 )
                 response.raise_for_status()
