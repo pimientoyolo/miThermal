@@ -110,10 +110,19 @@ class MitsubaAPIClient:
         try:
             r = self.session.get(f"{self.base_url}/object/file/id?object_id={object_id}")
             r.raise_for_status()
-            # Guardar SIEMPRE como .obj, el servidor ya convierte de .ply a .obj
+
+            # Guardar con extensión real recibida (obj/ply)
+            ext = Path(object_id).suffix.lower() or ".obj"
+            disposition = r.headers.get("Content-Disposition", "")
+            if "filename=" in disposition:
+                file_name = disposition.split("filename=", 1)[1].strip().strip('"')
+                detected_ext = Path(file_name).suffix.lower()
+                if detected_ext:
+                    ext = detected_ext
+
             save_path = Path(save_path)
             save_path.parent.mkdir(parents=True, exist_ok=True)
-            save_path = save_path.with_suffix(".obj")
+            save_path = save_path.with_suffix(ext)
             save_path.write_bytes(r.content)
             return str(save_path)
         except Exception as e:
@@ -493,10 +502,20 @@ class MitsubaAPIClient:
             logger.error(f"Clear cache error: {e}")
             return {"status": "error", "detail": str(e)}
     # ---------------------- Spectral Data Export ----------------------
-    def get_emissivity_spectrum(self, object_id: str) -> Dict:
+    def get_emissivity_spectrum(
+        self, 
+        object_id: str,
+        wavelength_min_nm: int = None,
+        wavelength_max_nm: int = None
+    ) -> Dict:
         """GET /spectral/emissivity/{object_id}
         
         Obtiene el espectro de emisividad de un objeto como datos JSON.
+        
+        Args:
+            object_id: ID del objeto
+            wavelength_min_nm: Longitud de onda mínima en nm (opcional)
+            wavelength_max_nm: Longitud de onda máxima en nm (opcional)
         
         Returns: {
             "wavelengths": [8000.0, 8100.0, ...],
@@ -507,17 +526,33 @@ class MitsubaAPIClient:
         }
         """
         try:
-            r = self.session.get(f"{self.base_url}/spectral/emissivity/{object_id}")
+            params = {}
+            if wavelength_min_nm is not None:
+                params["wavelength_min_nm"] = wavelength_min_nm
+            if wavelength_max_nm is not None:
+                params["wavelength_max_nm"] = wavelength_max_nm
+            
+            r = self.session.get(f"{self.base_url}/spectral/emissivity/{object_id}", params=params)
             r.raise_for_status()
             return {"status": "success", "data": r.json()}
         except Exception as e:
             logger.error(f"Get emissivity spectrum error: {e}")
             return {"status": "error", "detail": str(e)}
 
-    def get_reflectance_spectrum(self, object_id: str) -> Dict:
+    def get_reflectance_spectrum(
+        self, 
+        object_id: str,
+        wavelength_min_nm: int = None,
+        wavelength_max_nm: int = None
+    ) -> Dict:
         """GET /spectral/reflectance/{object_id}
         
         Obtiene el espectro de reflectancia de un objeto como datos JSON.
+        
+        Args:
+            object_id: ID del objeto
+            wavelength_min_nm: Longitud de onda mínima en nm (opcional)
+            wavelength_max_nm: Longitud de onda máxima en nm (opcional)
         
         Returns: {
             "wavelengths": [8000.0, 8100.0, ...],
@@ -528,20 +563,33 @@ class MitsubaAPIClient:
         }
         """
         try:
-            r = self.session.get(f"{self.base_url}/spectral/reflectance/{object_id}")
+            params = {}
+            if wavelength_min_nm is not None:
+                params["wavelength_min_nm"] = wavelength_min_nm
+            if wavelength_max_nm is not None:
+                params["wavelength_max_nm"] = wavelength_max_nm
+            
+            r = self.session.get(f"{self.base_url}/spectral/reflectance/{object_id}", params=params)
             r.raise_for_status()
             return {"status": "success", "data": r.json()}
         except Exception as e:
             logger.error(f"Get reflectance spectrum error: {e}")
             return {"status": "error", "detail": str(e)}
 
-    def get_atmospheric_spectrum(self, gas: str = "air") -> Dict:
-        """GET /spectral/atmosphere?gas=<gas>
+    def get_atmospheric_spectrum(
+        self, 
+        gas: str = "air",
+        wavelength_min_nm: int = None,
+        wavelength_max_nm: int = None
+    ) -> Dict:
+        """GET /spectral/atmosphere?gas=<gas>&wavelength_min_nm=<min>&wavelength_max_nm=<max>
         
         Obtiene el espectro de atenuación atmosférica.
         
         Args:
             gas: Tipo de atmósfera ('air', 'CO2', 'H2O', 'O3', 'CH4')
+            wavelength_min_nm: Longitud de onda mínima en nm (opcional)
+            wavelength_max_nm: Longitud de onda máxima en nm (opcional)
         
         Returns: {
             "wavelengths": [8000.0, 8100.0, ...],
@@ -553,6 +601,11 @@ class MitsubaAPIClient:
         """
         try:
             params = {"gas": gas}
+            if wavelength_min_nm is not None:
+                params["wavelength_min_nm"] = wavelength_min_nm
+            if wavelength_max_nm is not None:
+                params["wavelength_max_nm"] = wavelength_max_nm
+            
             r = self.session.get(f"{self.base_url}/spectral/atmosphere", params=params)
             r.raise_for_status()
             return {"status": "success", "data": r.json()}

@@ -377,8 +377,13 @@ def build_camera_interpolation_section() -> Dict[str, gr.components.Component]:
 		with gr.Column(scale=1):
 			generate_btn = gr.Button("🎬 Generar Interpolación (solo JSON)", variant="secondary")
 		with gr.Column(scale=1):
+			preview_btn = gr.Button("👀 Preview Rápido del Path (GIF)", variant="secondary")
+		with gr.Column(scale=1):
 			render_btn = gr.Button("🎞️ Renderizar Animación Completa", variant="primary")
 	
+	with gr.Row():
+		preview_gif = gr.Image(label="Preview Path (GIF)", type="filepath", height=280)
+
 	with gr.Row():
 		interpolation_result = gr.JSON(label="Frames Generados", visible=False)
 		animation_zip = gr.File(label="Descargar Animación (.zip)")
@@ -395,8 +400,10 @@ def build_camera_interpolation_section() -> Dict[str, gr.components.Component]:
 		"target_z": target_z,
 		"num_steps": num_steps,
 		"generate_btn": generate_btn,
+		"preview_btn": preview_btn,
 		"render_btn": render_btn,
 		"status_output": status_output,
+		"preview_gif": preview_gif,
 		"interpolation_result": interpolation_result,
 		"animation_zip": animation_zip,
 	}

@@ -160,9 +160,29 @@ def load_server_scene(scene_path: str) -> Tuple[Optional[np.ndarray], str, Dict,
         return None, "❌ Ingresa la ruta en el servidor", {}, [], []
     client = get_client()
     try:
-        _ = client.load_scene(scene_path)
+        resp = client.load_scene(scene_path)
+
+        img_pil = None
+        try:
+            if isinstance(resp, dict) and resp.get("image_base64"):
+                import io
+                import base64
+                from PIL import Image
+
+                img_bytes = base64.b64decode(resp["image_base64"])
+                img_pil = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+            else:
+                rgb_resp = client.session.get(f"{client.base_url}/render/rgb")
+                if rgb_resp.ok and rgb_resp.content:
+                    import io
+                    from PIL import Image
+
+                    img_pil = Image.open(io.BytesIO(rgb_resp.content)).convert("RGB")
+        except Exception as preview_e:
+            logger.warning(f"No se pudo cargar preview RGB tras load_scene: {preview_e}")
+
         info_text, scene_json, labels = _summarize_scene_and_update_state()
-        return None, info_text, scene_json, labels, labels
+        return img_pil, info_text, scene_json, labels, labels
     except Exception as e:
         return None, f"❌ Error cargando escena: {e}", {}, [], []
 
@@ -226,15 +246,28 @@ def view_object_3d(choice_label: str):
             emissivity = obj.get("emissivity")
             if wavelengths and (reflection or emissivity):
                 if reflection and not emissivity:
-                    y = [1 - (r / 100.0) for r in reflection]
+                    y = []
+                    x = []
+                    for wavelength, value in zip(wavelengths, reflection):
+                        if wavelength is None or value is None:
+                            continue
+                        x.append(float(wavelength))
+                        y.append(1 - (float(value) / 100.0))
                 elif emissivity and wavelengths and len(emissivity) == len(wavelengths):
-                    y = emissivity
+                    x = []
+                    y = []
+                    for wavelength, value in zip(wavelengths, emissivity):
+                        if wavelength is None or value is None:
+                            continue
+                        x.append(float(wavelength))
+                        y.append(float(value))
                 else:
+                    x = []
                     y = None
                 if y:
                     fig = go.Figure()
                     fig.add_trace(go.Scatter(
-                        x=wavelengths,
+                        x=x,
                         y=y,
                         mode='lines+markers',
                         name='Emisividad',
@@ -1722,6 +1755,43 @@ def create_mitsuba_viewer_interface():
                 logger.error(error_msg, exc_info=True)
                 return error_msg, None
 
+        def camera_preview_animation_cb(
+            origin_x, origin_y, origin_z,
+            end_x, end_y, end_z,
+            target_x, target_y, target_z,
+            num_steps
+        ):
+            """Genera una previsualización rápida en GIF del path de cámara."""
+            try:
+                client = get_client()
+                data = {
+                    "origin": [origin_x, origin_y, origin_z],
+                    "end": [end_x, end_y, end_z],
+                    "tracked_point": [target_x, target_y, target_z],
+                    "num_steps": int(num_steps)
+                }
+
+                response = client.session.post(
+                    f"{client.base_url}/scene/camera/animation/preview",
+                    json=data,
+                    timeout=300
+                )
+                response.raise_for_status()
+
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".gif") as tf:
+                    tf.write(response.content)
+                    gif_path = tf.name
+
+                status = (
+                    "✅ Preview generado (mitad de frames, baja resolución y SPP)."
+                )
+                return status, gif_path
+
+            except Exception as e:
+                error_msg = f"❌ Error al generar preview: {str(e)}"
+                logger.error(error_msg, exc_info=True)
+                return error_msg, None
+
         # Callbacks para gestión de cache
         def refresh_cache_stats_cb():
             """Obtiene y muestra las estadísticas del cache."""
@@ -1822,6 +1892,26 @@ def create_mitsuba_viewer_interface():
             ],
         )
 
+        camera_interp_section["preview_btn"].click(
+            fn=camera_preview_animation_cb,
+            inputs=[
+                camera_interp_section["origin_x"],
+                camera_interp_section["origin_y"],
+                camera_interp_section["origin_z"],
+                camera_interp_section["end_x"],
+                camera_interp_section["end_y"],
+                camera_interp_section["end_z"],
+                camera_interp_section["target_x"],
+                camera_interp_section["target_y"],
+                camera_interp_section["target_z"],
+                camera_interp_section["num_steps"],
+            ],
+            outputs=[
+                camera_interp_section["status_output"],
+                camera_interp_section["preview_gif"],
+            ],
+        )
+
         # Cache Management: conectar callbacks
         cache_section["refresh_stats_btn"].click(
             fn=refresh_cache_stats_cb,
@@ -1882,17 +1972,35 @@ def create_mitsuba_viewer_interface():
                 plot_info = ""
                 title_text = "Datos Espectrales"
                 ylabel_text = "Valor"
+                yaxis_type = "linear"  # Por defecto lineal, puede ser "log" para logarítmico
+
+                def clean_xy(x_values, y_values):
+                    clean_x = []
+                    clean_y = []
+                    for x_val, y_val in zip(x_values or [], y_values or []):
+                        if x_val is None or y_val is None:
+                            continue
+                        clean_x.append(float(x_val))
+                        clean_y.append(float(y_val))
+                    return clean_x, clean_y
                 
                 if plot_type == "Emisividad":
                     if not object_id:
                         return None, "❌ Por favor selecciona un objeto"
-                    result = client.get_emissivity_spectrum(object_id)
+                    result = client.get_emissivity_spectrum(
+                        object_id,
+                        wavelength_min_nm=int(wl_min) if wl_min else None,
+                        wavelength_max_nm=int(wl_max) if wl_max else None
+                    )
                     if result.get("status") != "success":
                         return None, f"❌ Error: {result.get('detail', 'Error desconocido')}"
                     
                     data = result.get("data", {})
                     wavelengths = data.get("wavelengths", [])
                     values = data.get("values", [])
+                    wavelengths, values = clean_xy(wavelengths, values)
+                    if not values:
+                        return None, "❌ No hay datos válidos de emisividad"
                     
                     fig.add_trace(go.Scatter(
                         x=wavelengths, y=values,
@@ -1908,13 +2016,20 @@ def create_mitsuba_viewer_interface():
                 elif plot_type == "Reflectancia":
                     if not object_id:
                         return None, "❌ Por favor selecciona un objeto"
-                    result = client.get_reflectance_spectrum(object_id)
+                    result = client.get_reflectance_spectrum(
+                        object_id,
+                        wavelength_min_nm=int(wl_min) if wl_min else None,
+                        wavelength_max_nm=int(wl_max) if wl_max else None
+                    )
                     if result.get("status") != "success":
                         return None, f"❌ Error: {result.get('detail', 'Error desconocido')}"
                     
                     data = result.get("data", {})
                     wavelengths = data.get("wavelengths", [])
                     values = data.get("values", [])
+                    wavelengths, values = clean_xy(wavelengths, values)
+                    if not values:
+                        return None, "❌ No hay datos válidos de reflectancia"
                     
                     fig.add_trace(go.Scatter(
                         x=wavelengths, y=values,
@@ -1940,6 +2055,9 @@ def create_mitsuba_viewer_interface():
                     data = result.get("data", {})
                     wavelengths = data.get("wavelengths", [])
                     radiance = data.get("radiance", [])
+                    wavelengths, radiance = clean_xy(wavelengths, radiance)
+                    if not radiance:
+                        return None, "❌ No hay datos válidos de radiancia"
                     
                     fig.add_trace(go.Scatter(
                         x=wavelengths, y=radiance,
@@ -1954,7 +2072,11 @@ def create_mitsuba_viewer_interface():
                     ylabel_text = "Radiancia W/(m³·sr)"
                     
                 elif plot_type == "Atenuación Atmosférica":
-                    result = client.get_atmospheric_spectrum(gas=gas_type)
+                    result = client.get_atmospheric_spectrum(
+                        gas=gas_type,
+                        wavelength_min_nm=int(wl_min) if wl_min else None,
+                        wavelength_max_nm=int(wl_max) if wl_max else None
+                    )
                     if result.get("status") != "success":
                         return None, f"❌ Error: {result.get('detail', 'Error desconocido')}"
                     
@@ -1962,9 +2084,14 @@ def create_mitsuba_viewer_interface():
                     wavelengths = data.get("wavelengths", [])
                     attenuation = data.get("attenuation", [])
                     transmittance = data.get("transmittance", [])
+
+                    wavelengths_a, attenuation = clean_xy(wavelengths, attenuation)
+                    wavelengths_t, transmittance = clean_xy(wavelengths, transmittance)
+                    if not attenuation and not transmittance:
+                        return None, "❌ No hay datos válidos de atenuación atmosférica"
                     
                     fig.add_trace(go.Scatter(
-                        x=wavelengths, y=attenuation,
+                        x=wavelengths_a, y=attenuation,
                         mode='lines',
                         name='Atenuación',
                         line=dict(color='red', width=2),
@@ -1972,22 +2099,28 @@ def create_mitsuba_viewer_interface():
                     ))
                     
                     fig.add_trace(go.Scatter(
-                        x=wavelengths, y=transmittance,
+                        x=wavelengths_t, y=transmittance,
                         mode='lines',
                         name='Transmitancia',
                         line=dict(color='green', width=2),
                         hovertemplate='<b>Longitud de onda:</b> %{x:.1f} nm<br><b>Transmitancia:</b> %{y:.4f}<extra></extra>'
                     ))
                     
-                    plot_info = f"✅ Atmósfera: {gas_type}\nPromedio Atenuación: {np.mean(attenuation):.3f}"
+                    attenuation_mean = np.mean(attenuation) if attenuation else 0.0
+                    plot_info = (
+                        f"✅ Atmósfera: {gas_type}\n"
+                        f"Promedio Atenuación: {attenuation_mean:.3f}"
+                    )
                     title_text = f"Atenuación Atmosférica - {gas_type}"
-                    ylabel_text = "Atenuación / Transmitancia"
+                    ylabel_text = "Atenuación / Transmitancia (escala log)"
+                    yaxis_type = "log"  # Escala logarítmica para atenuación atmosférica
                 
                 # Configurar diseño del gráfico
                 fig.update_layout(
                     title=title_text,
                     xaxis_title="Longitud de Onda (nm)",
                     yaxis_title=ylabel_text,
+                    yaxis_type=yaxis_type,
                     hovermode='closest',
                     template='plotly_white',
                     height=500,
