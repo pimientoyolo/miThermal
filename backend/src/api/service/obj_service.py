@@ -1,10 +1,11 @@
 import logging
-from src.mitsuba_core.object_utils import ObjectUtils
+from src.utils.objects.objects import ObjectUtils
 import os
 from fastapi.responses import FileResponse
 from fastapi import HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
-import src.config as config
+from src.utils.decorators import handle_file_errors, log_execution
+from src.config import PathManager, OUTPUT_STATIC_DIR, DEFAULT_EMISIVITY_DIR, get_config_scene_dict, save_config_scene_dict
 from src.api.dto.objectDTO import ObjectDTO, UpdateObjectDTO
 import numpy as np
 from src.api.service.scene_service import SceneService
@@ -14,6 +15,7 @@ import hashlib
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
+path_manager = PathManager
 
 scene_service = SceneService()
 
@@ -56,7 +58,7 @@ class ObjService:
         )
     
     def validate_object_id_exists(self, object_id: str) -> str:
-        object_path = config.OUTPUT_STATIC_DIR / object_id
+        object_path = OUTPUT_STATIC_DIR / object_id
 
         logger.debug(f"Validando existencia del objeto: {object_id} en ruta: {object_path}")
 
@@ -68,20 +70,11 @@ class ObjService:
     def get_object_info_by_id(self, object_id: str) -> ObjectDTO:
         
         self.validate_object_id_exists(object_id)
-        config_scene = config.get_config_scene_dict()
+        config_scene = get_config_scene_dict()
 
         wavelengths, emissivity = self.object_utils.read_object_emissivity_file(object_id)
 
         reflection = 1.0 - emissivity
-        
-        # Buscar el objeto en la configuración de la escena
-        # object_config = None
-        # for key in config_scene.keys():
-        #     if object_id in key or key.endswith(object_id):
-        #         object_config = config_scene[key]
-        #         break
-
-        # wavelengths = wavelengths/1000
         
         object_config = config_scene.get("objects", {}).get(object_id)
 
@@ -96,7 +89,7 @@ class ObjService:
                 pass
 
             # Construir ruta del archivo de emisividad relativo al OUTPUT_STATIC_DIR
-            base_out = Path(config.OUTPUT_STATIC_DIR)
+            base_out = Path(OUTPUT_STATIC_DIR)
             rel_obj = Path(object_id)
             if rel_obj.is_absolute():
                 rel_obj = rel_obj.relative_to(rel_obj.anchor)
@@ -106,7 +99,7 @@ class ObjService:
                 "temperature": default_temp,
                 "emissivity_file": emissivity_path
             }
-            config.save_config_scene_dict(config_scene)
+            save_config_scene_dict(config_scene)
             object_config = config_scene["objects"][object_id]
 
         # Construir el DTO
@@ -122,7 +115,7 @@ class ObjService:
         object_id = object_data.id
         self.validate_object_id_exists(object_id)
         
-        config_scene = config.get_config_scene_dict()
+        config_scene = get_config_scene_dict()
         
         if object_id not in config_scene:
             raise HTTPException(status_code=404, detail=f"Configuración no encontrada para el objeto: {object_id}")
@@ -135,7 +128,7 @@ class ObjService:
             raise HTTPException(status_code=400, detail="La temperatura debe ser superior a 0 (cero absoluto no permitido)")
         
         # Guardar la configuración actualizada
-        config.save_config_scene_dict(config_scene)
+        save_config_scene_dict(config_scene)
 
         scene_service.update_thermal_scene_obj(object_id=object_id)
         scene_service.prepare_depth_scene()
@@ -191,7 +184,7 @@ class ObjService:
             raise HTTPException(status_code=400, detail="La reflectancia (%) debe estar entre 0 y 100")
 
         # Construir ruta de destino debajo de OUTPUT_STATIC_DIR conservando subcarpetas del object_id
-        base_out = config.OUTPUT_STATIC_DIR
+        base_out = OUTPUT_STATIC_DIR
         rel_obj_id = object_id
         if os.path.isabs(object_id):
             rel_obj_id = os.path.splitdrive(object_id)[1].lstrip("\\/")
@@ -205,7 +198,7 @@ class ObjService:
 
         mensaje = ""
 
-        scene_config = config.get_config_scene_dict()
+        scene_config = get_config_scene_dict()
         wavelengths_scene = scene_config.get("wavelengths")
         wavelengths_scene = np.array(wavelengths_scene)/1000  # Convertir a µm
 
@@ -283,13 +276,13 @@ class ObjService:
         # 3. Guardar archivo de emisividad solo una vez
         hash_value = hashlib.md5(raw).hexdigest()[:16]
         unique_name = f"emissivity_{hash_value}.txt"
-        dst_path = os.path.join(config.OUTPUT_STATIC_DIR, unique_name)
+        dst_path = os.path.join(OUTPUT_STATIC_DIR, unique_name)
         os.makedirs(os.path.dirname(dst_path), exist_ok=True)
         with open(dst_path, "wb") as f:
             f.write(raw)
 
         # 4. Actualizar configuración
-        config_scene = config.get_config_scene_dict()
+        config_scene = get_config_scene_dict()
 
         for obj_data in object_data_list:
             self.validate_object_id_exists(obj_data.id)
@@ -301,11 +294,11 @@ class ObjService:
             config_scene["objects"][obj_data.id]["temperature"] = obj_data.temperature
             config_scene["objects"][obj_data.id]["emissivity_file"] = dst_path
 
-        config.save_config_scene_dict(config_scene)
+        save_config_scene_dict(config_scene)
 
         # 5. Validar rango espectral frente a la cámara
         mensaje = ""
-        scene_config = config.get_config_scene_dict()
+        scene_config = get_config_scene_dict()
         wavelengths_scene = np.array(scene_config.get("wavelengths")) / 1000.0  # µm
         w_min, w_max = np.min(wavelengths_scene), np.max(wavelengths_scene)
 
@@ -328,28 +321,18 @@ class ObjService:
 
         return mensaje
     
+    @log_execution()
+    @handle_file_errors(default_return=[])
     def get_suggested_object_emissivity(self) -> list[str]:
-        
-        path = config.DEFAULT_EMISIVITY_DIR
-        path = os.fspath(path)  # por si viene como pathlib.Path
-
-        # Validaciones
-        if not os.path.exists(path):
-            raise HTTPException(status_code=404, detail=f"Directorio no encontrado: {path}")
-        if not os.path.isdir(path):
-            raise HTTPException(status_code=400, detail=f"No es un directorio: {path}")
-
-        try:
-            return [f for f in os.listdir(path) if f.lower().endswith(".txt")]
-        except OSError as e:
-            raise HTTPException(status_code=500, detail=f"Error leyendo el directorio: {e}")
+        path = os.fspath(DEFAULT_EMISIVITY_DIR)
+        return [f for f in os.listdir(path) if f.lower().endswith(".txt")]
 
 
     def get_object_emissivity_file_by_id(self, object_id: str) -> FileResponse:
         self.validate_object_id_exists(object_id)
 
         # Construir ruta del archivo de emisividad debajo de OUTPUT_STATIC_DIR
-        base_out = config.OUTPUT_STATIC_DIR
+        base_out = OUTPUT_STATIC_DIR
         rel_obj_id = object_id
         if os.path.isabs(object_id):
             rel_obj_id = os.path.splitdrive(object_id)[1].lstrip("\\/")
@@ -361,25 +344,19 @@ class ObjService:
 
         return FileResponse(dst_path, filename=os.path.basename(dst_path))
     
+    @log_execution()
     def update_default_emissivity(self, file_name: str, object_id: str) -> None:
-        path = config.DEFAULT_EMISIVITY_DIR
-        path = os.fspath(path)  # por si viene como pathlib.Path
-
-        logger.info(f"Actualizando emisividad del objeto {object_id} con el archivo {file_name} desde el directorio {path}")
-
-        # Validaciones
-        if not os.path.exists(path):
-            raise HTTPException(status_code=404, detail=f"Directorio no encontrado: {path}")
-        if not os.path.isdir(path):
-            raise HTTPException(status_code=400, detail=f"No es un directorio: {path}")
+        path = os.fspath(DEFAULT_EMISIVITY_DIR)
         default_file_path = os.path.join(path, file_name)
+        
+        # Validar que el archivo de emisividad existe
         if not os.path.exists(default_file_path):
             raise HTTPException(status_code=404, detail=f"Archivo no encontrado: {default_file_path}")
         
         self.validate_object_id_exists(object_id)
 
         # Construir ruta del archivo de emisividad debajo de OUTPUT_STATIC_DIR
-        base_out = config.OUTPUT_STATIC_DIR
+        base_out = OUTPUT_STATIC_DIR
         rel_obj_id = object_id
         if os.path.isabs(object_id):
             rel_obj_id = os.path.splitdrive(object_id)[1].lstrip("\\/")

@@ -4,9 +4,11 @@ from fastapi.responses import FileResponse
 from src.api.dto.cameraDTO import CameraDTO, UpdateCameraDTO
 from src.api.service.config_service import ConfigService
 from fastapi import Query
+from typing import Dict
 
-from src.mitsuba_core.object_utils import ObjectUtils
-import src.config as config
+from src.utils.objects.objects import ObjectUtils
+from src.config import PathManager, ASSETS_DIR
+from src.utils.cache import get_cache_manager
 import os
 import shutil
 
@@ -18,6 +20,7 @@ config_router = APIRouter(
 
 config_service = ConfigService()
 object_utils = ObjectUtils()
+path_manager = PathManager
 
 @config_router.get("/camera")
 async def get_config() -> CameraDTO:
@@ -62,17 +65,18 @@ async def set_air_temperature(
 
 @config_router.get("/air/attenuation")
 async def get_air_attenuation() -> FileResponse:
-
-    # Si el archivo no existe, copiarlo desde assets
-    if not os.path.exists(config.AIR_ATTENUATION_FILE):
-        air_default = os.path.join(config.ASSETS_DIR, "reference_data", "air.txt")
-        if os.path.exists(air_default):
-            os.makedirs(os.path.dirname(config.AIR_ATTENUATION_FILE), exist_ok=True)
-            shutil.copy(air_default, config.AIR_ATTENUATION_FILE)
+    air_attenuation_path = path_manager.get_air_attenuation_path()
     
-    object_utils.valid_exist_file(config.AIR_ATTENUATION_FILE)
+    # Si el archivo no existe, copiarlo desde assets
+    if not os.path.exists(air_attenuation_path):
+        air_default = os.path.join(ASSETS_DIR, "reference_data", "air.txt")
+        if os.path.exists(air_default):
+            os.makedirs(os.path.dirname(air_attenuation_path), exist_ok=True)
+            shutil.copy(air_default, air_attenuation_path)
+    
+    object_utils.valid_exist_file(air_attenuation_path)
 
-    return FileResponse(config.AIR_ATTENUATION_FILE, filename="air.txt")
+    return FileResponse(air_attenuation_path, filename="air.txt")
 
 @config_router.put("/air/attenuation")
 async def set_air_attenuation(file: UploadFile = File(...)) -> str:
@@ -94,5 +98,37 @@ async def set_air_attenuation_by_filename(
 ) -> FileResponse:
 
     config_service.set_air_attenuation_by_filename(file_name)
+    air_attenuation_path = path_manager.get_air_attenuation_path()
 
-    return FileResponse(config.AIR_ATTENUATION_FILE, filename="air.txt")
+    return FileResponse(air_attenuation_path, filename="air.txt")
+
+
+@config_router.get("/cache/stats")
+async def get_cache_stats() -> Dict:
+    """
+    Obtiene estadísticas del cache de emisiones.
+    
+    Returns:
+        Dict con métricas:
+        - hits: Número de aciertos en cache
+        - misses: Número de fallos en cache
+        - total_requests: Total de peticiones
+        - hit_rate_percent: Porcentaje de aciertos
+        - cache_size: Número de entradas en cache
+        - max_size: Tamaño máximo del cache
+    """
+    cache = get_cache_manager()
+    return cache.get_stats()
+
+
+@config_router.post("/cache/clear")
+async def clear_cache() -> Dict:
+    """
+    Limpia completamente el cache de emisiones.
+    
+    Returns:
+        Dict con mensaje de confirmación
+    """
+    cache = get_cache_manager()
+    cache.clear()
+    return {"status": "success", "message": "Cache limpiado exitosamente"}

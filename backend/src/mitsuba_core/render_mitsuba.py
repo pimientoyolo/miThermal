@@ -1,10 +1,9 @@
 import logging
-
 import os
 import json
 import numpy as np
-from src.mitsuba_core.scene_parser import SceneParser
-import src.config as config
+from src.utils.scene.parser import SceneParser
+from src.config import PathManager, OUTPUT_STATIC_RESULT_DIR
 from PIL import Image
 
 
@@ -14,19 +13,19 @@ class RenderRGB:
         mi.set_variant('cuda_ad_rgb')
         self.mi = mi
         self.scene_parser = SceneParser()
-        
+        self.path_manager = PathManager
         self.logger = logging.getLogger(__name__)
 
     def render(self) -> str:
+        # Cargar escena con mitsuba
+        scene_path = self.path_manager.get_scene_path("rgb")
+        scene = self.mi.load_file(scene_path)
 
-        # cargar escena con mitsuba
-        scene = self.mi.load_file(config.SCENE_DIR)
-
-        # renderizar imagen
+        # Renderizar imagen
         image = self.mi.render(scene)
 
-        # crear carpeta si no existe
-        os.makedirs(config.OUTPUT_STATIC_RESULT_DIR, exist_ok=True)
+        # Crear carpeta si no existe
+        os.makedirs(OUTPUT_STATIC_RESULT_DIR, exist_ok=True)
 
         # Conversión correcta a RGB uint8 sRGB (sin write_bitmap)
         bmp = self.mi.Bitmap(image)
@@ -36,17 +35,20 @@ class RenderRGB:
         arr8 = np.array(bmp8, copy=False)  # [H, W, 3], uint8
         
         img = Image.fromarray(arr8, mode="RGB")
-        img.save(config.IMAGE_DIR, format="PNG")
+        result_path = self.path_manager.get_result_path("rgb")
+        img.save(result_path, format="PNG")
 
-class RenderDepth():
+
+class RenderDepth:
     def __init__(self):
         import mitsuba as mi
         mi.set_variant('cuda_ad_rgb')
         self.mi = mi
+        self.path_manager = PathManager
 
     def render(self):
-
-        scene = self.mi.load_file(config.SCENE_DEPTH_DIR)
+        scene_path = self.path_manager.get_scene_path("depth")
+        scene = self.mi.load_file(scene_path)
 
         image = self.mi.render(scene)
         
@@ -61,68 +63,77 @@ class RenderDepth():
             # Si ya es escala de grises o un solo canal
             grayscale_channel = image_array.squeeze()
 
-        # crear carpeta si no existe
-        os.makedirs(config.OUTPUT_STATIC_RESULT_DIR, exist_ok=True)
+        # Crear carpeta si no existe
+        os.makedirs(OUTPUT_STATIC_RESULT_DIR, exist_ok=True)
         
         # Guardar como archivo numpy
-        np.save(config.DEPTH_DIR, grayscale_channel)
+        result_path = self.path_manager.get_result_path("depth")
+        np.save(result_path, grayscale_channel)
 
-class RenderThermal():
 
+class RenderThermal:
     def __init__(self):
         import mitsuba as mi
         mi.set_variant('cuda_ad_spectral')
         self.mi = mi
+        self.path_manager = PathManager
 
     def render(self):
-        scene = self.mi.load_file(config.SCENE_THERMAL_DIR)
+        scene_path = self.path_manager.get_scene_path("thermal")
+        scene = self.mi.load_file(scene_path)
 
         image = self.mi.render(scene)
 
         # Convertir la imagen a numpy array
         image_array = np.array(image)
 
-        # crear carpeta si no existe
-        os.makedirs(config.OUTPUT_STATIC_RESULT_DIR, exist_ok=True)
+        # Crear carpeta si no existe
+        os.makedirs(OUTPUT_STATIC_RESULT_DIR, exist_ok=True)
 
-        contribution_blackbody_air = np.load(config.CONTRIBUTION_BLACKBODY_AIR_DIR)
+        contribution_path = self.path_manager.get_result_path("contribution_blackbody_air")
+        contribution_blackbody_air = np.load(contribution_path)
 
         image_array = image_array + contribution_blackbody_air
 
         # Guardar toda la información (todos los canales)
-        np.save(config.THERMAL_DIR, image_array)
+        result_path = self.path_manager.get_result_path("thermal")
+        np.save(result_path, image_array)
 
     def render_blackbody_air(self):
-
-        scene = self.mi.load_file(config.SCENE_BLACKBODY_AIR)
+        scene_path = self.path_manager.get_scene_path("blackbody_air")
+        scene = self.mi.load_file(scene_path)
 
         image = self.mi.render(scene)
 
         # Convertir la imagen a numpy array
         image_array = np.array(image)
 
-        # crear carpeta si no existe
-        os.makedirs(config.OUTPUT_STATIC_RESULT_DIR, exist_ok=True)
+        # Crear carpeta si no existe
+        os.makedirs(OUTPUT_STATIC_RESULT_DIR, exist_ok=True)
 
         # Guardar toda la información (todos los canales)
-        np.save(config.BLACKBODY_AIR_DIR, image_array)
+        result_path = self.path_manager.get_result_path("blackbody_air")
+        np.save(result_path, image_array)
 
     def render_transmittance_blackbody_air(self):
-        scene = self.mi.load_file(config.SCENE_TRANSMITTANCE_BLACKBODY_AIR)
+        scene_path = self.path_manager.get_scene_path("transmittance_blackbody_air")
+        scene = self.mi.load_file(scene_path)
 
         image = self.mi.render(scene)
 
         # Convertir la imagen a numpy array
         image_array = np.array(image)
 
-        # crear carpeta si no existe
-        os.makedirs(config.OUTPUT_STATIC_RESULT_DIR, exist_ok=True)
+        # Crear carpeta si no existe
+        os.makedirs(OUTPUT_STATIC_RESULT_DIR, exist_ok=True)
 
         # Guardar toda la información (todos los canales)
-        np.save(config.TRANSMITTANCE_BLACKBODY_AIR_DIR, image_array)
+        result_path = self.path_manager.get_result_path("transmittance_blackbody_air")
+        np.save(result_path, image_array)
 
     def render_temperature_map(self):
-        scene = self.mi.load_file(config.SCENE_TEMPERATURE_MAP)
+        scene_path = self.path_manager.get_scene_path("temperature_map")
+        scene = self.mi.load_file(scene_path)
 
         image = self.mi.render(scene)
 
@@ -135,9 +146,10 @@ class RenderThermal():
         else:
             image_array = image_array.squeeze()
 
-        # crear carpeta si no existe
-        os.makedirs(config.OUTPUT_STATIC_RESULT_DIR, exist_ok=True)
+        # Crear carpeta si no existe
+        os.makedirs(OUTPUT_STATIC_RESULT_DIR, exist_ok=True)
 
         # Guardar toda la información (todos los canales)
-        np.save(config.TEMPERATURE_MAP_DIR, image_array)
+        result_path = self.path_manager.get_result_path("temperature_map")
+        np.save(result_path, image_array)
 

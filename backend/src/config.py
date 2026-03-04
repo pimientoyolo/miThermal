@@ -1,5 +1,5 @@
 """
-Configuración global del proyecto
+Configuración global del proyecto - Simplificada
 """
 
 import json
@@ -7,7 +7,7 @@ import shutil
 from pathlib import Path
 from typing import Dict, Any
 
-# Rutas del proyecto
+# Rutas base del proyecto
 PROJECT_ROOT = Path(__file__).parent.parent
 SRC_DIR = PROJECT_ROOT / "src"
 ASSETS_DIR = PROJECT_ROOT / "assets"
@@ -17,49 +17,135 @@ NOTEBOOKS_DIR = PROJECT_ROOT / "notebooks"
 TESTS_DIR = PROJECT_ROOT / "tests"
 SCRIPTS_DIR = PROJECT_ROOT / "scripts"
 
-# Crear directorios de salida si no existen
-OUTPUT_DIR.mkdir(exist_ok=True)
-(OUTPUT_DIR / "renders").mkdir(exist_ok=True)
-(OUTPUT_DIR / "simulations").mkdir(exist_ok=True)
-(OUTPUT_DIR / "logs").mkdir(exist_ok=True)
-(OUTPUT_DIR / "exports").mkdir(exist_ok=True)
-(OUTPUT_DIR / "static").mkdir(exist_ok=True)
-(OUTPUT_DIR / "static" / "result").mkdir(exist_ok=True)
-
-# Copiar archivo air.txt por defecto si no existe
-_air_output = OUTPUT_DIR / "static" / "air.txt"
-_air_default = ASSETS_DIR / "reference_data" / "air.txt"
-if not _air_output.exists() and _air_default.exists():
-    shutil.copy(_air_default, _air_output)
-
-# scenes dir
-SCENE_DIR = str(OUTPUT_DIR / "static" / "scene.xml")
-SCENE_THERMAL_DIR = str(OUTPUT_DIR / "static" / "scene_thermal.xml")
-SCENE_DEPTH_DIR = str(OUTPUT_DIR / "static" / "scene_depth.xml")
-SCENE_BLACKBODY_AIR = str(OUTPUT_DIR / "static" / "scene_blackbody_air.xml")
-SCENE_TRANSMITTANCE_BLACKBODY_AIR = str(OUTPUT_DIR / "static" / "scene_transmittance_blackbody_air.xml")
-SCENE_TEMPERATURE_MAP = str(OUTPUT_DIR / "static" / "scene_temperature_map.xml")
-
-## OTHER FILES
+# Directorios de salida
 OUTPUT_STATIC_DIR = OUTPUT_DIR / "static"
-SCENE_ZIP = str(OUTPUT_DIR / "static" / "scene.zip")
-CONFIG_SCENE = str(OUTPUT_DIR / "static" / "config_scene.json")
-DEFAULT_EMISSIVITY_FILE = str(ASSETS_DIR / "materials" / "default.txt")  # (mantener por retrocompatibilidad con código existente)
-AIR_ATTENUATION_FILE = str(OUTPUT_STATIC_DIR / "air.txt")
-MITHERMAL_SCENE_FILE = str(OUTPUT_DIR / "miThermal.zip")
-DEFAULT_SCENES_DIR = str(ASSETS_DIR / "mitsuba_scenes")
-DEFAULT_EMISIVITY_DIR = str(ASSETS_DIR / "signatures")
-DEFAULT_ATTENNUATION_DIR = str(ASSETS_DIR / "reference_data")
+OUTPUT_STATIC_RESULT_DIR = OUTPUT_STATIC_DIR / "result"
 
-# resultados
-OUTPUT_STATIC_RESULT_DIR = OUTPUT_DIR / "static" / "result"
-IMAGE_DIR = str(OUTPUT_STATIC_RESULT_DIR / "rgb.png")
-DEPTH_DIR = str(OUTPUT_STATIC_RESULT_DIR / "depth.npy")
-THERMAL_DIR = str(OUTPUT_STATIC_RESULT_DIR / "thermal.npy")
-BLACKBODY_AIR_DIR = str(OUTPUT_STATIC_RESULT_DIR / "blackbody_air.npy")
-TRANSMITTANCE_BLACKBODY_AIR_DIR = str(OUTPUT_STATIC_RESULT_DIR / "transmittance_blackbody_air.npy")
-CONTRIBUTION_BLACKBODY_AIR_DIR = str(OUTPUT_STATIC_RESULT_DIR / "contribution_blackbody_air.npy")
-TEMPERATURE_MAP_DIR = str(OUTPUT_STATIC_RESULT_DIR / "temperature_map.npy")
+# Directorios de assets
+DEFAULT_SCENES_DIR = ASSETS_DIR / "mitsuba_scenes"
+DEFAULT_EMISIVITY_DIR = ASSETS_DIR / "signatures"
+DEFAULT_ATTENNUATION_DIR = ASSETS_DIR / "reference_data"
+
+# Crear directorios necesarios
+def _setup_directories():
+    """Crea los directorios de salida necesarios"""
+    OUTPUT_DIR.mkdir(exist_ok=True)
+    (OUTPUT_DIR / "renders").mkdir(exist_ok=True)
+    (OUTPUT_DIR / "simulations").mkdir(exist_ok=True)
+    (OUTPUT_DIR / "logs").mkdir(exist_ok=True)
+    (OUTPUT_DIR / "exports").mkdir(exist_ok=True)
+    OUTPUT_STATIC_DIR.mkdir(exist_ok=True)
+    OUTPUT_STATIC_RESULT_DIR.mkdir(exist_ok=True)
+    
+    # Copiar archivo air.txt por defecto si no existe
+    _air_output = OUTPUT_STATIC_DIR / "air.txt"
+    _air_default = DEFAULT_ATTENNUATION_DIR / "air.txt"
+    if not _air_output.exists() and _air_default.exists():
+        shutil.copy(_air_default, _air_output)
+
+_setup_directories()
+
+
+class PathManager:
+    """Gestor centralizado de rutas del proyecto"""
+    
+    @staticmethod
+    def get_scene_path(scene_type: str = "rgb") -> str:
+        """
+        Obtiene la ruta del archivo de escena según el tipo.
+        
+        Args:
+            scene_type: Tipo de escena (rgb, thermal, depth, blackbody_air, 
+                       transmittance_blackbody_air, temperature_map)
+        
+        Returns:
+            Ruta del archivo de escena XML
+        """
+        scene_files = {
+            "rgb": "scene.xml",
+            "thermal": "scene_thermal.xml",
+            "depth": "scene_depth.xml",
+            "blackbody_air": "scene_blackbody_air.xml",
+            "transmittance_blackbody_air": "scene_transmittance_blackbody_air.xml",
+            "temperature_map": "scene_temperature_map.xml",
+        }
+        return str(OUTPUT_STATIC_DIR / scene_files.get(scene_type, "scene.xml"))
+    
+    @staticmethod
+    def get_result_path(result_type: str) -> str:
+        """
+        Obtiene la ruta del archivo de resultado según el tipo.
+        
+        Args:
+            result_type: Tipo de resultado (rgb, depth, thermal, blackbody_air, 
+                        transmittance_blackbody_air, contribution_blackbody_air, temperature_map)
+        
+        Returns:
+            Ruta del archivo de resultado
+        """
+        result_files = {
+            "rgb": "rgb.png",
+            "depth": "depth.npy",
+            "thermal": "thermal.npy",
+            "blackbody_air": "blackbody_air.npy",
+            "transmittance_blackbody_air": "transmittance_blackbody_air.npy",
+            "contribution_blackbody_air": "contribution_blackbody_air.npy",
+            "temperature_map": "temperature_map.npy",
+        }
+        return str(OUTPUT_STATIC_RESULT_DIR / result_files[result_type])
+    
+    @staticmethod
+    def get_config_scene_path() -> str:
+        """Obtiene la ruta del archivo de configuración de escena"""
+        return str(OUTPUT_STATIC_DIR / "config_scene.json")
+    
+    @staticmethod
+    def get_air_attenuation_path() -> str:
+        """Obtiene la ruta del archivo de atenuación del aire"""
+        return str(OUTPUT_STATIC_DIR / "air.txt")
+    
+    @staticmethod
+    def get_scene_zip_path() -> str:
+        """Obtiene la ruta del archivo ZIP de escena"""
+        return str(OUTPUT_STATIC_DIR / "scene.zip")
+    
+    @staticmethod
+    def get_default_emissivity_path() -> str:
+        """Obtiene la ruta del archivo de emisividad por defecto"""
+        return str(ASSETS_DIR / "materials" / "default.txt")
+    
+    @staticmethod
+    def get_mithermal_scene_path() -> str:
+        """Obtiene la ruta del archivo miThermal.zip"""
+        return str(OUTPUT_DIR / "miThermal.zip")
+
+
+# Retrocompatibilidad: mantener estas variables para código legacy
+SCENE_DIR = PathManager.get_scene_path("rgb")
+SCENE_THERMAL_DIR = PathManager.get_scene_path("thermal")
+SCENE_DEPTH_DIR = PathManager.get_scene_path("depth")
+SCENE_BLACKBODY_AIR = PathManager.get_scene_path("blackbody_air")
+SCENE_TRANSMITTANCE_BLACKBODY_AIR = PathManager.get_scene_path("transmittance_blackbody_air")
+SCENE_TEMPERATURE_MAP = PathManager.get_scene_path("temperature_map")
+
+IMAGE_DIR = PathManager.get_result_path("rgb")
+DEPTH_DIR = PathManager.get_result_path("depth")
+THERMAL_DIR = PathManager.get_result_path("thermal")
+BLACKBODY_AIR_DIR = PathManager.get_result_path("blackbody_air")
+TRANSMITTANCE_BLACKBODY_AIR_DIR = PathManager.get_result_path("transmittance_blackbody_air")
+CONTRIBUTION_BLACKBODY_AIR_DIR = PathManager.get_result_path("contribution_blackbody_air")
+TEMPERATURE_MAP_DIR = PathManager.get_result_path("temperature_map")
+
+CONFIG_SCENE = PathManager.get_config_scene_path()
+AIR_ATTENUATION_FILE = PathManager.get_air_attenuation_path()
+SCENE_ZIP = PathManager.get_scene_zip_path()
+DEFAULT_EMISSIVITY_FILE = PathManager.get_default_emissivity_path()
+MITHERMAL_SCENE_FILE = PathManager.get_mithermal_scene_path()
+
+# Para strings
+DEFAULT_SCENES_DIR = str(DEFAULT_SCENES_DIR)
+DEFAULT_EMISIVITY_DIR = str(DEFAULT_EMISIVITY_DIR)
+DEFAULT_ATTENNUATION_DIR = str(DEFAULT_ATTENNUATION_DIR)
 
 # Configuración de Mitsuba
 MITSUBA_CONFIG = {

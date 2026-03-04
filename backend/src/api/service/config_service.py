@@ -3,26 +3,29 @@ import io
 import os
 from src.api.dto.cameraDTO import CameraDTO, UpdateCameraDTO
 from src.api.service.scene_service import SceneService
-import src.config as config
+from src.config import PathManager, DEFAULT_ATTENNUATION_DIR, get_config_scene_dict, save_config_scene_dict
 import numpy as np
 
 from fastapi import HTTPException, UploadFile
 
-from src.mitsuba_core.object_utils import ObjectUtils
+from src.utils.objects.objects import ObjectUtils
+from src.utils.decorators import log_execution, handle_file_errors
 
 
 logger = logging.getLogger(__name__)
 
 scene_service = SceneService()
 object_utils = ObjectUtils()
+path_manager = PathManager
 
 class ConfigService:
     def __init__(self):
         self.logger = logger
 
+    @log_execution()
     def get_camera_config(self) -> CameraDTO:
         
-        scene_config = config.get_config_scene_dict()
+        scene_config = get_config_scene_dict()
 
         camera_dto = CameraDTO(
             spp=scene_config["camera"]["spp"],
@@ -41,9 +44,10 @@ class ConfigService:
 
         return camera_dto
 
+    @log_execution()
     def update_camera_config(self, camera_update: UpdateCameraDTO) -> CameraDTO:
 
-        scene_config = config.get_config_scene_dict()
+        scene_config = get_config_scene_dict()
 
         scene_config["camera"]["spp"] = camera_update.spp
         scene_config["camera"]["width"] = camera_update.width
@@ -87,7 +91,7 @@ class ConfigService:
             fov=scene_config["camera"]["fov"]
         )
 
-        config.save_config_scene_dict(scene_config)
+        save_config_scene_dict(scene_config)
 
         scene_service.update_scene_camera_rgb()
         scene_service.update_scene_camera_thermal()
@@ -98,20 +102,21 @@ class ConfigService:
 
         return updated_camera
 
+    @log_execution()
     def update_wavelengths(self, w_min: int, w_max: int, bands: int) -> CameraDTO:
 
         # validar que w_max sea mayor que w_min
         if w_max < w_min:
             raise HTTPException(status_code=400, detail="El maximo debe ser mayor que el minimo")
 
-        scene_config = config.get_config_scene_dict()
+        scene_config = get_config_scene_dict()
 
         wavelengths = np.linspace(w_min, w_max, bands, endpoint=True, dtype=int).tolist()
 
         scene_config["wavelengths"] = wavelengths
         scene_config["num_bands"] = bands
 
-        config.save_config_scene_dict(scene_config)
+        save_config_scene_dict(scene_config)
 
         update = scene_service.update_film_spectrum()
 
@@ -123,21 +128,23 @@ class ConfigService:
 
         return self.get_camera_config()
     
+    @log_execution()
     def get_air_temperature(self) -> float:
-        scene_config = config.get_config_scene_dict()
+        scene_config = get_config_scene_dict()
         return scene_config["air"]["temperature"]
     
+    @log_execution()
     def set_air_temperature(self, temperature: float):
 
         # validar temperatura mayor a 0
         if temperature <= 0:
             raise HTTPException(status_code=400, detail="La temperatura debe ser superior a 0 (cero absoluto no permitido)")
 
-        scene_config = config.get_config_scene_dict()
+        scene_config = get_config_scene_dict()
 
         scene_config["air"]["temperature"] = temperature
 
-        config.save_config_scene_dict(scene_config)
+        save_config_scene_dict(scene_config)
 
         scene_service.update_thermal_scene_air()
         scene_service.prepare_blackbody_air_scene()
@@ -145,6 +152,8 @@ class ConfigService:
         scene_service.prepare_depth_scene()
         scene_service.prepare_temperature_map()
 
+    @log_execution()
+    @handle_file_errors()
     def set_air_attenuation(self, file: UploadFile) -> str:
 
         if not file or not file.filename:
@@ -155,7 +164,7 @@ class ConfigService:
 
         # Nota: Por ahora no guardamos ni comparamos con wavelengths de config hasta validar todo correctamente
 
-        scene_config = config.get_config_scene_dict()
+        scene_config = get_config_scene_dict()
 
         wavelengths_nm = np.array(scene_config["wavelengths"], dtype=int)
         w_min = wavelengths_nm.min() / 1000.0  # um
@@ -176,7 +185,8 @@ class ConfigService:
                 raise HTTPException(status_code=400, detail="El archivo debe tener el mismo número de valores en ambas columnas")
             
             # Guardar el archivo en la ubicación configurada
-            with open(config.AIR_ATTENUATION_FILE, "wb") as f:
+            air_attenuation_path = path_manager.get_air_attenuation_path()
+            with open(air_attenuation_path, "wb") as f:
                 f.write(raw)
 
             mensaje = ""
@@ -254,8 +264,7 @@ class ConfigService:
     
     def suggest_air_attenuation(self) -> list[str]:
 
-        path = config.DEFAULT_ATTENNUATION_DIR
-        path = os.fspath(path)
+        path = os.fspath(DEFAULT_ATTENNUATION_DIR)
 
         if not os.path.exists(path):
             raise HTTPException(status_code=404, detail=f"Directorio no encontrado: {path}")
@@ -269,8 +278,7 @@ class ConfigService:
         
     def set_air_attenuation_by_filename(self, file_name: str) -> str:
 
-        path = config.DEFAULT_ATTENNUATION_DIR
-        path = os.fspath(path)
+        path = os.fspath(DEFAULT_ATTENNUATION_DIR)
 
         # Validaciones de entrada
         if not file_name:
@@ -296,7 +304,8 @@ class ConfigService:
 
         data = np.column_stack((wavelengths_nm / 1000.0, sigma_t))  # Convertir nm a um
 
-        np.savetxt(config.AIR_ATTENUATION_FILE, data, delimiter='\t')
+        air_attenuation_path = path_manager.get_air_attenuation_path()
+        np.savetxt(air_attenuation_path, data, delimiter='\t')
 
         scene_service.update_thermal_scene_air()
         scene_service.prepare_blackbody_air_scene()

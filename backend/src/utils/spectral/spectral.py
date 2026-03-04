@@ -10,8 +10,7 @@ from scipy import interpolate
 import pandas as pd
 import matplotlib.pyplot as plt
 import os
-import sys
-from typing import Tuple, Optional, Union, List, Any
+from typing import Tuple, Optional, Union
 
 def load_spectral_data(csv_path: str) -> Tuple[np.ndarray, np.ndarray]:
     """

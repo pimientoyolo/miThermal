@@ -7,66 +7,77 @@ from fastapi.responses import FileResponse
 
 import os
 import glob
-import zipfile
 import shutil
 import json
-from src.mitsuba_core.object_utils import ObjectUtils
-from src.mitsuba_core.scene_parser import SceneParser
-from src.mitsuba_core.sensor_utils import create_specfilm_bands
+from src.utils.objects.objects import ObjectUtils
+from src.utils.scene.parser import SceneParser
+from src.utils.sensors.sensors import create_specfilm_bands
+from src.utils.decorators import log_execution, handle_file_errors
+from src.utils.helpers import rotation_matrix_x, rotation_matrix_y, rotation_matrix_z, clamp_value
+from src.atmosphere import read_air_attenuation_file, create_homogeneous_medium, get_attenuation
 import numpy as np
-import src.config as config
+from src.config import (
+    PathManager, 
+    OUTPUT_STATIC_DIR, 
+    OUTPUT_STATIC_RESULT_DIR, 
+    OUTPUT_DIR,
+    ASSETS_DIR,
+    DEFAULT_SCENES_DIR,
+    get_config_scene_dict
+)
+from src.api.service.base_services import BaseService, ZipHandler, FileHandler
+from src.utils.cache import get_cache_manager
 
 object_utils = ObjectUtils()
+path_manager = PathManager
 
 logger = logging.getLogger(__name__)
 
-_emission_cache: dict[tuple[str, float], tuple[dict, dict]] = {}
 
-
-class SceneService:
+class SceneService(BaseService):
+    
     def __init__(self):
-        self.logger = logger
+        super().__init__()
         self.scene_parser = SceneParser()
+        self.zip_handler = ZipHandler(self.logger)
+        self.file_handler = FileHandler(self.logger)
 
     def load_scene(self, file: UploadFile):
-        # Verificar si el archivo es un ZIP
+        """Carga escena desde archivo ZIP usando ZipHandler."""
+        # Validar que sea ZIP
         if not file.filename.endswith('.zip'):
             raise HTTPException(status_code=400, detail="El archivo debe ser un archivo ZIP")
 
-        # Eliminar todo el contenido del directorio
-        if os.path.exists(config.OUTPUT_STATIC_DIR):
-            try:
-                shutil.rmtree(config.OUTPUT_STATIC_DIR)
-                os.makedirs(config.OUTPUT_STATIC_DIR)
-            except OSError as e:
-                self.logger.warning(f"Error al limpiar directorio {config.OUTPUT_STATIC_DIR}: {e}")
-                os.makedirs(config.OUTPUT_STATIC_DIR)
-
-        # Recrear subdirectorios necesarios
-        os.makedirs(os.path.join(config.OUTPUT_STATIC_DIR, "result"), exist_ok=True)
-
-        # guardar archivo zip
-        with open(config.SCENE_ZIP, "wb") as buffer:
+        # Guardar ZIP temporal
+        scene_zip_path = path_manager.get_scene_zip_path()
+        with open(scene_zip_path, "wb") as buffer:
             buffer.write(file.file.read())
 
-        # descomprimir archivo zip
-        with zipfile.ZipFile(config.SCENE_ZIP, 'r') as zip_ref:
-            zip_ref.extractall(config.OUTPUT_STATIC_DIR)
+        # Limpiar y extraer con ZipHandler (reemplaza 20+ líneas)
+        self.zip_handler.clear_and_extract(scene_zip_path, OUTPUT_STATIC_DIR)
+        
+        # Recrear subdirectorios y archivo air.txt de referencia
+        os.makedirs(OUTPUT_STATIC_RESULT_DIR, exist_ok=True)
+        air_file = os.path.join(OUTPUT_STATIC_DIR, "air.txt")
+        air_default = os.path.join(ASSETS_DIR, "reference_data", "air.txt")
+        if not os.path.exists(air_file) and os.path.exists(air_default):
+            shutil.copy(air_default, air_file)
 
         # buscar y renombrar .xml
-        xml_files = glob.glob(os.path.join(config.OUTPUT_STATIC_DIR, "*.xml"))
+        xml_files = glob.glob(os.path.join(OUTPUT_STATIC_DIR, "*.xml"))
         logger.info(f"Archivos XML encontrados: {xml_files}")
         if len(xml_files) != 1:
             logger.error(f"Se esperaba exactamente 1 archivo XML, pero se encontraron {len(xml_files)}")
             raise HTTPException(status_code=400, detail="Debe haber exactamente un archivo XML en el ZIP")
 
         xml_file = xml_files[0]
-        os.rename(xml_file, config.SCENE_DIR)
+        scene_rgb_path = path_manager.get_scene_path("rgb")
+        os.rename(xml_file, scene_rgb_path)
 
         config_scene = {}
         T = 300
 
-        scene_dict = self.get_dict_scene(config.SCENE_DIR)
+        scene_dict = self.get_dict_scene(scene_rgb_path)
 
         # cambiar el spp de la scenea por defecto
         scene_dict['scene']['default'][0]['@value'] = 256
@@ -90,7 +101,7 @@ class SceneService:
 
 
         # guardar scene_dict como JSON
-        json_output_path = os.path.join(config.OUTPUT_DIR, "scene.json")
+        json_output_path = os.path.join(OUTPUT_DIR, "scene.json")
         with open(json_output_path, 'w') as json_file:
             json.dump(scene_dict, json_file, indent=2)
             
@@ -100,7 +111,7 @@ class SceneService:
         if scene_dict and "scene" in scene_dict and "shape" in scene_dict["scene"]:
             shapes = scene_dict["scene"]["shape"]
             config_scene["objects"] = {}  # inicializar como diccionario
-            emissivity_file = config.DEFAULT_EMISSIVITY_FILE
+            emissivity_file = path_manager.get_default_emissivity_path()
             logger.warning(f"Usando archivo de emisividad por defecto: {emissivity_file}")
 
             if isinstance(shapes, list):
@@ -113,11 +124,11 @@ class SceneService:
                         "emissivity_file": emissivity_file
                     }
 
-                    dir_file = os.path.join(config.OUTPUT_STATIC_DIR, id)
+                    dir_file = os.path.join(OUTPUT_STATIC_DIR, id)
                     logger.info(f"Buscando archivo del objeto '{id}' en: {dir_file}")
                     if not os.path.exists(dir_file):
                         # Listar archivos disponibles para debug
-                        available = os.listdir(config.OUTPUT_STATIC_DIR)
+                        available = os.listdir(OUTPUT_STATIC_DIR)
                         logger.error(f"No se encontró '{id}'. Archivos disponibles: {available}")
                         raise HTTPException(status_code=400, detail=f"No se encontró el archivo del objeto: {id}")
 
@@ -130,11 +141,11 @@ class SceneService:
                     "emissivity_file": emissivity_file
                 }
 
-                dir_file = os.path.join(config.OUTPUT_STATIC_DIR, id)
+                dir_file = os.path.join(OUTPUT_STATIC_DIR, id)
                 logger.info(f"Buscando archivo del objeto '{id}' en: {dir_file}")
                 if not os.path.exists(dir_file):
                     # Listar archivos disponibles para debug
-                    available = os.listdir(config.OUTPUT_STATIC_DIR)
+                    available = os.listdir(OUTPUT_STATIC_DIR)
                     logger.error(f"No se encontró '{id}'. Archivos disponibles: {available}")
                     raise HTTPException(status_code=400, detail=f"No se encontró el archivo del objeto: {id}")
 
@@ -144,7 +155,7 @@ class SceneService:
         wavelengths = np.linspace(10000, 12000, 10, endpoint=True, dtype=int)
 
         # Obtener longitudes de onda y atenuación desde archivo de referencia
-        object_utils.get_attenuation()
+        get_attenuation()
         num_bands = len(wavelengths)
 
         config_scene["air"] = {
@@ -235,13 +246,14 @@ class SceneService:
         config_scene["wavelengths"] = wavelengths.tolist()
 
         # guardar cambios en scene.xml
-        self.scene_parser.save_dict_as_xml(scene_dict, config.SCENE_DIR)
+        self.scene_parser.save_dict_as_xml(scene_dict, scene_rgb_path)
 
         # guardar config_scene como JSON
-        with open(config.CONFIG_SCENE, 'w') as f:
+        config_scene_path = path_manager.get_config_scene_path()
+        with open(config_scene_path, 'w') as f:
             json.dump(config_scene, f, indent=4)
 
-        logger.warning(f"Escena cargada con éxito. Configuración guardada en {config.CONFIG_SCENE}")
+        logger.warning(f"Escena cargada con éxito. Configuración guardada en {config_scene_path}")
 
     def has_loaded_scene(self, scene_dir: str) -> bool:
         """
@@ -260,7 +272,7 @@ class SceneService:
         Crea una escena térmica básica copiando scene.xml a scene_thermal.xml y cambiando el tipo de integrador a 'specfilm'.
         """
         # Cargar configuración JSON desde el directorio de la escena
-        config_scene = config.get_config_scene_dict()
+        config_scene = get_config_scene_dict()
 
         num_bands = config_scene["num_bands"]
         wavelengths = config_scene["wavelengths"]
@@ -272,9 +284,10 @@ class SceneService:
                 detail=f"El número de bandas ({num_bands}) no coincide con las longitudes ({len(wavelengths)})"
             )
 
-        if os.path.exists(config.SCENE_DIR):
-            thermal_xml = config.SCENE_THERMAL_DIR
-            shutil.copyfile(config.SCENE_DIR, thermal_xml)
+        scene_rgb_path = path_manager.get_scene_path("rgb")
+        if os.path.exists(scene_rgb_path):
+            thermal_xml = path_manager.get_scene_path("thermal")
+            shutil.copyfile(scene_rgb_path, thermal_xml)
             scene_dict = self.get_dict_scene(thermal_xml)
 
             # Cambiar el tipo de film y configurar sampler
@@ -365,7 +378,7 @@ class SceneService:
             # Crear valores de sigma_t para el medium (coeficiente de extinción)
             # Valores típicos para niebla en infrarrojo lejano
             t_air = config_scene["air"]["temperature"]
-            wavelengths_air, sigma_t_values = object_utils.read_air_attenuation_file()
+            wavelengths_air, sigma_t_values = read_air_attenuation_file()
 
             emission_air = object_utils.blackbody_radiance_nm(wavelengths_air, t_air)
 
@@ -374,8 +387,8 @@ class SceneService:
             # Agregar emisor de aire a la escena
             scene_dict["scene"]["emitter"] = emitter_air_dict
             
-            # Crear el medium usando la función de object_utils
-            medium_dict = object_utils.create_homogeneous_medium(
+            # Crear el medium usando la función de atmosphere
+            medium_dict = create_homogeneous_medium(
                 wavelengths=wavelengths_air,
                 sigma_t=sigma_t_values,
                 medium_id="fog",
@@ -395,8 +408,9 @@ class SceneService:
         """
         Prepara la escena para la renderización en profundidad.
         """
-        depth_xml = config.SCENE_DEPTH_DIR
-        shutil.copyfile(config.SCENE_DIR, depth_xml)
+        scene_rgb_path = path_manager.get_scene_path("rgb")
+        depth_xml = path_manager.get_scene_path("depth")
+        shutil.copyfile(scene_rgb_path, depth_xml)
         scene_dict = self.get_dict_scene(depth_xml)
         if scene_dict and "scene" in scene_dict:
             # Modificar la escena según sea necesario para la renderización en profundidad
@@ -411,13 +425,14 @@ class SceneService:
         """
         Prepara la escena para renderización de cuerpo negro del aire.
         """
+        thermal_path = path_manager.get_scene_path("thermal")
         # Verificar si existe la escena térmica, si no, crearla
-        if not os.path.exists(config.SCENE_THERMAL_DIR):
+        if not os.path.exists(thermal_path):
             self.prepare_thermal_scene()
 
         # Crear la escena de blackbody air copiando la escena térmica
-        blackbody_air_xml = config.SCENE_BLACKBODY_AIR
-        shutil.copyfile(config.SCENE_THERMAL_DIR, blackbody_air_xml)
+        blackbody_air_xml = path_manager.get_scene_path("blackbody_air")
+        shutil.copyfile(thermal_path, blackbody_air_xml)
         scene_dict = self.get_dict_scene(blackbody_air_xml)
 
         # Eliminar todos los objetos de la escena (shapes)
@@ -438,19 +453,20 @@ class SceneService:
         """
         Prepara la escena para renderización de transmitancia de cuerpo negro del aire.
         """
+        thermal_path = path_manager.get_scene_path("thermal")
         # Verificar si existe la escena térmica, si no, crearla
-        if not os.path.exists(config.SCENE_THERMAL_DIR):
+        if not os.path.exists(thermal_path):
             self.prepare_thermal_scene()
 
         # Crear la escena de transmitancia blackbody air copiando la escena térmica
-        transmittance_blackbody_air_xml = config.SCENE_TRANSMITTANCE_BLACKBODY_AIR
-        shutil.copyfile(config.SCENE_THERMAL_DIR, transmittance_blackbody_air_xml)
+        transmittance_blackbody_air_xml = path_manager.get_scene_path("transmittance_blackbody_air")
+        shutil.copyfile(thermal_path, transmittance_blackbody_air_xml)
         scene_dict = self.get_dict_scene(transmittance_blackbody_air_xml)
 
-        config_scene = config.get_config_scene_dict()
+        config_scene = get_config_scene_dict()
 
         t_air = config_scene["air"]["temperature"]
-        wavelengths_air, _ = object_utils.read_air_attenuation_file()
+        wavelengths_air, _ = read_air_attenuation_file()
 
         emission_air = object_utils.blackbody_radiance_nm(wavelengths_air, t_air)
 
@@ -484,16 +500,17 @@ class SceneService:
         """
         Prepara la escena para renderización de la temperatura de los objetos.
         """
+        thermal_path = path_manager.get_scene_path("thermal")
         # Verificar si existe la escena térmica, si no, crearla
-        if not os.path.exists(config.SCENE_THERMAL_DIR):
+        if not os.path.exists(thermal_path):
             self.prepare_thermal_scene()
 
         # Crear la escena de transmitancia blackbody air copiando la escena térmica
-        temperature_map_xml = config.SCENE_TEMPERATURE_MAP
-        shutil.copyfile(config.SCENE_THERMAL_DIR, temperature_map_xml)
+        temperature_map_xml = path_manager.get_scene_path("temperature_map")
+        shutil.copyfile(thermal_path, temperature_map_xml)
         scene_dict = self.get_dict_scene(temperature_map_xml)
 
-        config_scene = config.get_config_scene_dict()
+        config_scene = get_config_scene_dict()
 
         wavelengths = config_scene["wavelengths"]
 
@@ -556,9 +573,10 @@ class SceneService:
         Actualiza un objeto específico en la escena térmica con sus nuevas propiedades.
         """
         # Cargar configuración JSON desde el directorio de la escena
-        config_scene = config.get_config_scene_dict()
+        config_scene = get_config_scene_dict()
 
-        scene_dict = self.get_dict_scene(config.SCENE_THERMAL_DIR)
+        thermal_path = path_manager.get_scene_path("thermal")
+        scene_dict = self.get_dict_scene(thermal_path)
         
         # Verificar que el objeto existe en la configuración
         if object_id not in config_scene:
@@ -583,10 +601,13 @@ class SceneService:
                 for i, shape in enumerate(shapes):
                     shape_id = shape["string"]["@value"]
                     if shape_id == object_id:
-                        cache_key = (emissivity_file, temperature)
-                        if cache_key in _emission_cache:
+                        # Intentar obtener del cache persistente
+                        cache = get_cache_manager()
+                        result = cache.get(emissivity_file, temperature)
+                        
+                        if result is not None:
                             # Cargar de cache
-                            dict_reflectance, dict_emission = _emission_cache[cache_key]
+                            dict_reflectance, dict_emission = result
                         else:
                             # Calcular y guardar en cache
                             radiance = object_utils.blackbody_radiance_nm(wavelengths_obj, temperature)
@@ -594,7 +615,7 @@ class SceneService:
                             reflectance = 1 - np.array(emissivity)
                             dict_reflectance = object_utils.create_reflectance_material(wavelengths_obj, reflectance)
                             dict_emission = object_utils.create_spectral_emitter(wavelengths_obj, emission)
-                            _emission_cache[cache_key] = (dict_reflectance, dict_emission)
+                            cache.set(emissivity_file, temperature, dict_reflectance, dict_emission)
 
                         # Actualizar solo este objeto
                         shape["emitter"] = dict_emission
@@ -606,10 +627,13 @@ class SceneService:
                 # Para un solo shape
                 shape_id = shapes["string"]["@value"]
                 if shape_id == object_id:
-                    cache_key = (emissivity_file, temperature)
-                    if cache_key in _emission_cache:
+                    # Intentar obtener del cache persistente
+                    cache = get_cache_manager()
+                    result = cache.get(emissivity_file, temperature)
+                    
+                    if result is not None:
                         # Cargar de cache
-                        dict_reflectance, dict_emission = _emission_cache[cache_key]
+                        dict_reflectance, dict_emission = result
                     else:
                         # Calcular y guardar en cache
                         radiance = object_utils.blackbody_radiance_nm(wavelengths_obj, temperature)
@@ -617,6 +641,8 @@ class SceneService:
                         reflectance = 1 - np.array(emissivity)
                         dict_reflectance = object_utils.create_reflectance_material(wavelengths_obj, reflectance)
                         dict_emission = object_utils.create_spectral_emitter(wavelengths_obj, emission)
+                        cache.set(emissivity_file, temperature, dict_reflectance, dict_emission)
+                    
                     shapes["emitter"] = dict_emission
                     shapes['bsdf'] = dict_reflectance
                     object_found = True
@@ -629,7 +655,7 @@ class SceneService:
         
         # Guardar la escena térmica actualizada
         if scene_dict:
-            self.scene_parser.save_dict_as_xml(scene_dict, config.SCENE_THERMAL_DIR)
+            self.scene_parser.save_dict_as_xml(scene_dict, thermal_path)
 
     # Caché global en memoria
 
@@ -641,8 +667,9 @@ class SceneService:
         """
 
         # Cargar configuración y escena térmica
-        config_scene = config.get_config_scene_dict()
-        scene_dict = self.get_dict_scene(config.SCENE_THERMAL_DIR)
+        config_scene = get_config_scene_dict()
+        thermal_path = path_manager.get_scene_path("thermal")
+        scene_dict = self.get_dict_scene(thermal_path)
 
         if not (scene_dict and "scene" in scene_dict and "shape" in scene_dict["scene"]):
             raise HTTPException(status_code=404, detail="No se encontró la escena térmica")
@@ -666,12 +693,13 @@ class SceneService:
             emissivity_file = config_scene["objects"][object_id]["emissivity_file"]
             temperature = config_scene["objects"][object_id]["temperature"]
 
-            # Clave única para el cache
-            cache_key = (emissivity_file, temperature)
-
-            if cache_key in _emission_cache:
+            # Intentar obtener del cache persistente
+            cache = get_cache_manager()
+            result = cache.get(emissivity_file, temperature)
+            
+            if result is not None:
                 # Cargar de cache
-                dict_reflectance, dict_emission = _emission_cache[cache_key]
+                dict_reflectance, dict_emission = result
             else:
                 # Calcular y guardar en cache
                 wavelengths_obj, emissivity = object_utils.read_object_emissivity_file(object_id)
@@ -683,23 +711,24 @@ class SceneService:
                 dict_reflectance = object_utils.create_reflectance_material(wavelengths_obj, reflectance)
                 dict_emission = object_utils.create_spectral_emitter(wavelengths_obj, emission)
 
-                _emission_cache[cache_key] = (dict_reflectance, dict_emission)
+                cache.set(emissivity_file, temperature, dict_reflectance, dict_emission)
 
             # Actualizar shape
             shape["emitter"] = dict_emission
             shape["bsdf"] = dict_reflectance
 
         # Guardar la escena actualizada
-        self.scene_parser.save_dict_as_xml(scene_dict, config.SCENE_THERMAL_DIR)
+        self.scene_parser.save_dict_as_xml(scene_dict, thermal_path)
 
     def update_thermal_scene_air(self):
         """
         Actualiza las propiedades del aire en la escena térmica con sus nuevas propiedades.
         Refresca el espectro del film (sensor espectral) según las nuevas longitudes de onda.
         """
-        config_scene = config.get_config_scene_dict()
+        config_scene = get_config_scene_dict()
 
-        scene_dict = self.get_dict_scene(config.SCENE_THERMAL_DIR)
+        thermal_path = path_manager.get_scene_path("thermal")
+        scene_dict = self.get_dict_scene(thermal_path)
 
         if not scene_dict or "scene" not in scene_dict:
             raise HTTPException(status_code=404, detail="Escena térmica no encontrada para actualizar aire")
@@ -709,7 +738,7 @@ class SceneService:
 
         # Datos de aire
         t_air = config_scene["air"]["temperature"]
-        wavelengths, sigma_t_values = object_utils.read_air_attenuation_file()
+        wavelengths, sigma_t_values = read_air_attenuation_file()
 
         # Recalcular emisión del aire
         emission_air = object_utils.blackbody_radiance_nm(wavelengths, t_air)
@@ -717,7 +746,7 @@ class SceneService:
         scene_dict["scene"]["emitter"] = emitter_air_dict
 
         # Medium actualizado
-        medium_dict = object_utils.create_homogeneous_medium(
+        medium_dict = create_homogeneous_medium(
             wavelengths=wavelengths,
             sigma_t=sigma_t_values,
             medium_id="fog",
@@ -726,7 +755,7 @@ class SceneService:
         scene_dict["scene"]["medium"] = medium_dict
 
         # Guardar la escena modificada como XML
-        self.scene_parser.save_dict_as_xml(scene_dict, config.SCENE_THERMAL_DIR)
+        self.scene_parser.save_dict_as_xml(scene_dict, thermal_path)
 
     def update_film_spectrum(self) -> bool:
         """
@@ -735,10 +764,11 @@ class SceneService:
 
         Retorna True si se actualizó, False si no se encontró sensor/film.
         """
-        config_scene = config.get_config_scene_dict()
+        config_scene = get_config_scene_dict()
         wavelengths = config_scene["wavelengths"]
 
-        scene_dict = self.get_dict_scene(config.SCENE_THERMAL_DIR)
+        thermal_path = path_manager.get_scene_path("thermal")
+        scene_dict = self.get_dict_scene(thermal_path)
 
         if not scene_dict or "scene" not in scene_dict:
             return False
@@ -750,19 +780,20 @@ class SceneService:
         film["@type"] = "specfilm"
         film["spectrum"] = create_specfilm_bands(wavelengths)
 
-        self.scene_parser.save_dict_as_xml(scene_dict, config.SCENE_THERMAL_DIR)
+        self.scene_parser.save_dict_as_xml(scene_dict, thermal_path)
 
         return True
     
     def update_scene_camera_rgb(self):
-        scene_dict = self.get_dict_scene(config.SCENE_DIR)
+        scene_rgb_path = path_manager.get_scene_path("rgb")
+        scene_dict = self.get_dict_scene(scene_rgb_path)
 
         if not scene_dict or "scene" not in scene_dict or "default" not in scene_dict["scene"]:
             raise HTTPException(status_code=400, detail="No se encontraron parámetros por defecto en la escena")
 
         defaults = scene_dict["scene"]["default"]
 
-        cam_cfg = config.get_config_scene_dict().get("camera", {})
+        cam_cfg = get_config_scene_dict().get("camera", {})
         spp = cam_cfg.get("spp", 256)
         width = cam_cfg.get("width", 256)
         height = cam_cfg.get("height", 256)
@@ -834,17 +865,18 @@ class SceneService:
 
         # Guardar la escena modificada como XML
         if scene_dict:
-            self.scene_parser.save_dict_as_xml(scene_dict, config.SCENE_DIR)
+            self.scene_parser.save_dict_as_xml(scene_dict, scene_rgb_path)
 
     def update_scene_camera_thermal(self):
-        scene_dict = self.get_dict_scene(config.SCENE_THERMAL_DIR)
+        thermal_path = path_manager.get_scene_path("thermal")
+        scene_dict = self.get_dict_scene(thermal_path)
 
         if not scene_dict or "scene" not in scene_dict or "default" not in scene_dict["scene"]:
             raise HTTPException(status_code=400, detail="No se encontraron parámetros por defecto en la escena térmica")
 
         defaults = scene_dict["scene"]["default"]
 
-        cam_cfg = config.get_config_scene_dict().get("camera", {})
+        cam_cfg = get_config_scene_dict().get("camera", {})
         spp = cam_cfg.get("spp", 256)
         width = cam_cfg.get("width", 256)
         height = cam_cfg.get("height", 256)
@@ -916,66 +948,42 @@ class SceneService:
 
         # Guardar la escena modificada como XML
         if scene_dict:
-            self.scene_parser.save_dict_as_xml(scene_dict, config.SCENE_THERMAL_DIR)
+            self.scene_parser.save_dict_as_xml(scene_dict, thermal_path)
 
     def get_scene_mi_thermal(self) -> FileResponse:
+        """Crea ZIP con escena actual usando ZipHandler."""
         
-        path = str(config.OUTPUT_STATIC_DIR)
-        zip_filename = config.MITHERMAL_SCENE_FILE 
+        path = str(OUTPUT_STATIC_DIR)
+        zip_filename = path_manager.get_mithermal_scene_path() 
 
-        # eliminar el zip si ya existe
-        if os.path.exists(zip_filename):
-            os.remove(zip_filename)
+        # Una sola línea reemplaza todo el código de crear ZIP manualmente
+        self.zip_handler.create_zip_from_directory(path, zip_filename)
 
-        # crear el zip con zipfile
-        with zipfile.ZipFile(zip_filename, "w", compression=zipfile.ZIP_STORED, compresslevel=0) as zf:
-            for root, _, files in os.walk(path):
-                for file in files:
-                    abs_path = os.path.join(root, file)
-                    rel_path = os.path.relpath(abs_path, path) 
-                    zf.write(abs_path, rel_path)
-
-        # devolverlo como respuesta
+        # Devolverlo como respuesta
         return FileResponse(zip_filename, media_type="application/zip", filename="miThermal.zip")
     
     def upload_mi_thermal_scene(self, file: UploadFile) -> None:
-        path = str(config.OUTPUT_STATIC_DIR)
-        zip_path = config.MITHERMAL_SCENE_FILE
+        """Carga escena miThermal desde ZIP usando ZipHandler."""
+        path = str(OUTPUT_STATIC_DIR)
+        zip_path = path_manager.get_mithermal_scene_path()
 
-        # Vaciar el directorio 'path' antes de extraer el ZIP
-        if os.path.exists(path):
-            for entry in os.listdir(path):
-                entry_path = os.path.join(path, entry)
-                try:
-                    if os.path.isdir(entry_path):
-                        shutil.rmtree(entry_path)
-                    else:
-                        os.remove(entry_path)
-                except OSError as e:
-                    self.logger.warning(f"Error al eliminar {entry_path}: {e}")
-        else:
-            os.makedirs(path, exist_ok=True)
-        
-        # Recrear subdirectorios necesarios
-        os.makedirs(os.path.join(path, "result"), exist_ok=True)
-        
-        # Recrear archivo air.txt si no existe
-        air_file = os.path.join(path, "air.txt")
-        air_default = os.path.join(config.ASSETS_DIR, "reference_data", "air.txt")
-        if not os.path.exists(air_file) and os.path.exists(air_default):
-            shutil.copy(air_default, air_file)
-        
+        # Guardar ZIP temporalmente
         with open(zip_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(config.OUTPUT_STATIC_DIR)
+        # Limpiar y extraer (una sola línea reemplaza 20+ líneas)
+        self.zip_handler.clear_and_extract(zip_path, OUTPUT_STATIC_DIR)
         
-        os.remove(zip_path)
+        # Recrear subdirectorios y archivo air.txt de referencia
+        os.makedirs(os.path.join(path, "result"), exist_ok=True)
+        air_file = os.path.join(path, "air.txt")
+        air_default = os.path.join(ASSETS_DIR, "reference_data", "air.txt")
+        if not os.path.exists(air_file) and os.path.exists(air_default):
+            shutil.copy(air_default, air_file)
     
     def get_suggested_mi_thermal_scene(self) -> list[str]:
         
-        path = config.DEFAULT_SCENES_DIR
+        path = DEFAULT_SCENES_DIR
 
         if not os.path.isdir(path):
             return []
@@ -983,74 +991,193 @@ class SceneService:
         files.sort(key=str.lower)
         return files
     
+    @log_execution()
+    @handle_file_errors()
     def set_default_scene(self, scene_name: str) -> None:
         """
-        Copia un archivo ZIP de escena por defecto al directorio de salida y lo descomprime.
+        Copia una escena por defecto al directorio de salida.
+        Simplificada con ZipHandler.
         """
-        default_scene_path = os.path.join(config.DEFAULT_SCENES_DIR, scene_name)
+        default_scene_path = os.path.join(DEFAULT_SCENES_DIR, scene_name)
         if not os.path.isfile(default_scene_path):
             raise HTTPException(status_code=404, detail=f"No se encontró la escena por defecto: {scene_name}")
         
-        path = str(config.OUTPUT_STATIC_DIR)
-        zip_filename = config.MITHERMAL_SCENE_FILE 
+        path = str(OUTPUT_STATIC_DIR)
+        zip_filename = path_manager.get_mithermal_scene_path()
 
-        # eliminar el zip si ya existe
-        if os.path.exists(zip_filename):
-            os.remove(zip_filename)
+        # Copiar archivo ZIP
+        shutil.copyfile(default_scene_path, zip_filename)
 
-        # Vaciar el directorio 'path' antes de extraer el ZIP
-        if os.path.exists(path):
-            for entry in os.listdir(path):
-                entry_path = os.path.join(path, entry)
-                try:
-                    if os.path.isdir(entry_path):
-                        shutil.rmtree(entry_path)
-                    else:
-                        os.remove(entry_path)
-                except OSError as e:
-                    self.logger.warning(f"Error al eliminar {entry_path}: {e}")
-        else:
-            os.makedirs(path, exist_ok=True)
+        # Limpiar y extraer con ZipHandler (reemplaza 25+ líneas)
+        self.zip_handler.clear_and_extract(zip_filename, path)
         
-        # Recrear subdirectorios necesarios
-        os.makedirs(os.path.join(path, "result"), exist_ok=True)
-        
-        # Recrear archivo air.txt si no existe
+        # Recrear archivo air.txt de referencia
         air_file = os.path.join(path, "air.txt")
-        air_default = os.path.join(config.ASSETS_DIR, "reference_data", "air.txt")
+        air_default = os.path.join(ASSETS_DIR, "reference_data", "air.txt")
         if not os.path.exists(air_file) and os.path.exists(air_default):
             shutil.copy(air_default, air_file)
 
-        # copiar el archivo zip
-        shutil.copyfile(default_scene_path, zip_filename)
+    def generate_camera_animation(self, origin: list, end: list, tracked_point: list, num_steps: int = 30) -> list[dict]:
+        """
+        Genera una lista de configuraciones de cámara interpoladas para animación.
+        
+        Args:
+            origin: Coordenadas [x, y, z] del punto inicial de la cámara
+            end: Coordenadas [x, y, z] del punto final de la cámara
+            tracked_point: Punto [x, y, z] al que la cámara siempre mira
+            num_steps: Número de frames a generar (default: 30)
+            
+        Returns:
+            Lista de diccionarios con configuración de cámara para cada frame
+        """
+        try:
+            camera_frames = generate_camera_interpolation(origin, end, tracked_point, num_steps)
+            self.logger.info(f"Generada interpolación de cámara con {num_steps} frames")
+            return camera_frames
+        except Exception as e:
+            self.logger.error(f"Error al generar interpolación de cámara: {e}")
+            raise HTTPException(status_code=500, detail=f"Error al generar interpolación: {str(e)}")
 
-        # extraer el zip
-        with zipfile.ZipFile(zip_filename, "r") as zf:
-            zf.extractall(path)
+    def render_camera_animation_sequence(self, camera_frames: list[dict]) -> str:
+        """
+        Renderiza una secuencia completa de frames de animación.
+        
+        Para cada frame: actualiza la configuración de cámara, actualiza las escenas
+        y renderiza todos los tipos (RGB, depth, thermal, etc.).
+        Los resultados se guardan en output/renders/animation/frame_XXXX/
+        
+        Args:
+            camera_frames: Lista de configuraciones de cámara generadas por generate_camera_animation
+            
+        Returns:
+            Ruta del archivo ZIP con todos los renders
+        """
+        from src.api.service.render_service import RenderService
+        from src.config import save_config_scene_dict
+        import zipfile
+        
+        render_service = RenderService()
+        
+        # Crear carpeta de animación
+        animation_dir = OUTPUT_DIR / "renders" / "animation"
+        animation_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Limpiar carpeta anterior si existe
+        if animation_dir.exists():
+            shutil.rmtree(animation_dir)
+        animation_dir.mkdir(parents=True, exist_ok=True)
+        
+        total_frames = len(camera_frames)
+        self.logger.info(f"Iniciando renderizado de {total_frames} frames")
+        
+        # Obtener configuración actual
+        config_scene = get_config_scene_dict()
+        
+        for idx, frame_config in enumerate(camera_frames):
+            frame_num = idx + 1
+            self.logger.info(f"Renderizando frame {frame_num}/{total_frames}")
+            
+            # Crear carpeta para este frame
+            frame_dir = animation_dir / f"frame_{frame_num:04d}"
+            frame_dir.mkdir(exist_ok=True)
+            
+            # Actualizar configuración de cámara
+            config_scene["camera"].update({
+                "translate_x": frame_config["translate_x"],
+                "translate_y": frame_config["translate_y"],
+                "translate_z": frame_config["translate_z"],
+                "rotate_x": frame_config["rotate_x"],
+                "rotate_y": frame_config["rotate_y"],
+                "rotate_z": frame_config["rotate_z"],
+            })
+            save_config_scene_dict(config_scene)
+            
+            # Actualizar escenas XML con la nueva posición de cámara
+            self.update_scene_camera_rgb()
+            self.update_scene_camera_thermal()
+            
+            # Renderizar todos los tipos
+            try:
+                # RGB
+                render_service.render_basic_scene()
+                rgb_src = path_manager.get_result_path("rgb")
+                if os.path.exists(rgb_src):
+                    shutil.copy(rgb_src, frame_dir / "rgb.png")
+                
+                # Depth
+                render_service.render_depth_image()
+                depth_src = path_manager.get_result_path("depth")
+                if os.path.exists(depth_src):
+                    shutil.copy(depth_src, frame_dir / "depth.npy")
+                
+                # Thermal
+                render_service.render_thermal_image()
+                thermal_src = path_manager.get_result_path("thermal")
+                if os.path.exists(thermal_src):
+                    shutil.copy(thermal_src, frame_dir / "thermal.npy")
+                
+                # Blackbody Air
+                try:
+                    blackbody_src = path_manager.get_result_path("blackbody_air")
+                    if os.path.exists(blackbody_src):
+                        shutil.copy(blackbody_src, frame_dir / "blackbody_air.npy")
+                except Exception:
+                    pass
+                
+                # Transmittance Blackbody Air
+                try:
+                    trans_src = path_manager.get_result_path("transmittance_blackbody_air")
+                    if os.path.exists(trans_src):
+                        shutil.copy(trans_src, frame_dir / "transmittance_blackbody_air.npy")
+                except Exception:
+                    pass
+                
+                # Contribution Air
+                try:
+                    contrib_src = path_manager.get_result_path("contribution_blackbody_air")
+                    if os.path.exists(contrib_src):
+                        shutil.copy(contrib_src, frame_dir / "contribution_blackbody_air.npy")
+                except Exception:
+                    pass
+                
+                # Temperature Map
+                try:
+                    render_service.render_temperature_map()
+                    tmap_src = path_manager.get_result_path("temperature_map")
+                    if os.path.exists(tmap_src):
+                        shutil.copy(tmap_src, frame_dir / "temperature_map.npy")
+                except Exception:
+                    pass
+                    
+            except Exception as e:
+                self.logger.error(f"Error renderizando frame {frame_num}: {e}")
+                # Continuar con el siguiente frame
+                continue
+        
+        # Crear ZIP con todos los frames
+        zip_path = OUTPUT_DIR / "renders" / "animation.zip"
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            for frame_dir in sorted(animation_dir.glob("frame_*")):
+                for file in frame_dir.glob("*"):
+                    arcname = f"{frame_dir.name}/{file.name}"
+                    zipf.write(file, arcname)
+        
+        self.logger.info(f"Animación completada: {total_frames} frames renderizados en {zip_path}")
+        return str(zip_path)
 
 
-# --- Rotaciones básicas ---
-def Rx(d):
-    r = np.deg2rad(d)
-    c, s = np.cos(r), np.sin(r)
-    return np.array([[1, 0, 0], [0, c, -s], [0, s, c]], float)
-
-def Ry(d):
-    r = np.deg2rad(d)
-    c, s = np.cos(r), np.sin(r)
-    return np.array([[c, 0, s], [0, 1, 0], [-s, 0, c]], float)
-
-def Rz(d):
-    r = np.deg2rad(d)
-    c, s = np.cos(r), np.sin(r)
-    return np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]], float)
+# --- Rotaciones básicas (usar helpers de geometría) ---
+# Aliases para compatibilidad con código existente
+Rx = rotation_matrix_x
+Ry = rotation_matrix_y
+Rz = rotation_matrix_z
 
 # --- Euler intrínseco XYZ con vectores-columna: R = Rz(z) @ Ry(y) @ Rx(x) ---
 def euler_to_R_intrinsic_xyz(x,y,z):
     return Rz(z) @ Ry(y) @ Rx(x)
 
-def clamp(v, lo=-1.0, hi=1.0): 
-    return max(lo, min(hi, v))
+# Alias para compatibilidad
+clamp = clamp_value
 
 def R_to_euler_intrinsic_xyz(R):
     """
@@ -1152,3 +1279,82 @@ def mitsuba_cam_to_blender_xyz(xm,ym,zm, assume_variant="plugin"):
 
     # 5) Euler XYZ de Blender
     return R_to_euler_intrinsic_xyz(RB)
+
+
+# =========================
+#   INTERPOLACIÓN DE CÁMARA
+# =========================
+def calculate_look_at_blender(cam_pos: np.ndarray, target_pos: np.ndarray):
+    """
+    Calcula los ángulos de Euler XYZ (en grados) para que una cámara en Blender
+    (mirando hacia -Z local) apunte hacia target_pos.
+    
+    Args:
+        cam_pos: Posición de la cámara [x, y, z]
+        target_pos: Posición del objetivo [x, y, z]
+        
+    Returns:
+        Tuple de ángulos Euler (x, y, z) en grados
+    """
+    # Eje Z global en Blender es 'Arriba'
+    up_global = np.array([0.0, 0.0, 1.0])
+    
+    # Vector hacia el objetivo
+    forward = _norm(target_pos - cam_pos)
+    
+    # Manejar caso en el que estamos mirando directamente hacia arriba o abajo
+    if abs(np.dot(forward, up_global)) > 0.999:
+        # Cambiar ligeramente el up global para evitar un producto cruz nulo
+        up_global = np.array([0.0, 1.0, 0.0])
+        
+    right = _norm(np.cross(forward, up_global))
+    up = np.cross(right, forward)
+    
+    # Matriz de rotación en Blender: columnas = (Right, Up, -Forward)
+    R = np.column_stack([right, up, -forward])
+    
+    # Usar función existente para descomponer a (x,y,z) intrínsecos en grados
+    euler_angles = R_to_euler_intrinsic_xyz(R)
+    return euler_angles
+
+
+def generate_camera_interpolation(origin, end, tracked_point, num_steps=30):
+    """
+    Genera una lista de diccionarios de configuración de cámara interpolada.
+    
+    Args:
+        origin (list|tuple): Coordenadas [x, y, z] del inicio.
+        end (list|tuple): Coordenadas [x, y, z] del final.
+        tracked_point (list|tuple): Punto de interés [x, y, z] a mirar.
+        num_steps (int): Cantidad de pasos (frames) a generar.
+        
+    Returns:
+        List[dict]: Lista con las configuraciones (translate y rotate) para cada paso.
+    """
+    origin_np = np.array(origin, dtype=float)
+    end_np = np.array(end, dtype=float)
+    target_np = np.array(tracked_point, dtype=float)
+    
+    camera_frames = []
+    
+    for i in range(num_steps):
+        # t va de 0.0 a 1.0
+        t = i / max(1, (num_steps - 1))
+        
+        # Interpolación Lineal (LERP) de la posición
+        current_pos = origin_np * (1.0 - t) + end_np * t
+        
+        # Calcular los ángulos Euler en Blender
+        rot_x, rot_y, rot_z = calculate_look_at_blender(current_pos, target_np)
+        
+        frame_config = {
+            "translate_x": float(current_pos[0]),
+            "translate_y": float(current_pos[1]),
+            "translate_z": float(current_pos[2]),
+            "rotate_x": rot_x,
+            "rotate_y": rot_y,
+            "rotate_z": rot_z
+        }
+        camera_frames.append(frame_config)
+        
+    return camera_frames

@@ -3,11 +3,22 @@ import json
 import numpy as np
 from pathlib import Path
 from fastapi import HTTPException
-from src.mitsuba_core.scene_parser import SceneParser
+from src.utils.scene.parser import SceneParser
 from src.api.dto.suggestDTO import SuggestDTO
 from scipy import constants as const
 import shutil
-import src.config as config
+from src.config import (
+    DEFAULT_EMISSIVITY_FILE,
+    OUTPUT_STATIC_DIR,
+    get_config_scene_dict
+)
+
+# Importar funciones de atmósfera desde su módulo dedicado
+from src.atmosphere import (
+    get_attenuation as _get_attenuation,
+    read_air_attenuation_file as _read_air_attenuation_file,
+    create_homogeneous_medium as _create_homogeneous_medium,
+)
 
 # open3d es opcional; importarlo de forma segura
 try:
@@ -38,6 +49,9 @@ class ObjectUtils:
         "O3.txt",        # Ozono
         "enclosure.txt"  # mezcla de varios
     ]
+    
+    # Cache de base de datos de materiales (lazy loading)
+    _material_database_cache = None
 
 
     
@@ -199,14 +213,23 @@ class ObjectUtils:
 
     def load_material_database(self):
         """
-        Carga la base de datos de materiales espectrales.
+        Carga la base de datos de materiales espectrales con lazy loading.
+        
+        La primera vez que se llama, carga la base de datos desde disco y la cachea en memoria.
+        Llamadas subsecuentes retornan el cache, evitando lecturas repetidas (~200-500ms ahorro).
         
         Returns:
             tuple: (material_names, material_library) donde:
                 - material_names: array con los nombres de los materiales
                 - material_library: array con las firmas espectrales de los materiales
         """
+        # Retornar cache si ya está cargado
+        if ObjectUtils._material_database_cache is not None:
+            return ObjectUtils._material_database_cache
+        
         try:
+            self.logger.info("Cargando base de datos de materiales (primera vez)...")
+            
             # Cargar nombres de materiales
             database_names = np.load(self.MATERIAL_NAMES_DB_PATH, allow_pickle=True).item()["matName"]
             database_names = database_names.squeeze()
@@ -217,6 +240,9 @@ class ObjectUtils:
 
             self.logger.info(f"Base de datos cargada: {database_names.shape} nombres, {database_lib.shape} firmas espectrales")
 
+            # Guardar en cache para próximas llamadas
+            ObjectUtils._material_database_cache = (database_names, database_lib)
+            
             return database_names, database_lib
             
         except Exception as e:
@@ -343,6 +369,9 @@ class ObjectUtils:
         """
         Crea un diccionario para un medium homogéneo con coeficiente de extinción espectral.
         
+        DEPRECATED: Use src.atmosphere.create_homogeneous_medium directly.
+        This method is kept for backwards compatibility.
+        
         Args:
             wavelengths (np.ndarray): Array con las longitudes de onda en nanómetros
             sigma_t (np.ndarray): Array con los valores de coeficiente de extinción sigma_t
@@ -355,152 +384,34 @@ class ObjectUtils:
         Raises:
             HTTPException: Si las longitudes de los arrays no coinciden
         """
-        try:
-            # Validar que ambos arrays tengan la misma longitud
-            if len(wavelengths) != len(sigma_t):
-                raise HTTPException(
-                    status_code=400, 
-                    detail=f"Las longitudes no coinciden: wavelengths={len(wavelengths)}, sigma_t={len(sigma_t)}"
-                )
-            
-            # Crear el diccionario del medium con estructura para XML según documentación Mitsuba
-            medium_dict = {
-                "@type": "homogeneous",
-                "@id": medium_id,
-                "rgb": {
-                    "@name": "albedo", 
-                    "@value": "0.0, 0.0, 0.0"
-                },
-                "spectrum": {
-                    "@type": "irregular",
-                    "@name": "sigma_t",
-                    "string": [
-                        {"@name": "wavelengths", "@value": self.lista_a_string(wavelengths)},
-                        {"@name": "values", "@value": self.lista_a_string(sigma_t)},
-                    ]
-                },
-                "phase": {
-                    "@type": "hg",
-                    "float": {
-                        "@name": "g",
-                        "@value": str(g_value)
-                    }
-                }
-            }
-            
-            self.logger.info(f"Medium homogéneo creado con ID '{medium_id}' y g={g_value}")
-            
-            return medium_dict
-            
-        except HTTPException:
-            raise
-        except Exception as e:
-            self.logger.error(f"Error creando medium homogéneo: {e}")
-            raise HTTPException(status_code=500, detail=f"Error al crear medium homogéneo: {e}")
+        return _create_homogeneous_medium(wavelengths, sigma_t, medium_id, g_value)
 
     def get_attenuation(self, attenuation_file: str = "air.txt") -> tuple[np.ndarray, np.ndarray]:
         """
-        Lee el archivo de atenuación completo y retorna dos arrays alineados:
-        - wavelengths_nm: longitudes de onda en nanómetros (nm) obtenidas del archivo (columna 0 en µm convertida a nm)
-        - sigma_t_neper: coeficientes de extinción en neper (Np), obtenidos de la columna 2 multiplicada por ln(10)/10
-
-        El resultado se ordena de mayor a menor longitud de onda, preservando el pareo (wavelength, sigma_t).
-
+        Lee el archivo de atenuación completo y retorna dos arrays alineados.
+        
+        DEPRECATED: Use src.atmosphere.get_attenuation directly.
+        This method is kept for backwards compatibility.
+        
         Args:
             attenuation_file (str): Nombre del archivo de atenuación (sin extensión) en assets/reference_data.
 
         Returns:
             tuple[np.ndarray, np.ndarray]: (wavelengths_nm_desc, sigma_t_neper_desc)
         """
-
-        try:
-            # Construir la ruta del archivo
-            file_path = f"{config.DEFAULT_ATTENNUATION_DIR}/{attenuation_file}"
-
-            # Validar que el archivo existe
-            if not Path(file_path).exists():
-                available_files = [f.replace('.txt', '') for f in self.ATMOSPHERIC_GAS_FILES]
-                raise HTTPException(
-                    status_code=404,
-                    detail=f"Archivo '{attenuation_file}.txt' no encontrado. Disponibles: {available_files}"
-                )
-
-            # Cargar los datos del archivo
-            trans_array = np.loadtxt(file_path)
-
-            # Columnas esperadas: [wavelength_um, transmittance, attenuation]
-            wavelengths_um = trans_array[:, 0].astype(float)
-            attenuation_vals = trans_array[:, 2].astype(float)
-
-            # Convertir longitudes de onda a nm
-            wavelengths_nm = wavelengths_um * 1000.0
-
-            # Convertir atenuación a neper: multiplicar por ln(10)/10
-            sigma_t_neper = attenuation_vals * (np.log(10.0) / 10.0)
-
-            # Ordenar de menor a mayor por longitud de onda, manteniendo pares
-            order = np.argsort(wavelengths_nm)
-            wavelengths_nm_desc = wavelengths_nm[order]
-            sigma_t_neper_desc = sigma_t_neper[order]
-
-            # Guardar a archivo tab-delimitado (wavelength_nm, sigma_t_neper)
-            out_path = Path(config.AIR_ATTENUATION_FILE)
-            try:
-                out_path.parent.mkdir(parents=True, exist_ok=True)
-                data = np.column_stack((wavelengths_um, sigma_t_neper))
-                np.savetxt(out_path, data, delimiter='\t')
-            except Exception as save_err:
-                # No detener el flujo si falla el guardado; reportar y continuar
-                self.logger.warning(f"No se pudo guardar archivo de atenuación en '{config.AIR_ATTENUATION_FILE}': {save_err}")
-
-            return wavelengths_nm_desc, sigma_t_neper_desc
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            self.logger.error(f"Error obteniendo atenuación de '{attenuation_file}': {e}")
-            raise HTTPException(status_code=500, detail=f"Error al procesar archivo de atenuación: {e}")
+        return _get_attenuation(attenuation_file)
 
     def read_air_attenuation_file(self) -> tuple[np.ndarray, np.ndarray]:
         """
-        Lee el archivo configurado en config.AIR_ATTENUATION_FILE (dos columnas: wavelength, sigma_t),
-        asumiendo que la primera columna está en micrómetros (µm). Convierte las longitudes a nanómetros (nm)
-        y retorna ambas columnas ordenadas de mayor a menor longitud de onda.
+        Lee el archivo configurado en AIR_ATTENUATION_FILE.
+        
+        DEPRECATED: Use src.atmosphere.read_air_attenuation_file directly.
+        This method is kept for backwards compatibility.
 
         Returns:
             tuple[np.ndarray, np.ndarray]: (wavelengths_nm_desc, sigma_t_desc)
         """
-        try:
-            path = Path(config.AIR_ATTENUATION_FILE)
-            if not path.exists():
-                raise HTTPException(status_code=404, detail=f"No existe el archivo de atenuación: {path}")
-
-            data = np.loadtxt(path)
-
-            # Manejar casos de una sola fila
-            if data.ndim == 1:
-                if data.size < 2:
-                    raise HTTPException(status_code=400, detail="El archivo debe tener al menos dos columnas")
-                data = data.reshape(1, -1)
-
-            if data.shape[1] < 2:
-                raise HTTPException(status_code=400, detail="El archivo debe tener dos columnas: wavelength_um y sigma_t")
-
-            wavelengths_um = data[:, 0].astype(float)
-            sigma_t = data[:, 1].astype(float)
-
-            wavelengths_nm = wavelengths_um * 1000.0
-
-            order = np.argsort(wavelengths_nm)
-            wavelengths_nm_desc = wavelengths_nm[order]
-            sigma_t_desc = sigma_t[order]
-
-            return wavelengths_nm_desc, sigma_t_desc
-        except HTTPException:
-            raise
-        except Exception as e:
-            self.logger.error(f"Error leyendo '{config.AIR_ATTENUATION_FILE}': {e}")
-            raise HTTPException(status_code=500, detail=f"Error al leer archivo de atenuación del aire: {e}")
+        return _read_air_attenuation_file()
     
     def save_new_emissivity(self, object_id: str, wavelengths_nm: np.ndarray, emissivity: np.ndarray) -> None:
         """
@@ -516,7 +427,7 @@ class ObjectUtils:
             HTTPException: Si ocurre algún error durante el guardado
         """
         try:
-            path_static = config.OUTPUT_STATIC_DIR
+            path_static = OUTPUT_STATIC_DIR
             base_out = Path(path_static)
 
             obj_path = Path(object_id)
@@ -538,9 +449,9 @@ class ObjectUtils:
     
     def save_default_emissivity(self, object_id: str) -> None:
         
-        path_default = config.DEFAULT_EMISSIVITY_FILE
+        path_default = DEFAULT_EMISSIVITY_FILE
         self.valid_exist_file(path_default)
-        path_static = config.OUTPUT_STATIC_DIR
+        path_static = OUTPUT_STATIC_DIR
 
         try:
             src_path = Path(path_default)
@@ -622,7 +533,7 @@ class ObjectUtils:
         abre el archivo .txt correspondiente en OUTPUT_STATIC_DIR y retorna
         (wavelengths_nm, emissivity) usando read_reflectance_file_as_emissivity.
         """
-        config_scene = config.get_config_scene_dict()
+        config_scene = get_config_scene_dict()
         emissivity_file = config_scene.get("objects", {}).get(object_id, {}).get("emissivity_file", None)
 
         # Si la configuración tiene un archivo asociado y existe, úsalo
@@ -630,7 +541,7 @@ class ObjectUtils:
             return self.read_reflectance_file_as_emissivity(emissivity_file)
 
         # Intentar localizar un archivo .txt bajo OUTPUT_STATIC_DIR siguiendo el object_id
-        base_out = Path(config.OUTPUT_STATIC_DIR)
+        base_out = Path(OUTPUT_STATIC_DIR)
         obj_path = Path(object_id)
         if obj_path.is_absolute():
             obj_path = obj_path.relative_to(obj_path.anchor)
@@ -649,16 +560,3 @@ class ObjectUtils:
 
         self.logger.warning(f"No se encontró archivo de emisividad para objeto '{object_id}'")
         raise HTTPException(status_code=404, detail="Archivo de emisividad no encontrado")
-        #     obj_path = Path(object_id)
-        #     if obj_path.is_absolute():
-        #         obj_path = obj_path.relative_to(obj_path.anchor)
-
-        #     txt_path = base_out / obj_path.with_suffix(".txt")
-        #     return self.read_reflectance_file_as_emissivity(str(txt_path))
-        # except HTTPException:
-        #     raise
-        # except Exception as e:
-        #     self.logger.error(f"Error leyendo emisividad para objeto '{object_id}': {e}")
-        #     raise HTTPException(status_code=500, detail="Error al leer archivo de emisividad del objeto")
-        
-    

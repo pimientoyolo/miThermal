@@ -4,16 +4,17 @@ Controller para manejo de objetos 3D
 """
 from src.api.dto.objectDTO import ObjectDTO, UpdateObjectDTO
 from src.api.dto.suggestDTO import SuggestDTO
-from src.mitsuba_core.object_utils import ObjectUtils
+from src.utils.objects.objects import ObjectUtils
 from src.api.service.obj_service import ObjService
 from fastapi.responses import FileResponse
 from fastapi import APIRouter, File, Query, UploadFile, Form
-from src.config import SCENE_DIR
+from src.config import PathManager
 import json
 
 
 object_utils = ObjectUtils()
 object_service = ObjService()
+path_manager = PathManager
 
 obj_router = APIRouter(
     prefix="/object",
@@ -22,7 +23,8 @@ obj_router = APIRouter(
 
 @obj_router.get("/suggest")
 async def suggest_objects() -> list[SuggestDTO]:
-    objects = object_utils.get_suggested_object(SCENE_DIR)
+    scene_rgb_path = path_manager.get_scene_path("rgb")
+    objects = object_utils.get_suggested_object(scene_rgb_path)
     return objects
 
 @obj_router.get("/file/id")

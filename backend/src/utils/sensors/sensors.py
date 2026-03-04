@@ -5,7 +5,6 @@ Este módulo contiene funciones para crear y configurar sensores en Mitsuba con
 respuestas espectrales gaussianas, así como para ajustar el campo de visión (FOV)
 según la distancia para mantener un ángulo sólido constante.
 """
-import mitsuba as mi
 import math
 import numpy as np
 #from .visualization_utils import lista_a_string
