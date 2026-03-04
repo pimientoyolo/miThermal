@@ -93,8 +93,7 @@ class ConfigService:
 
         save_config_scene_dict(scene_config)
 
-        scene_service.update_scene_camera_rgb()
-        scene_service.update_scene_camera_thermal()
+        scene_service.update_scene_camera_all()
         scene_service.prepare_blackbody_air_scene()
         scene_service.prepare_depth_scene()
         scene_service.prepare_transmittance_blackbody_air_scene()

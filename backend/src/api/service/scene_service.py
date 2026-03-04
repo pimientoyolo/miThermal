@@ -784,12 +784,22 @@ class SceneService(BaseService):
 
         return True
     
-    def update_scene_camera_rgb(self):
-        scene_rgb_path = path_manager.get_scene_path("rgb")
-        scene_dict = self.get_dict_scene(scene_rgb_path)
+    def _update_scene_camera_for_type(self, scene_type: str):
+        scene_path = path_manager.get_scene_path(scene_type)
+
+        if not os.path.exists(scene_path):
+            self.logger.warning(
+                f"No existe escena '{scene_type}' en {scene_path}. Se omite actualización de cámara."
+            )
+            return
+
+        scene_dict = self.get_dict_scene(scene_path)
 
         if not scene_dict or "scene" not in scene_dict or "default" not in scene_dict["scene"]:
-            raise HTTPException(status_code=400, detail="No se encontraron parámetros por defecto en la escena")
+            raise HTTPException(
+                status_code=400,
+                detail=f"No se encontraron parámetros por defecto en la escena '{scene_type}'"
+            )
 
         defaults = scene_dict["scene"]["default"]
 
@@ -811,7 +821,16 @@ class SceneService(BaseService):
 
         scene = scene_dict["scene"]
         sensor = scene.get("sensor")
+        if sensor is None:
+            raise HTTPException(
+                status_code=400,
+                detail=f"No se encontró sensor en la escena '{scene_type}'"
+            )
+
         transform = sensor.get("transform")
+        if transform is None:
+            sensor["transform"] = {}
+            transform = sensor["transform"]
 
         angles = blender_cam_to_mitsuba_xyz(rx, ry, rz)
 
@@ -862,93 +881,34 @@ class SceneService(BaseService):
                         "@value": str(fov)
                     }
                 ]
+        else:
+            sensor["float"] = {
+                "@name": "fov",
+                "@value": str(fov)
+            }
 
         # Guardar la escena modificada como XML
         if scene_dict:
-            self.scene_parser.save_dict_as_xml(scene_dict, scene_rgb_path)
+            self.scene_parser.save_dict_as_xml(scene_dict, scene_path)
+
+    def update_scene_camera_rgb(self):
+        self._update_scene_camera_for_type("rgb")
 
     def update_scene_camera_thermal(self):
-        thermal_path = path_manager.get_scene_path("thermal")
-        scene_dict = self.get_dict_scene(thermal_path)
+        self._update_scene_camera_for_type("thermal")
 
-        if not scene_dict or "scene" not in scene_dict or "default" not in scene_dict["scene"]:
-            raise HTTPException(status_code=400, detail="No se encontraron parámetros por defecto en la escena térmica")
-
-        defaults = scene_dict["scene"]["default"]
-
-        cam_cfg = get_config_scene_dict().get("camera", {})
-        spp = cam_cfg.get("spp", 256)
-        width = cam_cfg.get("width", 256)
-        height = cam_cfg.get("height", 256)
-        rx = float(cam_cfg.get("rotate_x", 0.0))
-        ry = float(cam_cfg.get("rotate_y", 0.0))
-        rz = float(cam_cfg.get("rotate_z", 0.0))
-        tx = float(cam_cfg.get("translate_x", 0.0))
-        ty = float(cam_cfg.get("translate_y", 0.0))
-        tz = float(cam_cfg.get("translate_z", 0.0))
-        fov = float(cam_cfg.get("fov", 45.0))
-
-        defaults[0]["@value"] = spp      # spp
-        defaults[1]["@value"] = width    # resx
-        defaults[2]["@value"] = height   # resy
-
-        scene = scene_dict["scene"]
-        sensor = scene.get("sensor")
-        transform = sensor.get("transform")
-
-        angles = blender_cam_to_mitsuba_xyz(rx, ry, rz)
-
-        # set rotate
-        transform["rotate"] = [
-            {
-                "@x": "1",
-                "@angle": str(angles[0])  # ajuste para mitsuba
-            },
-            {
-                "@y": "1",
-                "@angle": str(angles[1])  # ajuste para mitsuba
-            },
-            {
-                "@z": "1",
-                "@angle": str(angles[2])  # ajuste para mitsuba
-            }
+    def update_scene_camera_all(self):
+        """Actualiza la cámara en todas las escenas derivadas usadas en render."""
+        scene_types = [
+            "rgb",
+            "depth",
+            "thermal",
+            "blackbody_air",
+            "transmittance_blackbody_air",
+            "temperature_map",
         ]
-
-        # set translate
-        transform["translate"] = {
-            "@value": f"{tx} {tz} {-ty}"  # y mitsuba = z blender, z mitsuba = -y blender
-        }
-
-        # set fov
-        floats = sensor.get("float")
-        if isinstance(floats, list):
-            fov_found = False
-            for f in floats:
-                if f.get("@name") == "fov":
-                    f["@value"] = str(fov)
-                    fov_found = True
-                    break
-            if not fov_found:
-                floats.append({
-                    "@name": "fov",
-                    "@value": str(fov)
-                })
-
-        elif isinstance(floats, dict):
-            if floats.get("@name") == "fov":
-                floats["@value"] = str(fov)
-            else:
-                sensor["float"] = [
-                    floats,
-                    {
-                        "@name": "fov",
-                        "@value": str(fov)
-                    }
-                ]
-
-        # Guardar la escena modificada como XML
-        if scene_dict:
-            self.scene_parser.save_dict_as_xml(scene_dict, thermal_path)
+        for scene_type in scene_types:
+            self._update_scene_camera_for_type(scene_type)
 
     def get_scene_mi_thermal(self) -> FileResponse:
         """Crea ZIP con escena actual usando ZipHandler."""
@@ -1148,8 +1108,7 @@ class SceneService(BaseService):
             })
             save_config_scene_dict(config_scene)
             try:
-                self.update_scene_camera_rgb()
-                self.update_scene_camera_thermal()
+                self.update_scene_camera_all()
             except Exception as restore_err:
                 self.logger.warning(
                     f"No se pudo restaurar XML de cámara tras preview: {restore_err}"
@@ -1210,8 +1169,7 @@ class SceneService(BaseService):
             save_config_scene_dict(config_scene)
             
             # Actualizar escenas XML con la nueva posición de cámara
-            self.update_scene_camera_rgb()
-            self.update_scene_camera_thermal()
+            self.update_scene_camera_all()
             
             # Renderizar todos los tipos
             try:
@@ -1238,24 +1196,30 @@ class SceneService(BaseService):
                     blackbody_src = path_manager.get_result_path("blackbody_air")
                     if os.path.exists(blackbody_src):
                         shutil.copy(blackbody_src, frame_dir / "blackbody_air.npy")
-                except Exception:
-                    pass
+                except Exception as e:
+                    self.logger.warning(
+                        f"Frame {frame_num}: no se pudo copiar blackbody_air.npy: {e}"
+                    )
                 
                 # Transmittance Blackbody Air
                 try:
                     trans_src = path_manager.get_result_path("transmittance_blackbody_air")
                     if os.path.exists(trans_src):
                         shutil.copy(trans_src, frame_dir / "transmittance_blackbody_air.npy")
-                except Exception:
-                    pass
+                except Exception as e:
+                    self.logger.warning(
+                        f"Frame {frame_num}: no se pudo copiar transmittance_blackbody_air.npy: {e}"
+                    )
                 
                 # Contribution Air
                 try:
                     contrib_src = path_manager.get_result_path("contribution_blackbody_air")
                     if os.path.exists(contrib_src):
                         shutil.copy(contrib_src, frame_dir / "contribution_blackbody_air.npy")
-                except Exception:
-                    pass
+                except Exception as e:
+                    self.logger.warning(
+                        f"Frame {frame_num}: no se pudo copiar contribution_blackbody_air.npy: {e}"
+                    )
                 
                 # Temperature Map
                 try:
@@ -1263,8 +1227,14 @@ class SceneService(BaseService):
                     tmap_src = path_manager.get_result_path("temperature_map")
                     if os.path.exists(tmap_src):
                         shutil.copy(tmap_src, frame_dir / "temperature_map.npy")
-                except Exception:
-                    pass
+                    else:
+                        self.logger.warning(
+                            f"Frame {frame_num}: no existe temperature_map.npy tras render"
+                        )
+                except Exception as e:
+                    self.logger.warning(
+                        f"Frame {frame_num}: no se pudo renderizar/copiar temperature_map.npy: {e}"
+                    )
                     
             except Exception as e:
                 self.logger.error(f"Error renderizando frame {frame_num}: {e}")
