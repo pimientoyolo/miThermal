@@ -14,6 +14,9 @@ __all__ = [
 	"build_visualization_section",
 	"build_air_section",
 	"build_spectrum_section",
+	"build_camera_interpolation_section",
+	"build_cache_management_section",
+	"build_spectral_plot_section",
 	"format_object_label",
 ]
 
@@ -330,4 +333,220 @@ def build_spectrum_section() -> Dict[str, gr.components.Component]:
 		"bands": bands,
 		"update_btn": update_btn,
 		"result": result,
+	}
+
+
+def build_camera_interpolation_section() -> Dict[str, gr.components.Component]:
+	"""Sección para configurar interpolación de cámara y generar animaciones."""
+	with gr.Row():
+		gr.Markdown("## 🎥 Interpolación de Cámara")
+	
+	with gr.Row():
+		with gr.Column(scale=1):
+			gr.Markdown("### Punto Inicial")
+			origin_x = gr.Number(label="X origen", value=0.0, precision=2)
+			origin_y = gr.Number(label="Y origen", value=0.0, precision=2)
+			origin_z = gr.Number(label="Z origen", value=5.0, precision=2)
+			
+		with gr.Column(scale=1):
+			gr.Markdown("### Punto Final")
+			end_x = gr.Number(label="X final", value=5.0, precision=2)
+			end_y = gr.Number(label="Y final", value=5.0, precision=2)
+			end_z = gr.Number(label="Z final", value=5.0, precision=2)
+			
+		with gr.Column(scale=1):
+			gr.Markdown("### Punto Objetivo")
+			target_x = gr.Number(label="X objetivo", value=0.0, precision=2)
+			target_y = gr.Number(label="Y objetivo", value=0.0, precision=2)
+			target_z = gr.Number(label="Z objetivo", value=0.0, precision=2)
+	
+	with gr.Row():
+		with gr.Column(scale=1):
+			num_steps = gr.Slider(
+				label="Número de frames",
+				minimum=5,
+				maximum=100,
+				step=1,
+				value=30
+			)
+			
+		with gr.Column(scale=2):
+			status_output = gr.Textbox(label="Estado", lines=4, interactive=False)
+	
+	with gr.Row():
+		with gr.Column(scale=1):
+			generate_btn = gr.Button("🎬 Generar Interpolación (solo JSON)", variant="secondary")
+		with gr.Column(scale=1):
+			render_btn = gr.Button("🎞️ Renderizar Animación Completa", variant="primary")
+	
+	with gr.Row():
+		interpolation_result = gr.JSON(label="Frames Generados", visible=False)
+		animation_zip = gr.File(label="Descargar Animación (.zip)")
+	
+	return {
+		"origin_x": origin_x,
+		"origin_y": origin_y,
+		"origin_z": origin_z,
+		"end_x": end_x,
+		"end_y": end_y,
+		"end_z": end_z,
+		"target_x": target_x,
+		"target_y": target_y,
+		"target_z": target_z,
+		"num_steps": num_steps,
+		"generate_btn": generate_btn,
+		"render_btn": render_btn,
+		"status_output": status_output,
+		"interpolation_result": interpolation_result,
+		"animation_zip": animation_zip,
+	}
+
+
+def build_spectral_plot_section() -> Dict[str, gr.components.Component]:
+	"""Sección para visualizar datos espectrales con Plotly.
+	
+	Permite graficar emisividad, reflectancia, espectros atmosféricos y de cuerpo negro.
+	Los datos se obtienen del backend como JSON y se visualizan interactivamente.
+	"""
+	with gr.Row():
+		gr.Markdown("## 📊 Visualización de Datos Espectrales")
+	
+	gr.Markdown("""
+	Visualiza espectros de radiancia térmica, emisividad, reflectancia y datos atmosféricos.
+	Los gráficos son interactivos: puedes hacer zoom, pan, y pasar el ratón para ver valores exactos.
+	""")
+	
+	# Selectores de tipo de gráfico y parámetros
+	with gr.Row():
+		with gr.Column(scale=2):
+			plot_type = gr.Radio(
+				label="Tipo de Gráfico",
+				choices=["Emisividad", "Reflectancia", "Radiancia Térmica", "Atenuación Atmosférica"],
+				value="Radiancia Térmica"
+			)
+		with gr.Column(scale=1):
+			object_select = gr.Dropdown(
+				label="Objeto",
+				choices=[],
+				interactive=True,
+				visible=False  # Se muestra solo para Emisividad y Reflectancia
+			)
+	
+	# Parámetros específicos según el tipo de gráfico
+	with gr.Row():
+		with gr.Column(scale=1):
+			temp_k = gr.Slider(
+				label="Temperatura (K)",
+				minimum=200,
+				maximum=500,
+				value=300,
+				step=10,
+				visible=False  # Solo para Radiancia Térmica
+			)
+		with gr.Column(scale=1):
+			gas_type = gr.Dropdown(
+				label="Gas",
+				choices=["air", "CO2", "H2O", "O3", "CH4"],
+				value="air",
+				visible=False  # Solo para Atenuación Atmosférica
+			)
+		with gr.Column(scale=1):
+			wl_min = gr.Number(
+				label="Longitud Onda Mín (nm)",
+				value=8000,
+				visible=False
+			)
+		with gr.Column(scale=1):
+			wl_max = gr.Number(
+				label="Longitud Onda Máx (nm)",
+				value=12000,
+				visible=False
+			)
+	
+	# Botón para generar gráfico
+	with gr.Row():
+		generate_plot_btn = gr.Button("📈 Generar Gráfico", variant="primary", size="lg")
+	
+	# Contenedor para el gráfico
+	with gr.Row():
+		spectral_plot = gr.Plot(label="Gráfico Espectral")
+	
+	# Información adicional y opciones de exportación
+	with gr.Row():
+		plot_info = gr.Textbox(
+			label="Información del Gráfico",
+			lines=3,
+			interactive=False,
+			placeholder="Se mostrará información del gráfico aquí"
+		)
+	
+	with gr.Row():
+		with gr.Column(scale=1):
+			export_data_btn = gr.Button("💾 Exportar Datos (CSV)", variant="secondary")
+		with gr.Column(scale=1):
+			export_plot_btn = gr.Button("📥 Exportar Gráfico (PNG)", variant="secondary")
+	
+	with gr.Row():
+		export_status = gr.Textbox(
+			label="Estado de Exportación",
+			lines=2,
+			interactive=False,
+			placeholder="Los archivos se descargarán automáticamente"
+		)
+	
+	# Archivos para descargar
+	with gr.Row():
+		download_csv = gr.File(label="Descargar CSV", visible=False)
+		download_png = gr.File(label="Descargar PNG", visible=False)
+	
+	return {
+		"plot_type": plot_type,
+		"object_select": object_select,
+		"temp_k": temp_k,
+		"gas_type": gas_type,
+		"wl_min": wl_min,
+		"wl_max": wl_max,
+		"generate_plot_btn": generate_plot_btn,
+		"spectral_plot": spectral_plot,
+		"plot_info": plot_info,
+		"export_data_btn": export_data_btn,
+		"export_plot_btn": export_plot_btn,
+		"export_status": export_status,
+		"download_csv": download_csv,
+		"download_png": download_png,
+	}
+
+
+def build_cache_management_section() -> Dict[str, gr.components.Component]:
+	"""Sección para gestionar el cache de firmas espectrales."""
+	with gr.Row():
+		gr.Markdown("## 💾 Gestión de Cache de Firmas Espectrales")
+	
+	gr.Markdown("""
+	El sistema cachea los cálculos de emisión y reflectancia para mejorar el rendimiento.
+	Aquí puedes ver las estadísticas del cache y limpiarlo si es necesario.
+	""")
+	
+	with gr.Row():
+		with gr.Column(scale=1):
+			refresh_stats_btn = gr.Button("🔄 Actualizar Estadísticas", variant="secondary")
+		with gr.Column(scale=1):
+			clear_cache_btn = gr.Button("🗑️ Limpiar Cache", variant="primary")
+	
+	with gr.Row():
+		cache_stats_display = gr.JSON(label="📊 Estadísticas del Cache", value={})
+	
+	with gr.Row():
+		cache_status_output = gr.Textbox(
+			label="Estado",
+			lines=3,
+			interactive=False,
+			placeholder="Haz clic en 'Actualizar Estadísticas' para ver el estado del cache"
+		)
+	
+	return {
+		"refresh_stats_btn": refresh_stats_btn,
+		"clear_cache_btn": clear_cache_btn,
+		"cache_stats_display": cache_stats_display,
+		"cache_status_output": cache_status_output,
 	}

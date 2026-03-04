@@ -7,12 +7,16 @@ from typing import Dict, List, Optional, Tuple
 
 import gradio as gr
 import numpy as np
+import plotly.graph_objects as go
 
 from ..components import (
     build_object_group_section,
     build_unified_config_section,
     build_upload_section,
     build_visualization_section,
+    build_camera_interpolation_section,
+    build_cache_management_section,
+    build_spectral_plot_section,
 )
 from .api_client import MitsubaAPIClient
 from .render_utils import normalize_to_uint8
@@ -218,16 +222,13 @@ def view_object_3d(choice_label: str):
             lines.append(f"💡 Emisor: {obj.get('emitter', {}).get('type', '?')}")
         temp_val = obj.get("temperature") if "temperature" in obj else None
 
-        # Emisividad: si hay datos, graficar
+        # Emisividad: si hay datos, graficar con Plotly
         emissivity_plot = None
         try:
             wavelengths = obj.get("wavelengths")
             reflection = obj.get("reflection")
             emissivity = obj.get("emissivity")
             if wavelengths and (reflection or emissivity):
-                import matplotlib.pyplot as plt
-
-                fig, ax = plt.subplots(figsize=(4, 3))
                 if reflection and not emissivity:
                     y = [1 - (r / 100.0) for r in reflection]
                 elif emissivity and wavelengths and len(emissivity) == len(wavelengths):
@@ -235,13 +236,25 @@ def view_object_3d(choice_label: str):
                 else:
                     y = None
                 if y:
-                    ax.plot(wavelengths, y, label="Emisividad", color="#e67e22")
-                    ax.set_xlabel("Longitud de onda")
-                    ax.set_ylabel("Emisividad")
-                    ax.set_title("Emisividad vs λ")
-                    ax.set_ylim(0, 1.05)
-                    ax.grid(alpha=0.3)
-                    ax.legend()
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(
+                        x=wavelengths,
+                        y=y,
+                        mode='lines+markers',
+                        name='Emisividad',
+                        line=dict(color='#e67e22', width=2),
+                        hovertemplate='<b>λ:</b> %{x:.1f}<br><b>Emisividad:</b> %{y:.4f}<extra></extra>'
+                    ))
+                    fig.update_layout(
+                        title=f'Emisividad - {obj_id}',
+                        xaxis_title='Longitud de onda (nm)',
+                        yaxis_title='Emisividad (0-1)',
+                        hovermode='closest',
+                        template='plotly_white',
+                        height=350,
+                        showlegend=False,
+                        yaxis=dict(range=[0, 1.05])
+                    )
                     emissivity_plot = fig
         except Exception as plot_e:
             logger.warning(f"Fallo generando plot emisividad: {plot_e}")
@@ -283,6 +296,12 @@ def create_mitsuba_viewer_interface():
                 og_section = build_object_group_section()
             with gr.Tab("⚙️ Config"):
                 config_section = build_unified_config_section()
+            with gr.Tab("🎥 Interpolación Cámara"):
+                camera_interp_section = build_camera_interpolation_section()
+            with gr.Tab("💾 Gestión de Cache"):
+                cache_section = build_cache_management_section()
+            with gr.Tab("📊 Datos Espectrales"):
+                spectral_section = build_spectral_plot_section()
 
         # Visualización: ejecutar todos los renders y mostrarlos en galería
         def run_simulation_cb():
@@ -961,21 +980,35 @@ def create_mitsuba_viewer_interface():
                     emissivity = [1 - r / 100.0 for r in reflection]
                 else:
                     emissivity = [1 - r for r in reflection]
-                import matplotlib.pyplot as plt
 
-                fig, ax = plt.subplots(figsize=(4, 3))
-                sc = ax.scatter(wavelengths, emissivity, c=emissivity, cmap="magma")
-                ax.set_xlabel("Longitud de onda")
-                ax.set_ylabel("Emisividad")
-                plt.colorbar(sc, ax=ax, label="Emisividad (preview)")
-                ax.set_ylim(0, 1.05)
-                ax.grid(alpha=0.3)
-                ax.set_title("Previsualización Emisividad")
-                ax.legend()
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(
+                    x=wavelengths,
+                    y=emissivity,
+                    mode='markers',
+                    marker=dict(
+                        size=8,
+                        color=emissivity,
+                        colorscale='Magma',
+                        showscale=True,
+                        colorbar=dict(title="Emisividad")
+                    ),
+                    hovertemplate='<b>λ:</b> %{x:.1f}<br><b>Emisividad:</b> %{y:.4f}<extra></extra>'
+                ))
+                fig.update_layout(
+                    title='Previsualización Emisividad',
+                    xaxis_title='Longitud de onda (nm)',
+                    yaxis_title='Emisividad (0-1)',
+                    hovermode='closest',
+                    template='plotly_white',
+                    height=350,
+                    yaxis=dict(range=[0, 1.05])
+                )
                 return fig
             except Exception as e:
                 logger.warning(f"preview_emissivity_file fallo: {e}")
                 return None
+            return None
 
         og_section["emissivity_file"].change(
             fn=preview_emissivity_file,
@@ -1056,16 +1089,25 @@ def create_mitsuba_viewer_interface():
                         results["air"] = client.upload_air_attenuation(path)
                 text = client.get_air_attenuation()
                 try:
-                    import matplotlib.pyplot as plt
-
                     xs, ys = parse_air_text_to_xy(text)
                     if xs and ys:
-                        fig, ax = plt.subplots(figsize=(5, 3))
-                        ax.plot(xs, ys, color="#D55E00", linewidth=1.8)
-                        ax.set_title("Atenuación del aire")
-                        ax.set_xlabel("x")
-                        ax.set_ylabel("y")
-                        ax.grid(alpha=0.3)
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatter(
+                            x=xs,
+                            y=ys,
+                            mode='lines',
+                            name='Atenuación',
+                            line=dict(color='#D55E00', width=2),
+                            hovertemplate='<b>Longitud de onda:</b> %{x:.1f} nm<br><b>Atenuación:</b> %{y:.4f}<extra></extra>'
+                        ))
+                        fig.update_layout(
+                            title='Atenuación del Aire',
+                            xaxis_title='Longitud de Onda (nm)',
+                            yaxis_title='Atenuación',
+                            hovermode='closest',
+                            template='plotly_white',
+                            height=350
+                        )
                         air_plot = fig
                 except Exception:
                     pass
@@ -1199,15 +1241,25 @@ def create_mitsuba_viewer_interface():
             air_plot = None
             try:
                 text = client.get_air_attenuation()
-                import matplotlib.pyplot as plt
                 xs, ys = parse_air_text_to_xy(text)
                 if xs and ys:
-                    fig, ax = plt.subplots(figsize=(5, 3))
-                    ax.plot(xs, ys, color="#D55E00", linewidth=1.8)
-                    ax.set_title("Atenuación del aire")
-                    ax.set_xlabel("x")
-                    ax.set_ylabel("y")
-                    ax.grid(alpha=0.3)
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(
+                        x=xs,
+                        y=ys,
+                        mode='lines',
+                        name='Atenuación',
+                        line=dict(color='#D55E00', width=2),
+                        hovertemplate='<b>Longitud de onda:</b> %{x:.1f} nm<br><b>Atenuación:</b> %{y:.4f}<extra></extra>'
+                    ))
+                    fig.update_layout(
+                        title='Atenuación del Aire',
+                        xaxis_title='Longitud de Onda (nm)',
+                        yaxis_title='Atenuación',
+                        hovermode='closest',
+                        template='plotly_white',
+                        height=350
+                    )
                     air_plot = fig
             except Exception:
                 pass
@@ -1226,15 +1278,25 @@ def create_mitsuba_viewer_interface():
             try:
                 client = get_client()
                 text = client.get_air_attenuation()
-                import matplotlib.pyplot as plt
                 xs, ys = parse_air_text_to_xy(text)
                 if xs and ys:
-                    fig, ax = plt.subplots(figsize=(5, 3))
-                    ax.plot(xs, ys, color="#D55E00", linewidth=1.8)
-                    ax.set_title("Atenuación del aire")
-                    ax.set_xlabel("x")
-                    ax.set_ylabel("y")
-                    ax.grid(alpha=0.3)
+                    fig = go.Figure()
+                    fig.add_trace(go.Scatter(
+                        x=xs,
+                        y=ys,
+                        mode='lines',
+                        name='Atenuación',
+                        line=dict(color='#D55E00', width=2),
+                        hovertemplate='<b>Longitud de onda:</b> %{x:.1f} nm<br><b>Atenuación:</b> %{y:.4f}<extra></extra>'
+                    ))
+                    fig.update_layout(
+                        title='Atenuación del Aire',
+                        xaxis_title='Longitud de Onda (nm)',
+                        yaxis_title='Atenuación',
+                        hovermode='closest',
+                        template='plotly_white',
+                        height=350
+                    )
                     return fig
             except Exception:
                 return None
@@ -1255,6 +1317,374 @@ def create_mitsuba_viewer_interface():
             fn=air_bootstrap_cb,
             inputs=[],
             outputs=[config_section["air_suggest_list"], config_section["air_plot"], config_section["air_temperature"]],
+        )
+
+        # --------------------------------------------------------------------------------------
+        # Callback para interpolación de cámara
+        # --------------------------------------------------------------------------------------
+        def camera_interpolation_cb(
+            origin_x, origin_y, origin_z,
+            end_x, end_y, end_z,
+            target_x, target_y, target_z,
+            num_steps
+        ):
+            """Genera interpolación de cámara llamando al endpoint del backend."""
+            try:
+                client = get_client()
+                data = {
+                    "origin": [origin_x, origin_y, origin_z],
+                    "end": [end_x, end_y, end_z],
+                    "tracked_point": [target_x, target_y, target_z],
+                    "num_steps": int(num_steps)
+                }
+                
+                # Llamar al endpoint
+                response = client.session.post(
+                    f"{client.base_url}/scene/camera/interpolation",
+                    json=data
+                )
+                response.raise_for_status()
+                frames = response.json()
+                
+                status_msg = f"✅ Generados {len(frames)} frames de interpolación exitosamente."
+                return status_msg, frames
+                
+            except Exception as e:
+                error_msg = f"❌ Error al generar interpolación: {str(e)}"
+                logger.error(error_msg, exc_info=True)
+                return error_msg, []
+
+        def camera_render_animation_cb(
+            origin_x, origin_y, origin_z,
+            end_x, end_y, end_z,
+            target_x, target_y, target_z,
+            num_steps
+        ):
+            """Renderiza la animación completa de cámara."""
+            try:
+                client = get_client()
+                data = {
+                    "origin": [origin_x, origin_y, origin_z],
+                    "end": [end_x, end_y, end_z],
+                    "tracked_point": [target_x, target_y, target_z],
+                    "num_steps": int(num_steps)
+                }
+                
+                # Llamar al endpoint de renderizado
+                response = client.session.post(
+                    f"{client.base_url}/scene/camera/animation/render",
+                    json=data,
+                    timeout=600  # 10 minutos de timeout
+                )
+                response.raise_for_status()
+                
+                # Guardar el ZIP temporalmente
+                import tempfile
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tf:
+                    tf.write(response.content)
+                    zip_path = tf.name
+                
+                final_msg = f"✅ Animación completada: {int(num_steps)} frames renderizados y guardados en ZIP."
+                return final_msg, zip_path
+                
+            except Exception as e:
+                error_msg = f"❌ Error al renderizar animación: {str(e)}"
+                logger.error(error_msg, exc_info=True)
+                return error_msg, None
+
+        # Callbacks para gestión de cache
+        def refresh_cache_stats_cb():
+            """Obtiene y muestra las estadísticas del cache."""
+            try:
+                client = get_client()
+                result = client.get_cache_stats()
+                
+                if result.get("status") == "success":
+                    stats = result.get("data", {})
+                    
+                    # Formatear mensaje legible
+                    hits = stats.get("hits", 0)
+                    misses = stats.get("misses", 0)
+                    total = hits + misses
+                    hit_rate = stats.get("hit_rate", 0.0) * 100
+                    size = stats.get("size", 0)
+                    max_size = stats.get("max_size", 0)
+                    
+                    status_msg = (
+                        f"✅ Estadísticas actualizadas:\n"
+                        f"• Aciertos: {hits} / {total} ({hit_rate:.1f}%)\n"
+                        f"• Tamaño: {size} / {max_size} entradas"
+                    )
+                    
+                    return stats, status_msg
+                else:
+                    error_msg = f"❌ Error: {result.get('detail', 'Error desconocido')}"
+                    return {}, error_msg
+                    
+            except Exception as e:
+                error_msg = f"❌ Error al obtener estadísticas: {str(e)}"
+                logger.error(error_msg, exc_info=True)
+                return {}, error_msg
+
+        def clear_cache_cb():
+            """Limpia todo el cache de firmas espectrales."""
+            try:
+                client = get_client()
+                result = client.clear_cache()
+                
+                if result.get("status") == "success":
+                    data = result.get("data", {})
+                    cleared = data.get("entries_cleared", 0)
+                    status_msg = f"✅ Cache limpiado exitosamente. {cleared} entradas eliminadas."
+                    
+                    # Después de limpiar, obtener estadísticas actualizadas
+                    stats_result = client.get_cache_stats()
+                    if stats_result.get("status") == "success":
+                        return stats_result.get("data", {}), status_msg
+                    else:
+                        return {}, status_msg
+                else:
+                    error_msg = f"❌ Error: {result.get('detail', 'Error desconocido')}"
+                    return {}, error_msg
+                    
+            except Exception as e:
+                error_msg = f"❌ Error al limpiar cache: {str(e)}"
+                logger.error(error_msg, exc_info=True)
+                return {}, error_msg
+
+        camera_interp_section["generate_btn"].click(
+            fn=camera_interpolation_cb,
+            inputs=[
+                camera_interp_section["origin_x"],
+                camera_interp_section["origin_y"],
+                camera_interp_section["origin_z"],
+                camera_interp_section["end_x"],
+                camera_interp_section["end_y"],
+                camera_interp_section["end_z"],
+                camera_interp_section["target_x"],
+                camera_interp_section["target_y"],
+                camera_interp_section["target_z"],
+                camera_interp_section["num_steps"],
+            ],
+            outputs=[
+                camera_interp_section["status_output"],
+                camera_interp_section["interpolation_result"],
+            ],
+        )
+
+        camera_interp_section["render_btn"].click(
+            fn=camera_render_animation_cb,
+            inputs=[
+                camera_interp_section["origin_x"],
+                camera_interp_section["origin_y"],
+                camera_interp_section["origin_z"],
+                camera_interp_section["end_x"],
+                camera_interp_section["end_y"],
+                camera_interp_section["end_z"],
+                camera_interp_section["target_x"],
+                camera_interp_section["target_y"],
+                camera_interp_section["target_z"],
+                camera_interp_section["num_steps"],
+            ],
+            outputs=[
+                camera_interp_section["status_output"],
+                camera_interp_section["animation_zip"],
+            ],
+        )
+
+        # Cache Management: conectar callbacks
+        cache_section["refresh_stats_btn"].click(
+            fn=refresh_cache_stats_cb,
+            inputs=[],
+            outputs=[
+                cache_section["cache_stats_display"],
+                cache_section["cache_status_output"],
+            ],
+        )
+
+        cache_section["clear_cache_btn"].click(
+            fn=clear_cache_cb,
+            inputs=[],
+            outputs=[
+                cache_section["cache_stats_display"],
+                cache_section["cache_status_output"],
+            ],
+        )
+
+        # ============================================================================
+        # Spectral Data Plotting: conectar callbacks
+        # ============================================================================
+        
+        # Callback para mostrar/ocultar componentes según tipo de gráfico
+        def update_spectral_ui(plot_type):
+            """Actualiza qué controles están visibles según el tipo de gráfico."""
+            show_object = plot_type in ["Emisividad", "Reflectancia"]
+            show_temp = plot_type == "Radiancia Térmica"
+            show_gas = plot_type == "Atenuación Atmosférica"
+            show_wl = True  # Siempre mostrar rangos de longitud de onda
+            
+            return (
+                gr.update(visible=show_object),  # object_select
+                gr.update(visible=show_temp),     # temp_k
+                gr.update(visible=show_gas),      # gas_type
+                gr.update(visible=show_wl),       # wl_min
+                gr.update(visible=show_wl),       # wl_max
+            )
+        
+        spectral_section["plot_type"].change(
+            fn=update_spectral_ui,
+            inputs=[spectral_section["plot_type"]],
+            outputs=[
+                spectral_section["object_select"],
+                spectral_section["temp_k"],
+                spectral_section["gas_type"],
+                spectral_section["wl_min"],
+                spectral_section["wl_max"],
+            ],
+        )
+        
+        # Callback para generar gráfico
+        def generate_spectral_plot_cb(plot_type, object_id, temp_k, gas_type, wl_min, wl_max):
+            """Genera gráfico espectral según parámetros seleccionados."""
+            try:
+                client = get_client()
+                fig = go.Figure()
+                plot_info = ""
+                title_text = "Datos Espectrales"
+                ylabel_text = "Valor"
+                
+                if plot_type == "Emisividad":
+                    if not object_id:
+                        return None, "❌ Por favor selecciona un objeto"
+                    result = client.get_emissivity_spectrum(object_id)
+                    if result.get("status") != "success":
+                        return None, f"❌ Error: {result.get('detail', 'Error desconocido')}"
+                    
+                    data = result.get("data", {})
+                    wavelengths = data.get("wavelengths", [])
+                    values = data.get("values", [])
+                    
+                    fig.add_trace(go.Scatter(
+                        x=wavelengths, y=values,
+                        mode='lines+markers',
+                        name='Emisividad',
+                        line=dict(color='red', width=2),
+                        hovertemplate='<b>Longitud de onda:</b> %{x:.1f} nm<br><b>Emisividad:</b> %{y:.4f}<extra></extra>'
+                    ))
+                    plot_info = f"✅ Emisividad de {object_id}\nRango: {min(values):.3f} - {max(values):.3f}"
+                    title_text = f"Emisividad - {object_id}"
+                    ylabel_text = "Emisividad (0-1)"
+                    
+                elif plot_type == "Reflectancia":
+                    if not object_id:
+                        return None, "❌ Por favor selecciona un objeto"
+                    result = client.get_reflectance_spectrum(object_id)
+                    if result.get("status") != "success":
+                        return None, f"❌ Error: {result.get('detail', 'Error desconocido')}"
+                    
+                    data = result.get("data", {})
+                    wavelengths = data.get("wavelengths", [])
+                    values = data.get("values", [])
+                    
+                    fig.add_trace(go.Scatter(
+                        x=wavelengths, y=values,
+                        mode='lines+markers',
+                        name='Reflectancia',
+                        line=dict(color='blue', width=2),
+                        hovertemplate='<b>Longitud de onda:</b> %{x:.1f} nm<br><b>Reflectancia:</b> %{y:.4f}<extra></extra>'
+                    ))
+                    plot_info = f"✅ Reflectancia de {object_id}\nRango: {min(values):.3f} - {max(values):.3f}"
+                    title_text = f"Reflectancia - {object_id}"
+                    ylabel_text = "Reflectancia (0-1)"
+                    
+                elif plot_type == "Radiancia Térmica":
+                    result = client.get_blackbody_spectrum(
+                        temperature_k=temp_k,
+                        wavelength_min_nm=wl_min,
+                        wavelength_max_nm=wl_max,
+                        num_points=100
+                    )
+                    if result.get("status") != "success":
+                        return None, f"❌ Error: {result.get('detail', 'Error desconocido')}"
+                    
+                    data = result.get("data", {})
+                    wavelengths = data.get("wavelengths", [])
+                    radiance = data.get("radiance", [])
+                    
+                    fig.add_trace(go.Scatter(
+                        x=wavelengths, y=radiance,
+                        mode='lines',
+                        name=f'Cuerpo Negro {temp_k}K',
+                        line=dict(color='orange', width=2),
+                        hovertemplate='<b>Longitud de onda:</b> %{x:.1f} nm<br><b>Radiancia:</b> %{y:.3e} W/(m^3·sr)<extra></extra>'
+                    ))
+                    max_radiance = max(radiance) if radiance else 0
+                    plot_info = f"✅ Cuerpo Negro a {temp_k}K\nRadiancia máxima: {max_radiance:.3e} W/(m³·sr)"
+                    title_text = f"Radiancia Térmica - {temp_k}K"
+                    ylabel_text = "Radiancia W/(m³·sr)"
+                    
+                elif plot_type == "Atenuación Atmosférica":
+                    result = client.get_atmospheric_spectrum(gas=gas_type)
+                    if result.get("status") != "success":
+                        return None, f"❌ Error: {result.get('detail', 'Error desconocido')}"
+                    
+                    data = result.get("data", {})
+                    wavelengths = data.get("wavelengths", [])
+                    attenuation = data.get("attenuation", [])
+                    transmittance = data.get("transmittance", [])
+                    
+                    fig.add_trace(go.Scatter(
+                        x=wavelengths, y=attenuation,
+                        mode='lines',
+                        name='Atenuación',
+                        line=dict(color='red', width=2),
+                        hovertemplate='<b>Longitud de onda:</b> %{x:.1f} nm<br><b>Atenuación:</b> %{y:.4f}<extra></extra>'
+                    ))
+                    
+                    fig.add_trace(go.Scatter(
+                        x=wavelengths, y=transmittance,
+                        mode='lines',
+                        name='Transmitancia',
+                        line=dict(color='green', width=2),
+                        hovertemplate='<b>Longitud de onda:</b> %{x:.1f} nm<br><b>Transmitancia:</b> %{y:.4f}<extra></extra>'
+                    ))
+                    
+                    plot_info = f"✅ Atmósfera: {gas_type}\nPromedio Atenuación: {np.mean(attenuation):.3f}"
+                    title_text = f"Atenuación Atmosférica - {gas_type}"
+                    ylabel_text = "Atenuación / Transmitancia"
+                
+                # Configurar diseño del gráfico
+                fig.update_layout(
+                    title=title_text,
+                    xaxis_title="Longitud de Onda (nm)",
+                    yaxis_title=ylabel_text,
+                    hovermode='closest',
+                    template='plotly_white',
+                    height=500,
+                    showlegend=True,
+                )
+                
+                return fig, plot_info
+                
+            except Exception as e:
+                error_msg = f"❌ Error generando gráfico: {str(e)}"
+                logger.error(error_msg, exc_info=True)
+                return None, error_msg
+        
+        spectral_section["generate_plot_btn"].click(
+            fn=generate_spectral_plot_cb,
+            inputs=[
+                spectral_section["plot_type"],
+                spectral_section["object_select"],
+                spectral_section["temp_k"],
+                spectral_section["gas_type"],
+                spectral_section["wl_min"],
+                spectral_section["wl_max"],
+            ],
+            outputs=[
+                spectral_section["spectral_plot"],
+                spectral_section["plot_info"],
+            ],
         )
 
     return interface

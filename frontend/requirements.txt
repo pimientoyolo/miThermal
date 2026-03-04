@@ -3,4 +3,4 @@ requests>=2.32.4
 numpy>=2.3.2
 pillow>=11.2.1
 matplotlib>=3.10.3
-PySide6>=6.6.0
+PySide6>=6.6.0plotly>=5.15.0

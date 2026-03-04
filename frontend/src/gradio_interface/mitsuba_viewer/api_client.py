@@ -5,9 +5,23 @@ from pathlib import Path
 import logging
 import base64
 import requests
+import os
 from typing import Dict
 
 logger = logging.getLogger(__name__)
+
+
+DEFAULT_BASE_URL = os.environ.get("MITSUBA_API_BASE", os.environ.get("MITHERMAL_BACKEND", "http://localhost:8000"))
+
+
+def set_default_base_url(url: str) -> None:
+    """Establece la URL base por defecto usada al crear nuevos clientes.
+
+    Esto permite que la aplicación (p.ej. `frontend/main.py`) fije el backend
+    mediante argumentos de línea de comandos antes de crear componentes.
+    """
+    global DEFAULT_BASE_URL
+    DEFAULT_BASE_URL = url.rstrip("/")
 
 
 class MitsubaAPIClient:
@@ -31,8 +45,12 @@ class MitsubaAPIClient:
             return {"status": "error", "detail": str(e)}
     """Cliente para conectar con la API FastAPI del servidor Mitsuba."""
 
-    def __init__(self, base_url: str = "http://localhost:8000"):
-        self.base_url = base_url.rstrip("/")
+    def __init__(self, base_url: str | None = None):
+        # Prioridad: argumento > variable de entorno > valor por defecto
+        if base_url:
+            self.base_url = base_url.rstrip("/")
+        else:
+            self.base_url = (os.environ.get("MITSUBA_API_BASE") or DEFAULT_BASE_URL).rstrip("/")
         self.session = requests.Session()
 
     def health_check(self) -> bool:
@@ -444,4 +462,173 @@ class MitsubaAPIClient:
                     return {"status": "success", "message": r.text}
         except Exception as e:
             logger.error(f"Batch update objects with emissivity error: {e}")
+            return {"status": "error", "detail": str(e)}
+
+    # ---------------------- Cache Management ----------------------
+    def get_cache_stats(self) -> Dict:
+        """GET /config/cache/stats
+        
+        Obtiene estadísticas del cache de emisión/reflectancia.
+        Retorna: dict con hits, misses, hit_rate, size, max_size, etc.
+        """
+        try:
+            r = self.session.get(f"{self.base_url}/config/cache/stats")
+            r.raise_for_status()
+            return {"status": "success", "data": r.json()}
+        except Exception as e:
+            logger.error(f"Get cache stats error: {e}")
+            return {"status": "error", "detail": str(e)}
+
+    def clear_cache(self) -> Dict:
+        """POST /config/cache/clear
+        
+        Limpia todo el cache de emisión/reflectancia.
+        Retorna: dict con mensaje de confirmación.
+        """
+        try:
+            r = self.session.post(f"{self.base_url}/config/cache/clear")
+            r.raise_for_status()
+            return {"status": "success", "data": r.json()}
+        except Exception as e:
+            logger.error(f"Clear cache error: {e}")
+            return {"status": "error", "detail": str(e)}
+    # ---------------------- Spectral Data Export ----------------------
+    def get_emissivity_spectrum(self, object_id: str) -> Dict:
+        """GET /spectral/emissivity/{object_id}
+        
+        Obtiene el espectro de emisividad de un objeto como datos JSON.
+        
+        Returns: {
+            "wavelengths": [8000.0, 8100.0, ...],
+            "values": [0.85, 0.87, ...],
+            "unit": "Emisividad (0-1)",
+            "label": "Espectro de emisividad: <object_id>",
+            "title": "Emisividad vs Longitud de Onda - <object_id>"
+        }
+        """
+        try:
+            r = self.session.get(f"{self.base_url}/spectral/emissivity/{object_id}")
+            r.raise_for_status()
+            return {"status": "success", "data": r.json()}
+        except Exception as e:
+            logger.error(f"Get emissivity spectrum error: {e}")
+            return {"status": "error", "detail": str(e)}
+
+    def get_reflectance_spectrum(self, object_id: str) -> Dict:
+        """GET /spectral/reflectance/{object_id}
+        
+        Obtiene el espectro de reflectancia de un objeto como datos JSON.
+        
+        Returns: {
+            "wavelengths": [8000.0, 8100.0, ...],
+            "values": [0.15, 0.13, ...],
+            "unit": "Reflectancia (0-1)",
+            "label": "Espectro de reflectancia: <object_id>",
+            "title": "Reflectancia vs Longitud de Onda - <object_id>"
+        }
+        """
+        try:
+            r = self.session.get(f"{self.base_url}/spectral/reflectance/{object_id}")
+            r.raise_for_status()
+            return {"status": "success", "data": r.json()}
+        except Exception as e:
+            logger.error(f"Get reflectance spectrum error: {e}")
+            return {"status": "error", "detail": str(e)}
+
+    def get_atmospheric_spectrum(self, gas: str = "air") -> Dict:
+        """GET /spectral/atmosphere?gas=<gas>
+        
+        Obtiene el espectro de atenuación atmosférica.
+        
+        Args:
+            gas: Tipo de atmósfera ('air', 'CO2', 'H2O', 'O3', 'CH4')
+        
+        Returns: {
+            "wavelengths": [8000.0, 8100.0, ...],
+            "attenuation": [0.95, 0.94, ...],
+            "transmittance": [0.05, 0.06, ...],
+            "gas": "air",
+            "title": "Atenuación Atmosférica - air"
+        }
+        """
+        try:
+            params = {"gas": gas}
+            r = self.session.get(f"{self.base_url}/spectral/atmosphere", params=params)
+            r.raise_for_status()
+            return {"status": "success", "data": r.json()}
+        except Exception as e:
+            logger.error(f"Get atmospheric spectrum error: {e}")
+            return {"status": "error", "detail": str(e)}
+
+    def get_blackbody_spectrum(
+        self, 
+        temperature_k: float = 300.0,
+        wavelength_min_nm: float = 8000.0,
+        wavelength_max_nm: float = 12000.0,
+        num_points: int = 100
+    ) -> Dict:
+        """GET /spectral/blackbody?temperature_k=300&wavelength_min_nm=8000&wavelength_max_nm=12000&num_points=100
+        
+        Calcula y obtiene el espectro de radiancia de cuerpo negro (Ley de Planck).
+        
+        Args:
+            temperature_k: Temperatura en Kelvin (default: 300K = ~27°C)
+            wavelength_min_nm: Longitud de onda mínima en nm (default: 8000)
+            wavelength_max_nm: Longitud de onda máxima en nm (default: 12000)
+            num_points: Número de puntos en el espectro (default: 100)
+        
+        Returns: {
+            "wavelengths": [8000.0, 8100.0, ...],
+            "radiance": [1.5e-6, 1.6e-6, ...],
+            "temperature_k": 300.0,
+            "unit": "W/(m^3·sr)",
+            "title": "Radiancia de Cuerpo Negro - 300K"
+        }
+        """
+        try:
+            params = {
+                "temperature_k": temperature_k,
+                "wavelength_min_nm": wavelength_min_nm,
+                "wavelength_max_nm": wavelength_max_nm,
+                "num_points": num_points
+            }
+            r = self.session.get(f"{self.base_url}/spectral/blackbody", params=params)
+            r.raise_for_status()
+            return {"status": "success", "data": r.json()}
+        except Exception as e:
+            logger.error(f"Get blackbody spectrum error: {e}")
+            return {"status": "error", "detail": str(e)}
+
+    def interpolate_spectral_data(
+        self,
+        wavelengths_source: list[float],
+        values_source: list[float],
+        wavelengths_target: list[float]
+    ) -> Dict:
+        """POST /spectral/interpolate
+        
+        Interpola datos espectrales a una nueva malla de longitudes de onda.
+        
+        Args:
+            wavelengths_source: Array de longitudes de onda originales (nm)
+            values_source: Array de valores espectrales correspondientes
+            wavelengths_target: Array de longitudes de onda destino (nm)
+        
+        Returns: {
+            "wavelengths": [8000.0, 8050.0, ...],
+            "values": [0.85, 0.86, ...],
+            "interpolation_method": "cubic"
+        }
+        """
+        try:
+            payload = {
+                "wavelengths_source": wavelengths_source,
+                "values_source": values_source,
+                "wavelengths_target": wavelengths_target
+            }
+            r = self.session.post(f"{self.base_url}/spectral/interpolate", json=payload)
+            r.raise_for_status()
+            return {"status": "success", "data": r.json()}
+        except Exception as e:
+            logger.error(f"Interpolate spectral data error: {e}")
             return {"status": "error", "detail": str(e)}
