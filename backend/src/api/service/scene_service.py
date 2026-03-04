@@ -166,16 +166,21 @@ class SceneService(BaseService):
 
         # obtener sensor y transform
         sensor = scene_dict["scene"].get("sensor")
+        if sensor is None or not isinstance(sensor, dict):
+            logger.error("La escena no contiene un bloque 'sensor' válido")
+            raise HTTPException(
+                status_code=400,
+                detail="La escena debe incluir un 'sensor' con parámetros de cámara"
+            )
+
         transform = sensor.get("transform")
 
-        # obtner las rotaciones
-        rotate = transform.get("rotate")
-
         # Asegurar que exista transform
-        if transform is None:
+        if transform is None or not isinstance(transform, dict):
             sensor["transform"] = {}
             transform = sensor["transform"]
 
+        # obtner las rotaciones
         rotate = transform.get("rotate")
 
         # Leer valores actuales si existen
@@ -207,9 +212,19 @@ class SceneService(BaseService):
 
         # obtener las traslaciones
         translate = transform.get("translate")
+        if not isinstance(translate, dict):
+            translate = {"@value": "0 0 0"}
+            transform["translate"] = translate
 
         value = translate.get("@value", "0 0 0")
         coords = value.split()
+        if len(coords) != 3:
+            logger.error(f"Formato inválido de translate: '{value}'")
+            raise HTTPException(
+                status_code=400,
+                detail="El campo translate del sensor debe tener 3 coordenadas: 'x y z'"
+            )
+
         tx = float(coords[0])
         ty = float(coords[1])
         tz = float(coords[2])

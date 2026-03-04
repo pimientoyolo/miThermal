@@ -1,4 +1,7 @@
-from fastapi import APIRouter, File, UploadFile, Body
+import logging
+from uuid import uuid4
+
+from fastapi import APIRouter, File, UploadFile, Body, HTTPException
 from fastapi import Query
 from src.api.service.scene_service import SceneService
 from src.api.service.render_service import RenderService
@@ -6,6 +9,9 @@ from fastapi.responses import FileResponse
 from src.config import PathManager
 from src.api.dto.cameraDTO import CameraInterpolationDTO
 from typing import List
+
+
+logger = logging.getLogger(__name__)
 
 scene_service = SceneService()
 render_service = RenderService()
@@ -18,15 +24,47 @@ scene_router = APIRouter(
 
 @scene_router.post("/load")
 async def load_scene(file: UploadFile = File(...)) -> FileResponse:    
-    scene_service.load_scene(file)
-    render_service.render_basic_scene()
-    scene_service.prepare_depth_scene()
-    scene_service.prepare_thermal_scene()
-    scene_service.prepare_blackbody_air_scene()
-    scene_service.prepare_transmittance_blackbody_air_scene()
-    scene_service.prepare_temperature_map()
-    result_path = path_manager.get_result_path("rgb")
-    return FileResponse(result_path, media_type="image/png", filename="rgb.png")
+    request_id = uuid4().hex
+    logger.info(
+        "POST /scene/load iniciado request_id=%s filename=%s",
+        request_id,
+        file.filename,
+    )
+
+    try:
+        scene_service.load_scene(file)
+        render_service.render_basic_scene()
+        scene_service.prepare_depth_scene()
+        scene_service.prepare_thermal_scene()
+        scene_service.prepare_blackbody_air_scene()
+        scene_service.prepare_transmittance_blackbody_air_scene()
+        scene_service.prepare_temperature_map()
+        result_path = path_manager.get_result_path("rgb")
+        logger.info("POST /scene/load completado request_id=%s", request_id)
+        return FileResponse(
+            result_path,
+            media_type="image/png",
+            filename="rgb.png",
+            headers={"X-Request-ID": request_id},
+        )
+    except HTTPException as exc:
+        logger.exception(
+            "POST /scene/load error controlado request_id=%s status=%s",
+            request_id,
+            exc.status_code,
+        )
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=f"[request_id={request_id}] {exc.detail}",
+            headers=exc.headers,
+        ) from exc
+    except Exception as exc:
+        logger.exception("POST /scene/load error inesperado request_id=%s", request_id)
+        raise HTTPException(
+            status_code=500,
+            detail=f"[request_id={request_id}] Error al cargar escena: {exc}",
+            headers={"X-Request-ID": request_id},
+        ) from exc
 
 
 @scene_router.get("/loaded")
