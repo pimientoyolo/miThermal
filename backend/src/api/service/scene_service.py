@@ -55,6 +55,8 @@ class SceneService(BaseService):
 
         # Limpiar y extraer con ZipHandler (reemplaza 20+ líneas)
         self.zip_handler.clear_and_extract(scene_zip_path, OUTPUT_STATIC_DIR)
+        if os.path.exists(scene_zip_path):
+            os.remove(scene_zip_path)
         
         # Recrear subdirectorios y archivo air.txt de referencia
         os.makedirs(OUTPUT_STATIC_RESULT_DIR, exist_ok=True)

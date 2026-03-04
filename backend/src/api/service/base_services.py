@@ -4,6 +4,7 @@ Reduce boilerplate mediante herencia y composición
 """
 
 import logging
+import io
 from abc import ABC
 from typing import Any, Optional, Callable
 from fastapi import HTTPException
@@ -115,6 +116,26 @@ class ZipHandler:
         Raises:
             HTTPException: Si hay errores
         """
+        zip_abs_path = os.path.abspath(zip_path)
+        extract_abs_path = os.path.abspath(extract_to)
+
+        # Si el ZIP está dentro del destino, leerlo en memoria antes de limpiar
+        zip_bytes = None
+        zip_inside_extract_dir = (
+            zip_abs_path == extract_abs_path
+            or zip_abs_path.startswith(extract_abs_path + os.sep)
+        )
+
+        if zip_inside_extract_dir:
+            try:
+                with open(zip_abs_path, "rb") as source_zip:
+                    zip_bytes = source_zip.read()
+            except OSError as e:
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"No se pudo leer ZIP temporal antes de limpiar: {e}",
+                )
+
         # Limpiar directorio destino
         if os.path.exists(extract_to):
             try:
@@ -128,7 +149,8 @@ class ZipHandler:
         
         # Extraer ZIP
         try:
-            with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_source = zip_path if zip_bytes is None else io.BytesIO(zip_bytes)
+            with zipfile.ZipFile(zip_source, 'r') as zip_ref:
                 if preserve_subdirs:
                     zip_ref.extractall(extract_to)
                 else:

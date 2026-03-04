@@ -107,7 +107,7 @@ class PathManager:
     @staticmethod
     def get_scene_zip_path() -> str:
         """Obtiene la ruta del archivo ZIP de escena"""
-        return str(OUTPUT_STATIC_DIR / "scene.zip")
+        return str(OUTPUT_DIR / "scene_upload.zip")
     
     @staticmethod
     def get_default_emissivity_path() -> str:
