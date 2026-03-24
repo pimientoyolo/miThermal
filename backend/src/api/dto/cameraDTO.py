@@ -33,3 +33,15 @@ class CameraInterpolationDTO(BaseModel):
     end: List[float]     # [x, y, z] posición final de la cámara
     tracked_point: List[float]  # [x, y, z] punto objetivo que la cámara mira
     num_steps: int = 30  # número de frames a generar
+
+
+class SphericalCameraInterpolationDTO(BaseModel):
+    """DTO para interpolación esférica de cámara alrededor de un punto."""
+    start_theta: float
+    end_theta: float
+    start_azimuth: float
+    end_azimuth: float
+    radius: float
+    tracked_point: List[float]
+    num_steps: int = 30
+    lock_azimuth_to_end: bool = False

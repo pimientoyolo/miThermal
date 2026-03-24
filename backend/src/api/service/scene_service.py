@@ -1015,6 +1015,41 @@ class SceneService(BaseService):
             self.logger.error(f"Error al generar interpolación de cámara: {e}")
             raise HTTPException(status_code=500, detail=f"Error al generar interpolación: {str(e)}")
 
+    def generate_camera_animation_spherical(
+        self,
+        start_theta: float,
+        end_theta: float,
+        start_azimuth: float,
+        end_azimuth: float,
+        radius: float,
+        tracked_point: list,
+        num_steps: int = 30,
+        lock_azimuth_to_end: bool = False,
+    ) -> list[dict]:
+        """Genera frames de cámara usando coordenadas esféricas alrededor de un objetivo."""
+        try:
+            camera_frames = generate_camera_interpolation_spherical(
+                start_theta=start_theta,
+                end_theta=end_theta,
+                start_azimuth=start_azimuth,
+                end_azimuth=end_azimuth,
+                radius=radius,
+                tracked_point=tracked_point,
+                num_steps=num_steps,
+                lock_azimuth_to_end=lock_azimuth_to_end,
+            )
+            self.logger.info(
+                "Generada interpolación esférica con %s frames",
+                num_steps,
+            )
+            return camera_frames
+        except Exception as e:
+            self.logger.error(f"Error al generar interpolación esférica: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Error al generar interpolación esférica: {str(e)}",
+            )
+
     def render_camera_path_preview_gif(self, camera_frames: list[dict]) -> str:
         """
         Renderiza un preview rápido de la trayectoria de cámara como GIF RGB.
@@ -1461,4 +1496,63 @@ def generate_camera_interpolation(origin, end, tracked_point, num_steps=30):
         }
         camera_frames.append(frame_config)
         
+    return camera_frames
+
+
+def generate_camera_interpolation_spherical(
+    start_theta,
+    end_theta,
+    start_azimuth,
+    end_azimuth,
+    radius,
+    tracked_point,
+    num_steps=30,
+    lock_azimuth_to_end=False,
+):
+    """Genera interpolación de cámara en coordenadas esféricas sobre un hemisferio."""
+    if num_steps <= 0:
+        raise ValueError("num_steps debe ser mayor que 0")
+    if radius <= 0:
+        raise ValueError("radius debe ser mayor que 0")
+
+    target_np = np.array(tracked_point, dtype=float)
+    camera_frames = []
+
+    for i in range(num_steps):
+        t = i / max(1, (num_steps - 1))
+
+        theta_deg = float(start_theta * (1.0 - t) + end_theta * t)
+        if lock_azimuth_to_end:
+            azimuth_deg = float(end_azimuth)
+        else:
+            azimuth_deg = float(start_azimuth * (1.0 - t) + end_azimuth * t)
+
+        theta_rad = np.deg2rad(theta_deg)
+        azimuth_rad = np.deg2rad(azimuth_deg)
+
+        offset = np.array(
+            [
+                radius * np.sin(theta_rad) * np.cos(azimuth_rad),
+                radius * np.sin(theta_rad) * np.sin(azimuth_rad),
+                radius * np.cos(theta_rad),
+            ],
+            dtype=float,
+        )
+
+        current_pos = target_np + offset
+        rot_x, rot_y, rot_z = calculate_look_at_blender(current_pos, target_np)
+
+        frame_config = {
+            "translate_x": float(current_pos[0]),
+            "translate_y": float(current_pos[1]),
+            "translate_z": float(current_pos[2]),
+            "rotate_x": rot_x,
+            "rotate_y": rot_y,
+            "rotate_z": rot_z,
+            "theta": theta_deg,
+            "azimuth": azimuth_deg,
+            "radius": float(radius),
+        }
+        camera_frames.append(frame_config)
+
     return camera_frames

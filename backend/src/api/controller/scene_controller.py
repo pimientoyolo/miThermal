@@ -7,7 +7,10 @@ from src.api.service.scene_service import SceneService
 from src.api.service.render_service import RenderService
 from fastapi.responses import FileResponse
 from src.config import PathManager
-from src.api.dto.cameraDTO import CameraInterpolationDTO
+from src.api.dto.cameraDTO import (
+    CameraInterpolationDTO,
+    SphericalCameraInterpolationDTO,
+)
 from typing import List
 
 
@@ -176,4 +179,67 @@ async def render_camera_animation_preview(
         gif_path,
         media_type="image/gif",
         filename="camera_path_preview.gif"
+    )
+
+
+@scene_router.post("/camera/interpolation/spherical")
+async def generate_camera_interpolation_spherical(
+    data: SphericalCameraInterpolationDTO = Body(...)
+) -> List[dict]:
+    """Genera interpolación esférica de cámara alrededor de un punto objetivo."""
+    return scene_service.generate_camera_animation_spherical(
+        start_theta=data.start_theta,
+        end_theta=data.end_theta,
+        start_azimuth=data.start_azimuth,
+        end_azimuth=data.end_azimuth,
+        radius=data.radius,
+        tracked_point=data.tracked_point,
+        num_steps=data.num_steps,
+        lock_azimuth_to_end=data.lock_azimuth_to_end,
+    )
+
+
+@scene_router.post("/camera/animation/render/spherical")
+async def render_camera_animation_spherical(
+    data: SphericalCameraInterpolationDTO = Body(...)
+) -> FileResponse:
+    """Genera y renderiza una animación completa usando interpolación esférica."""
+    camera_frames = scene_service.generate_camera_animation_spherical(
+        start_theta=data.start_theta,
+        end_theta=data.end_theta,
+        start_azimuth=data.start_azimuth,
+        end_azimuth=data.end_azimuth,
+        radius=data.radius,
+        tracked_point=data.tracked_point,
+        num_steps=data.num_steps,
+        lock_azimuth_to_end=data.lock_azimuth_to_end,
+    )
+    zip_path = scene_service.render_camera_animation_sequence(camera_frames)
+    return FileResponse(
+        zip_path,
+        media_type="application/zip",
+        filename="camera_animation_spherical.zip",
+    )
+
+
+@scene_router.post("/camera/animation/preview/spherical")
+async def render_camera_animation_preview_spherical(
+    data: SphericalCameraInterpolationDTO = Body(...)
+) -> FileResponse:
+    """Genera un preview GIF usando interpolación esférica."""
+    camera_frames = scene_service.generate_camera_animation_spherical(
+        start_theta=data.start_theta,
+        end_theta=data.end_theta,
+        start_azimuth=data.start_azimuth,
+        end_azimuth=data.end_azimuth,
+        radius=data.radius,
+        tracked_point=data.tracked_point,
+        num_steps=data.num_steps,
+        lock_azimuth_to_end=data.lock_azimuth_to_end,
+    )
+    gif_path = scene_service.render_camera_path_preview_gif(camera_frames)
+    return FileResponse(
+        gif_path,
+        media_type="image/gif",
+        filename="camera_path_preview_spherical.gif",
     )
