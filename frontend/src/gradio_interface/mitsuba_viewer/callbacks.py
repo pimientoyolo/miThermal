@@ -429,15 +429,29 @@ def create_mitsuba_viewer_interface():
                                 fov = gr.Number(label="FOV (deg)", precision=3, value=45)
                             
                             with gr.Column(scale=1):
-                                gr.Markdown("#### Transformaciones")
-                                with gr.Row():
-                                    rotate_x = gr.Number(label="Rotar X (°)", precision=3, value=0)
-                                    rotate_y = gr.Number(label="Rotar Y (°)", precision=3, value=0)
-                                    rotate_z = gr.Number(label="Rotar Z (°)", precision=3, value=0)
-                                with gr.Row():
-                                    translate_x = gr.Number(label="Trasladar X", precision=6, value=0)
-                                    translate_y = gr.Number(label="Trasladar Y", precision=6, value=0)
-                                    translate_z = gr.Number(label="Trasladar Z", precision=6, value=0)
+                                with gr.Tabs():
+                                    with gr.Tab("Cartesiano"):
+                                        gr.Markdown("#### Transformaciones")
+                                        with gr.Row():
+                                            rotate_x = gr.Number(label="Rotar X (°)", precision=3, value=0)
+                                            rotate_y = gr.Number(label="Rotar Y (°)", precision=3, value=0)
+                                            rotate_z = gr.Number(label="Rotar Z (°)", precision=3, value=0)
+                                        with gr.Row():
+                                            translate_x = gr.Number(label="Trasladar X", precision=6, value=0)
+                                            translate_y = gr.Number(label="Trasladar Y", precision=6, value=0)
+                                            translate_z = gr.Number(label="Trasladar Z", precision=6, value=0)
+                                    
+                                    with gr.Tab("Esférico (Ángulos)"):
+                                        gr.Markdown("#### Coordenadas Esféricas")
+                                        with gr.Row():
+                                            theta = gr.Number(label="Zenital (theta) [0-180]", precision=3)
+                                            phi = gr.Number(label="Azimutal (phi) [0-360]", precision=3)
+                                            radius = gr.Number(label="Radio", precision=3)
+                                        gr.Markdown("#### Punto Objetivo (Target)")
+                                        with gr.Row():
+                                            target_x = gr.Number(label="Target X", precision=3, value=0.0)
+                                            target_y = gr.Number(label="Target Y", precision=3, value=0.0)
+                                            target_z = gr.Number(label="Target Z", precision=3, value=0.0)
                         
                         gr.Markdown("---")
                         gr.Markdown("### Interpolación de Cámara (Animaciones)")
@@ -492,6 +506,8 @@ def create_mitsuba_viewer_interface():
                         gr.Markdown("### Aplicar Toda la Configuración")
                         with gr.Row():
                             load_config_btn = gr.Button("📥 Cargar Config Actual", variant="secondary")
+                            export_cam_btn = gr.Button("📤 Exportar Cámara", variant="secondary")
+                            import_cam_btn = gr.Button("📥 Importar Cámara", variant="secondary")
                             apply_all_btn = gr.Button("✅ Aplicar Toda la Config", variant="primary", size="lg")
                         
                         with gr.Row():
@@ -515,6 +531,12 @@ def create_mitsuba_viewer_interface():
                     "translate_x": translate_x,
                     "translate_y": translate_y,
                     "translate_z": translate_z,
+                    "theta": theta,
+                    "phi": phi,
+                    "radius": radius,
+                    "target_x": target_x,
+                    "target_y": target_y,
+                    "target_z": target_z,
                     "fov": fov,
                     "wl_min": wl_min,
                     "wl_max": wl_max,
@@ -528,6 +550,8 @@ def create_mitsuba_viewer_interface():
                     "air_plot": air_plot,
                     "atm_status": atm_status,
                     "load_config_btn": load_config_btn,
+                    "export_cam_btn": export_cam_btn,
+                    "import_cam_btn": import_cam_btn,
                     "apply_all_btn": apply_all_btn,
                     "config_status": config_status,
                     "config_info": config_info,
