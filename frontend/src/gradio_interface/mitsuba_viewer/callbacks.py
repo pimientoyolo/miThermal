@@ -635,67 +635,34 @@ def create_mitsuba_viewer_interface():
             try:
                 import math
                 if not isinstance(cfg, dict):
-                    return (
-                        gr.update(), gr.update(), gr.update(),  # spp_k, width, height
-                        gr.update(), gr.update(), gr.update(),  # rx, ry, rz
-                        gr.update(), gr.update(), gr.update(),  # tx, ty, tz
-                        gr.update(),                             # fov
-                        gr.update(), gr.update(), gr.update(),   # wl_min, wl_max, bands
-                        gr.update(),                              # config_info JSON
-                    )
+                    return (gr.update(),) * 19
+                
                 spp = cfg.get("spp")
                 k_val = None
                 if isinstance(spp, (int, float)) and spp > 0:
-                    # calcular k = log2(spp), entero
                     try:
                         k_val = int(round(math.log2(float(spp))))
                     except Exception:
                         k_val = None
-                width = cfg.get("width")
-                height = cfg.get("height")
-                rx = cfg.get("rotate_x")
-                ry = cfg.get("rotate_y")
-                rz = cfg.get("rotate_z")
-                tx = cfg.get("translate_x")
-                ty = cfg.get("translate_y")
-                tz = cfg.get("translate_z")
-                fov = cfg.get("fov")
+                
                 wavelengths = cfg.get("wavelengths") or []
                 wl_min = int(min(wavelengths)) if wavelengths else None
                 wl_max = int(max(wavelengths)) if wavelengths else None
                 bands = cfg.get("num_bands")
-                # Construir label dinámico para SPP = 2^k
-                spp_label = "SPP (2^k)"
-                try:
-                    if k_val is not None:
-                        spp_label = f"SPP = {int(2 ** int(k_val))}"
-                except Exception:
-                    pass
+
                 return (
-                    gr.update(value=k_val, label=spp_label),
-                    gr.update(value=width),
-                    gr.update(value=height),
-                    gr.update(value=rx),
-                    gr.update(value=ry),
-                    gr.update(value=rz),
-                    gr.update(value=tx),
-                    gr.update(value=ty),
-                    gr.update(value=tz),
-                    gr.update(value=fov),
-                    gr.update(value=wl_min),
-                    gr.update(value=wl_max),
-                    gr.update(value=bands),
+                    gr.update(value=k_val), gr.update(value=cfg.get("width")), gr.update(value=cfg.get("height")),
+                    gr.update(value=cfg.get("rotate_x")), gr.update(value=cfg.get("rotate_y")), gr.update(value=cfg.get("rotate_z")),
+                    gr.update(value=cfg.get("translate_x")), gr.update(value=cfg.get("translate_y")), gr.update(value=cfg.get("translate_z")),
+                    gr.update(value=cfg.get("fov")),
+                    gr.update(value=cfg.get("theta")), gr.update(value=cfg.get("phi")), gr.update(value=cfg.get("radius")),
+                    gr.update(value=cfg.get("target_x")), gr.update(value=cfg.get("target_y")), gr.update(value=cfg.get("target_z")),
+                    gr.update(value=wl_min), gr.update(value=wl_max), gr.update(value=bands),
                     gr.update(value=cfg),
                 )
-            except Exception:
-                return (
-                    gr.update(), gr.update(), gr.update(),
-                    gr.update(), gr.update(), gr.update(),
-                    gr.update(), gr.update(), gr.update(),
-                    gr.update(),
-                    gr.update(), gr.update(), gr.update(),
-                    gr.update(),
-                )
+            except Exception as e:
+                logger.error(f"_prefill_updates_from_config fallo: {e}")
+                return (gr.update(),) * 19
 
         # Actualizar label del slider SPP cuando el usuario cambia k
         def _update_spp_label(k):
@@ -1354,21 +1321,9 @@ def create_mitsuba_viewer_interface():
 
         # Config unificada: cámara + espectro + aire
         def apply_all_config_cb(
-            spp_k,
-            width,
-            height,
-            wl_min,
-            wl_max,
-            bands,
-            air_temperature,
-            air_file,
-            rx,
-            ry,
-            rz,
-            tx,
-            ty,
-            tz,
-            fov,
+            spp_k, width, height, wl_min, wl_max, bands, air_temperature, air_file,
+            rx, ry, rz, tx, ty, tz, fov,
+            theta, phi, radius, target_x, target_y, target_z
         ):
             client = get_client()
             results: Dict[str, Dict] = {}
@@ -1376,115 +1331,120 @@ def create_mitsuba_viewer_interface():
             try:
                 k = int(float(spp_k)) if spp_k is not None else None
                 spp_val = 2 ** k if k is not None else None
-                def pos_int(x):
-                    return x is None or (isinstance(x, (int, float)) and int(x) > 0)
-                if not pos_int(spp_val) or not pos_int(width) or not pos_int(height):
-                    results["camera"] = {"status": "error", "detail": "Valores inválidos"}
+                
+                # Preparamos argumentos para update_camera_config
+                cam_args = {
+                    "spp": int(spp_val) if spp_val is not None else None,
+                    "width": int(width) if width is not None else None,
+                    "height": int(height) if height is not None else None,
+                    "fov": float(fov) if fov is not None else None,
+                }
+                
+                # Si hay valores esféricos, los priorizamos (el backend se encarga de la lógica)
+                if all(v is not None for v in [theta, phi, radius]):
+                    cam_args.update({
+                        "theta": float(theta),
+                        "phi": float(phi),
+                        "radius": float(radius),
+                        "target_x": float(target_x) if target_x is not None else 0.0,
+                        "target_y": float(target_y) if target_y is not None else 0.0,
+                        "target_z": float(target_z) if target_z is not None else 0.0,
+                    })
                 else:
-                    results["camera"] = client.update_camera_config(
-                        spp=int(spp_val) if spp_val is not None else None,
-                        width=int(width) if width is not None else None,
-                        height=int(height) if height is not None else None,
-                        rotate_x=float(rx) if rx is not None else None,
-                        rotate_y=float(ry) if ry is not None else None,
-                        rotate_z=float(rz) if rz is not None else None,
-                        translate_x=float(tx) if tx is not None else None,
-                        translate_y=float(ty) if ty is not None else None,
-                        translate_z=float(tz) if tz is not None else None,
-                        fov=float(fov) if fov is not None else None,
-                    )
+                    # Si no, usamos cartesianas
+                    cam_args.update({
+                        "rotate_x": float(rx) if rx is not None else None,
+                        "rotate_y": float(ry) if ry is not None else None,
+                        "rotate_z": float(rz) if rz is not None else None,
+                        "translate_x": float(tx) if tx is not None else None,
+                        "translate_y": float(ty) if ty is not None else None,
+                        "translate_z": float(tz) if tz is not None else None,
+                    })
+                
+                results["camera"] = client.update_camera_config(**cam_args)
             except Exception as e:
                 results["camera"] = {"status": "error", "detail": str(e)}
+            
             # Espectro
             try:
                 wl_min_i = int(wl_min) if wl_min is not None else None
                 wl_max_i = int(wl_max) if wl_max is not None else None
                 bands_i = int(bands) if bands is not None else None
-                if wl_min_i is None or wl_max_i is None or bands_i is None:
-                    results["spectrum"] = {"status": "error", "detail": "Campos requeridos"}
-                elif wl_min_i < 0 or wl_max_i < 0 or wl_min_i >= wl_max_i or bands_i <= 0:
-                    results["spectrum"] = {"status": "error", "detail": "Valores espectro inválidos"}
-                else:
+                if all(v is not None for v in [wl_min_i, wl_max_i, bands_i]):
                     results["spectrum"] = client.update_wavelengths(wl_min_i, wl_max_i, bands_i)
             except Exception as e:
                 results["spectrum"] = {"status": "error", "detail": str(e)}
-            # Aire
+            
+            # Aire (resto igual...)
             air_plot = None
             try:
-                # Temperatura del aire (opcional)
                 if air_temperature is not None and air_temperature != "":
                     try:
                         t = float(air_temperature)
                         if t > 0:
                             results["air_temperature"] = client.set_air_temperature(t)
-                    except Exception as _:
-                        results["air_temperature"] = {"status": "error", "detail": "Temperatura inválida"}
+                    except Exception: pass
+                
                 if air_file is not None:
                     path = getattr(air_file, "name", None)
                     if path:
                         results["air"] = client.upload_air_attenuation(path)
+                
                 text = client.get_air_attenuation()
                 try:
                     xs, ys = parse_air_text_to_xy(text)
                     if xs and ys:
                         fig = go.Figure()
-                        fig.add_trace(go.Scatter(
-                            x=xs,
-                            y=ys,
-                            mode='lines',
-                            name='Atenuación',
-                            line=dict(color='#D55E00', width=2),
-                            hovertemplate='<b>Longitud de onda:</b> %{x:.1f} nm<br><b>Atenuación:</b> %{y:.4f}<extra></extra>'
-                        ))
-                        fig.update_layout(
-                            title='Atenuación del Aire',
-                            xaxis_title='Longitud de Onda (nm)',
-                            yaxis_title='Atenuación',
-                            hovermode='closest',
-                            template='plotly_white',
-                            height=350
-                        )
+                        fig.add_trace(go.Scatter(x=xs, y=ys, mode='lines', name='Atenuación'))
+                        fig.update_layout(title='Atenuación del Aire', height=350)
                         air_plot = fig
-                except Exception:
-                    pass
+                except Exception: pass
             except Exception as e:
                 results["air"] = {"status": "error", "detail": str(e)}
-            # Estado
-            status_lines = []
-            for k2, v in results.items():
-                try:
-                    st = v.get("status", "ok") if isinstance(v, dict) else "ok"
-                except Exception:
-                    st = "ok"
-                status_lines.append(f"{k2}: {st}")
-            status_text = "\n".join(status_lines) if status_lines else "Sin cambios"
+                
+            status_text = "\n".join([f"{k}: {v.get('status', 'ok') if isinstance(v, dict) else 'ok'}" for k, v in results.items()])
             return results, status_text, air_plot
 
         config_section["apply_all_btn"].click(
             fn=apply_all_config_cb,
             inputs=[
-                config_section["camera_spp"],
-                config_section["camera_width"],
-                config_section["camera_height"],
-                config_section["wl_min"],
-                config_section["wl_max"],
-                config_section["bands"],
-                config_section["air_temperature"],
-                config_section["air_file"],
-                config_section["rotate_x"],
-                config_section["rotate_y"],
-                config_section["rotate_z"],
-                config_section["translate_x"],
-                config_section["translate_y"],
-                config_section["translate_z"],
+                config_section["camera_spp"], config_section["camera_width"], config_section["camera_height"],
+                config_section["wl_min"], config_section["wl_max"], config_section["bands"],
+                config_section["air_temperature"], config_section["air_file"],
+                config_section["rotate_x"], config_section["rotate_y"], config_section["rotate_z"],
+                config_section["translate_x"], config_section["translate_y"], config_section["translate_z"],
                 config_section["fov"],
+                config_section["theta"], config_section["phi"], config_section["radius"],
+                config_section["target_x"], config_section["target_y"], config_section["target_z"],
             ],
             outputs=[
-                config_section["config_info"],
-                config_section["config_status"],
-                config_section["air_plot"],
+                config_section["config_info"], config_section["config_status"], config_section["air_plot"],
             ],
         )
+
+        def export_cam_cb():
+            import json, tempfile
+            res = get_client().export_camera_spatial_config()
+            if res.get("status") == "success":
+                with tempfile.NamedTemporaryFile(delete=False, mode="w", suffix=".json") as f:
+                    json.dump(res["data"], f)
+                    return f.name
+            return None
+
+        config_section["export_cam_btn"].click(fn=export_cam_cb, outputs=[gr.File(label="Cam Config JSON")])
+
+        def import_cam_cb(file):
+            import json
+            if file is None: return "No file selected"
+            try:
+                with open(file.name, "r") as f:
+                    data = json.load(f)
+                res = get_client().import_camera_spatial_config(data)
+                return f"Import status: {res.get('status')}"
+            except Exception as e:
+                return f"Error: {str(e)}"
+
+        config_section["import_cam_btn"].click(fn=import_cam_cb, inputs=[gr.File()], outputs=[config_section["config_status"]])
 
 
         # Utilidad local: parsear texto de aire a pares (x, y)
@@ -1535,6 +1495,12 @@ def create_mitsuba_viewer_interface():
                 config_section["translate_y"],
                 config_section["translate_z"],
                 config_section["fov"],
+                config_section["theta"],
+                config_section["phi"],
+                config_section["radius"],
+                config_section["target_x"],
+                config_section["target_y"],
+                config_section["target_z"],
                 config_section["wl_min"],
                 config_section["wl_max"],
                 config_section["bands"],
@@ -1687,231 +1653,151 @@ def create_mitsuba_viewer_interface():
         # Callback para interpolación de cámara
         # --------------------------------------------------------------------------------------
         def camera_interpolation_cb(
-            origin_x, origin_y, origin_z,
-            end_x, end_y, end_z,
-            target_x, target_y, target_z,
-            num_steps
+            mode, ox, oy, oz, ex, ey, ez, st, sa, sr, et, ea, er, lock_a, tx, ty, tz, steps
         ):
-            """Genera interpolación de cámara llamando al endpoint del backend."""
+            client = get_client()
             try:
-                client = get_client()
-                data = {
-                    "origin": [origin_x, origin_y, origin_z],
-                    "end": [end_x, end_y, end_z],
-                    "tracked_point": [target_x, target_y, target_z],
-                    "num_steps": int(num_steps)
-                }
-                
-                # Llamar al endpoint
-                response = client.session.post(
-                    f"{client.base_url}/scene/camera/interpolation",
-                    json=data
-                )
-                response.raise_for_status()
-                frames = response.json()
-                
-                status_msg = f"✅ Generados {len(frames)} frames de interpolación exitosamente."
-                return status_msg, frames
-                
-            except Exception as e:
-                error_msg = f"❌ Error al generar interpolación: {str(e)}"
-                logger.error(error_msg, exc_info=True)
-                return error_msg, []
-
-        def camera_render_animation_cb(
-            origin_x, origin_y, origin_z,
-            end_x, end_y, end_z,
-            target_x, target_y, target_z,
-            num_steps
-        ):
-            """Renderiza la animación completa de cámara."""
-            try:
-                client = get_client()
-                data = {
-                    "origin": [origin_x, origin_y, origin_z],
-                    "end": [end_x, end_y, end_z],
-                    "tracked_point": [target_x, target_y, target_z],
-                    "num_steps": int(num_steps)
-                }
-                
-                # Llamar al endpoint de renderizado
-                response = client.session.post(
-                    f"{client.base_url}/scene/camera/animation/render",
-                    json=data,
-                    timeout=600  # 10 minutos de timeout
-                )
-                response.raise_for_status()
-                
-                # Guardar el ZIP temporalmente
-                import tempfile
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tf:
-                    tf.write(response.content)
-                    zip_path = tf.name
-                
-                final_msg = f"✅ Animación completada: {int(num_steps)} frames renderizados y guardados en ZIP."
-                return final_msg, zip_path
-                
-            except Exception as e:
-                error_msg = f"❌ Error al renderizar animación: {str(e)}"
-                logger.error(error_msg, exc_info=True)
-                return error_msg, None
-
-        def camera_preview_animation_cb(
-            origin_x, origin_y, origin_z,
-            end_x, end_y, end_z,
-            target_x, target_y, target_z,
-            num_steps
-        ):
-            """Genera una previsualización rápida en GIF del path de cámara."""
-            try:
-                client = get_client()
-                data = {
-                    "origin": [origin_x, origin_y, origin_z],
-                    "end": [end_x, end_y, end_z],
-                    "tracked_point": [target_x, target_y, target_z],
-                    "num_steps": int(num_steps)
-                }
-
-                response = client.session.post(
-                    f"{client.base_url}/scene/camera/animation/preview",
-                    json=data,
-                    timeout=300
-                )
-                response.raise_for_status()
-
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".gif") as tf:
-                    tf.write(response.content)
-                    gif_path = tf.name
-
-                status = (
-                    "✅ Preview generado (mitad de frames, baja resolución y SPP)."
-                )
-                return status, gif_path
-
-            except Exception as e:
-                error_msg = f"❌ Error al generar preview: {str(e)}"
-                logger.error(error_msg, exc_info=True)
-                return error_msg, None
-
-        # Callbacks para gestión de cache
-        def refresh_cache_stats_cb():
-            """Obtiene y muestra las estadísticas del cache."""
-            try:
-                client = get_client()
-                result = client.get_cache_stats()
-                
-                if result.get("status") == "success":
-                    stats = result.get("data", {})
-                    
-                    # Formatear mensaje legible
-                    hits = stats.get("hits", 0)
-                    misses = stats.get("misses", 0)
-                    total = hits + misses
-                    hit_rate = stats.get("hit_rate", 0.0) * 100
-                    size = stats.get("size", 0)
-                    max_size = stats.get("max_size", 0)
-                    
-                    status_msg = (
-                        f"✅ Estadísticas actualizadas:\n"
-                        f"• Aciertos: {hits} / {total} ({hit_rate:.1f}%)\n"
-                        f"• Tamaño: {size} / {max_size} entradas"
+                if mode == "Lineal":
+                    res = client.session.post(f"{client.base_url}/scene/camera/interpolation", json={
+                        "origin": [ox, oy, oz], "end": [ex, ey, ez],
+                        "tracked_point": [tx, ty, tz], "num_steps": int(steps)
+                    })
+                else:
+                    res = client.generate_spherical_interpolation(
+                        start_theta=st, end_theta=et, start_azimuth=sa, end_azimuth=ea,
+                        start_radius=sr, end_radius=er, lock_azimuth_to_end=lock_a,
+                        tracked_point=[tx, ty, tz], num_steps=int(steps)
                     )
-                    
-                    return stats, status_msg
-                else:
-                    error_msg = f"❌ Error: {result.get('detail', 'Error desconocido')}"
-                    return {}, error_msg
-                    
-            except Exception as e:
-                error_msg = f"❌ Error al obtener estadísticas: {str(e)}"
-                logger.error(error_msg, exc_info=True)
-                return {}, error_msg
-
-        def clear_cache_cb():
-            """Limpia todo el cache de firmas espectrales."""
-            try:
-                client = get_client()
-                result = client.clear_cache()
-                
-                if result.get("status") == "success":
-                    data = result.get("data", {})
-                    cleared = data.get("entries_cleared", 0)
-                    status_msg = f"✅ Cache limpiado exitosamente. {cleared} entradas eliminadas."
-                    
-                    # Después de limpiar, obtener estadísticas actualizadas
-                    stats_result = client.get_cache_stats()
-                    if stats_result.get("status") == "success":
-                        return stats_result.get("data", {}), status_msg
+                    if isinstance(res, dict) and res.get("status") == "success":
+                        frames = res["data"]
+                        return f"✅ Generados {len(frames)} frames (Esférico)", frames
                     else:
-                        return {}, status_msg
-                else:
-                    error_msg = f"❌ Error: {result.get('detail', 'Error desconocido')}"
-                    return {}, error_msg
-                    
+                        return f"❌ Error: {res}", []
+
+                res.raise_for_status()
+                frames = res.json()
+                return f"✅ Generados {len(frames)} frames ({mode})", frames
             except Exception as e:
-                error_msg = f"❌ Error al limpiar cache: {str(e)}"
-                logger.error(error_msg, exc_info=True)
-                return {}, error_msg
+                return f"❌ Error: {str(e)}", []
 
-        camera_interp_section["generate_btn"].click(
-            fn=camera_interpolation_cb,
-            inputs=[
-                camera_interp_section["origin_x"],
-                camera_interp_section["origin_y"],
-                camera_interp_section["origin_z"],
-                camera_interp_section["end_x"],
-                camera_interp_section["end_y"],
-                camera_interp_section["end_z"],
-                camera_interp_section["target_x"],
-                camera_interp_section["target_y"],
-                camera_interp_section["target_z"],
-                camera_interp_section["num_steps"],
-            ],
-            outputs=[
-                camera_interp_section["status_output"],
-                camera_interp_section["interpolation_result"],
-            ],
-        )
+        def render_camera_animation_cb(mode, ox, oy, oz, ex, ey, ez, st, sa, sr, et, ea, er, lock_a, tx, ty, tz, steps):
+            client = get_client()
+            try:
+                if mode == "Lineal":
+                    payload = {"origin": [ox, oy, oz], "end": [ex, ey, ez], "tracked_point": [tx, ty, tz], "num_steps": int(steps)}
+                    url = f"{client.base_url}/scene/camera/animation/render"
+                else:
+                    payload = {
+                        "start_theta": st, "end_theta": et, "start_azimuth": sa, "end_azimuth": ea,
+                        "start_radius": sr, "end_radius": er, "lock_azimuth_to_end": lock_a,
+                        "tracked_point": [tx, ty, tz], "num_steps": int(steps)
+                    }
+                    url = f"{client.base_url}/scene/camera/animation/render/spherical"
 
-        camera_interp_section["render_btn"].click(
-            fn=camera_render_animation_cb,
-            inputs=[
-                camera_interp_section["origin_x"],
-                camera_interp_section["origin_y"],
-                camera_interp_section["origin_z"],
-                camera_interp_section["end_x"],
-                camera_interp_section["end_y"],
-                camera_interp_section["end_z"],
-                camera_interp_section["target_x"],
-                camera_interp_section["target_y"],
-                camera_interp_section["target_z"],
-                camera_interp_section["num_steps"],
-            ],
-            outputs=[
-                camera_interp_section["status_output"],
-                camera_interp_section["animation_zip"],
-            ],
-        )
+                res = client.session.post(url, json=payload, timeout=600)
+                res.raise_for_status()
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tf:
+                    tf.write(res.content)
+                    return f"✅ Animación renderizada ({mode})", tf.name
+            except Exception as e:
+                return f"❌ Error: {str(e)}", None
 
-        camera_interp_section["preview_btn"].click(
-            fn=camera_preview_animation_cb,
-            inputs=[
-                camera_interp_section["origin_x"],
-                camera_interp_section["origin_y"],
-                camera_interp_section["origin_z"],
-                camera_interp_section["end_x"],
-                camera_interp_section["end_y"],
-                camera_interp_section["end_z"],
-                camera_interp_section["target_x"],
-                camera_interp_section["target_y"],
-                camera_interp_section["target_z"],
-                camera_interp_section["num_steps"],
-            ],
-            outputs=[
-                camera_interp_section["status_output"],
-                camera_interp_section["preview_gif"],
-            ],
-        )
+        def preview_camera_path_cb(mode, ox, oy, oz, ex, ey, ez, st, sa, sr, et, ea, er, lock_a, tx, ty, tz, steps):
+            client = get_client()
+            try:
+                if mode == "Lineal":
+                    payload = {"origin": [ox, oy, oz], "end": [ex, ey, ez], "tracked_point": [tx, ty, tz], "num_steps": int(steps)}
+                    url = f"{client.base_url}/scene/camera/animation/preview"
+                else:
+                    payload = {
+                        "start_theta": st, "end_theta": et, "start_azimuth": sa, "end_azimuth": ea,
+                        "start_radius": sr, "end_radius": er, "lock_azimuth_to_end": lock_a,
+                        "tracked_point": [tx, ty, tz], "num_steps": int(steps)
+                    }
+                    url = f"{client.base_url}/scene/camera/animation/preview/spherical"
+                
+                res = client.session.post(url, json=payload, timeout=300)
+                res.raise_for_status()
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".gif") as tf:
+                    tf.write(res.content)
+                    return f"✅ Preview generado ({mode})", tf.name
+            except Exception as e:
+                return f"❌ Error: {str(e)}", None
+
+        def export_anim_cb(mode, ox, oy, oz, ex, ey, ez, st, sa, sr, et, ea, er, lock_a, tx, ty, tz, steps):
+            import json
+            client = get_client()
+            if mode == "Lineal":
+                data = {"origin": [ox, oy, oz], "end": [ex, ey, ez], "tracked_point": [tx, ty, tz], "num_steps": int(steps)}
+            else:
+                data = {
+                    "start_theta": st, "end_theta": et, "start_azimuth": sa, "end_azimuth": ea,
+                    "start_radius": sr, "end_radius": er, "lock_azimuth_to_end": lock_a,
+                    "tracked_point": [tx, ty, tz], "num_steps": int(steps)
+                }
+            res = client.export_camera_animation(mode.lower(), data)
+            if res.get("status") == "success":
+                with tempfile.NamedTemporaryFile(delete=False, mode="w", suffix=".json") as f:
+                    json.dump(res["data"], f)
+                    return f.name
+            return None
+
+        def import_anim_cb(file):
+            import json
+            if file is None: return "No file selected", gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+            try:
+                with open(file.name, "r") as f:
+                    data = json.load(f)
+                mode = data.get("mode", "linear")
+                mode_label = "Lineal" if mode == "linear" else "Esférico"
+                
+                updates = [gr.update(value=mode_label)] # interp_mode
+                
+                if mode == "linear" and "linear_data" in data:
+                    ld = data["linear_data"]
+                    updates.extend([
+                        gr.update(value=ld["origin"][0]), gr.update(value=ld["origin"][1]), gr.update(value=ld["origin"][2]),
+                        gr.update(value=ld["end"][0]), gr.update(value=ld["end"][1]), gr.update(value=ld["end"][2]),
+                        gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(),
+                        gr.update(value=ld["tracked_point"][0]), gr.update(value=ld["tracked_point"][1]), gr.update(value=ld["tracked_point"][2]),
+                        gr.update(value=ld["num_steps"])
+                    ])
+                elif mode == "spherical" and "spherical_data" in data:
+                    sd = data["spherical_data"]
+                    updates.extend([
+                        gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(),
+                        gr.update(value=sd["start_theta"]), gr.update(value=sd["start_azimuth"]), gr.update(value=sd.get("start_radius", sd.get("radius"))),
+                        gr.update(value=sd["end_theta"]), gr.update(value=sd["end_azimuth"]), gr.update(value=sd.get("end_radius", sd.get("radius"))),
+                        gr.update(value=sd.get("lock_azimuth_to_end", False)),
+                        gr.update(value=sd["tracked_point"][0]), gr.update(value=sd["tracked_point"][1]), gr.update(value=sd["tracked_point"][2]),
+                        gr.update(value=sd["num_steps"])
+                    ])
+                else:
+                    return "Invalid JSON format", *([gr.update()] * 17)
+                
+                return f"✅ Animación cargada ({mode_label})", *updates
+            except Exception as e:
+                return f"❌ Error: {str(e)}", *([gr.update()] * 17)
+
+        interp_inputs = [
+            camera_interp_section["interp_mode"],
+            camera_interp_section["origin_x"], camera_interp_section["origin_y"], camera_interp_section["origin_z"],
+            camera_interp_section["end_x"], camera_interp_section["end_y"], camera_interp_section["end_z"],
+            camera_interp_section["start_theta"], camera_interp_section["start_azimuth"], camera_interp_section["start_radius"],
+            camera_interp_section["end_theta"], camera_interp_section["end_azimuth"], camera_interp_section["end_radius"],
+            camera_interp_section["lock_azimuth"],
+            camera_interp_section["target_x"], camera_interp_section["target_y"], camera_interp_section["target_z"],
+            camera_interp_section["num_steps"],
+        ]
+
+        camera_interp_section["generate_btn"].click(fn=camera_interpolation_cb, inputs=interp_inputs, outputs=[camera_interp_section["status_output"], camera_interp_section["interpolation_result"]])
+        camera_interp_section["render_btn"].click(fn=render_camera_animation_cb, inputs=interp_inputs, outputs=[camera_interp_section["status_output"], camera_interp_section["animation_zip"]])
+        camera_interp_section["preview_btn"].click(fn=preview_camera_path_cb, inputs=interp_inputs, outputs=[camera_interp_section["status_output"], camera_interp_section["preview_gif"]])
+        camera_interp_section["export_anim_btn"].click(fn=export_anim_cb, inputs=interp_inputs, outputs=[gr.File(label="Anim Config JSON")])
+        
+        # Para import, necesitamos que devuelva updates a todos los campos
+        interp_outputs = [camera_interp_section["status_output"]] + interp_inputs
+        camera_interp_section["import_anim_btn"].click(fn=import_anim_cb, inputs=[gr.File()], outputs=interp_outputs)
 
         # Cache Management: conectar callbacks
         cache_section["refresh_stats_btn"].click(

@@ -1021,8 +1021,10 @@ class SceneService(BaseService):
         end_theta: float,
         start_azimuth: float,
         end_azimuth: float,
-        radius: float,
         tracked_point: list,
+        radius: float = None,
+        start_radius: float = None,
+        end_radius: float = None,
         num_steps: int = 30,
         lock_azimuth_to_end: bool = False,
     ) -> list[dict]:
@@ -1034,6 +1036,8 @@ class SceneService(BaseService):
                 start_azimuth=start_azimuth,
                 end_azimuth=end_azimuth,
                 radius=radius,
+                start_radius=start_radius,
+                end_radius=end_radius,
                 tracked_point=tracked_point,
                 num_steps=num_steps,
                 lock_azimuth_to_end=lock_azimuth_to_end,
@@ -1504,16 +1508,23 @@ def generate_camera_interpolation_spherical(
     end_theta,
     start_azimuth,
     end_azimuth,
-    radius,
-    tracked_point,
+    radius=None,
+    start_radius=None,
+    end_radius=None,
+    tracked_point=[0, 0, 0],
     num_steps=30,
     lock_azimuth_to_end=False,
 ):
     """Genera interpolación de cámara en coordenadas esféricas sobre un hemisferio."""
     if num_steps <= 0:
         raise ValueError("num_steps debe ser mayor que 0")
-    if radius <= 0:
-        raise ValueError("radius debe ser mayor que 0")
+    
+    # Determinar radios inicial y final
+    s_rad = start_radius if start_radius is not None else radius
+    e_rad = end_radius if end_radius is not None else radius
+    
+    if s_rad is None or e_rad is None:
+        raise ValueError("Se debe proporcionar radius o (start_radius y end_radius)")
 
     target_np = np.array(tracked_point, dtype=float)
     camera_frames = []
@@ -1526,15 +1537,17 @@ def generate_camera_interpolation_spherical(
             azimuth_deg = float(end_azimuth)
         else:
             azimuth_deg = float(start_azimuth * (1.0 - t) + end_azimuth * t)
+            
+        current_radius = float(s_rad * (1.0 - t) + e_rad * t)
 
         theta_rad = np.deg2rad(theta_deg)
         azimuth_rad = np.deg2rad(azimuth_deg)
 
         offset = np.array(
             [
-                radius * np.sin(theta_rad) * np.cos(azimuth_rad),
-                radius * np.sin(theta_rad) * np.sin(azimuth_rad),
-                radius * np.cos(theta_rad),
+                current_radius * np.sin(theta_rad) * np.cos(azimuth_rad),
+                current_radius * np.sin(theta_rad) * np.sin(azimuth_rad),
+                current_radius * np.cos(theta_rad),
             ],
             dtype=float,
         )
@@ -1551,7 +1564,7 @@ def generate_camera_interpolation_spherical(
             "rotate_z": rot_z,
             "theta": theta_deg,
             "azimuth": azimuth_deg,
-            "radius": float(radius),
+            "radius": current_radius,
         }
         camera_frames.append(frame_config)
 

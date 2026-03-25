@@ -220,14 +220,30 @@ def build_unified_config_section() -> Dict[str, gr.components.Component]:
 		# Izquierda: Config cámara
 		with gr.Column(scale=1):
 			gr.Markdown("### Config cámara")
-			load_config_btn = gr.Button("Cargar Config", variant="secondary")
+			with gr.Row():
+				load_config_btn = gr.Button("Cargar Config", variant="secondary")
+				export_cam_btn = gr.Button("📤 Exportar Cámara", variant="secondary")
+				import_cam_btn = gr.Button("📥 Importar Cámara", variant="secondary")
+			
 			camera_spp = gr.Slider(label="SPP (2^k)", minimum=1, maximum=13, step=1, value=4)
-			rotate_x = gr.Number(label="Rotar X (deg)", precision=3)
-			rotate_y = gr.Number(label="Rotar Y (deg)", precision=3)
-			rotate_z = gr.Number(label="Rotar Z (deg)", precision=3)
-			translate_x = gr.Number(label="Trasladar X", precision=6)
-			translate_y = gr.Number(label="Trasladar Y", precision=6)
-			translate_z = gr.Number(label="Trasladar Z", precision=6)
+			
+			with gr.Tab("Cartesiano"):
+				rotate_x = gr.Number(label="Rotar X (deg)", precision=3)
+				rotate_y = gr.Number(label="Rotar Y (deg)", precision=3)
+				rotate_z = gr.Number(label="Rotar Z (deg)", precision=3)
+				translate_x = gr.Number(label="Trasladar X", precision=6)
+				translate_y = gr.Number(label="Trasladar Y", precision=6)
+				translate_z = gr.Number(label="Trasladar Z", precision=6)
+			
+			with gr.Tab("Esférico (Ángulos)"):
+				theta = gr.Number(label="Zenital (theta) [0-180]", precision=3)
+				phi = gr.Number(label="Azimutal (phi) [0-360]", precision=3)
+				radius = gr.Number(label="Radio", precision=3)
+				with gr.Row():
+					target_x = gr.Number(label="Target X", precision=3, value=0.0)
+					target_y = gr.Number(label="Target Y", precision=3, value=0.0)
+					target_z = gr.Number(label="Target Z", precision=3, value=0.0)
+			
 			fov = gr.Number(label="FOV (deg)", precision=3)
 
 		# Derecha: Config general
@@ -257,6 +273,8 @@ def build_unified_config_section() -> Dict[str, gr.components.Component]:
 	return {
 		"air_plot": air_plot,
 		"load_config_btn": load_config_btn,
+		"export_cam_btn": export_cam_btn,
+		"import_cam_btn": import_cam_btn,
 		"camera_spp": camera_spp,
 		"rotate_x": rotate_x,
 		"rotate_y": rotate_y,
@@ -264,6 +282,12 @@ def build_unified_config_section() -> Dict[str, gr.components.Component]:
 		"translate_x": translate_x,
 		"translate_y": translate_y,
 		"translate_z": translate_z,
+		"theta": theta,
+		"phi": phi,
+		"radius": radius,
+		"target_x": target_x,
+		"target_y": target_y,
+		"target_z": target_z,
 		"fov": fov,
 		"wl_min": wl_min,
 		"wl_max": wl_max,
@@ -343,19 +367,46 @@ def build_camera_interpolation_section() -> Dict[str, gr.components.Component]:
 	
 	with gr.Row():
 		with gr.Column(scale=1):
-			gr.Markdown("### Punto Inicial")
-			origin_x = gr.Number(label="X origen", value=0.0, precision=2)
-			origin_y = gr.Number(label="Y origen", value=0.0, precision=2)
-			origin_z = gr.Number(label="Z origen", value=5.0, precision=2)
-			
+			interp_mode = gr.Radio(label="Modo de Interpolación", choices=["Lineal", "Esférico"], value="Lineal")
 		with gr.Column(scale=1):
-			gr.Markdown("### Punto Final")
-			end_x = gr.Number(label="X final", value=5.0, precision=2)
-			end_y = gr.Number(label="Y final", value=5.0, precision=2)
-			end_z = gr.Number(label="Z final", value=5.0, precision=2)
+			with gr.Row():
+				export_anim_btn = gr.Button("📤 Exportar Animación", variant="secondary")
+				import_anim_btn = gr.Button("📥 Importar Animación", variant="secondary")
+
+	with gr.Tabs() as tabs:
+		with gr.Tab("Lineal (Cartesiano)") as linear_tab:
+			with gr.Row():
+				with gr.Column(scale=1):
+					gr.Markdown("### Punto Inicial")
+					origin_x = gr.Number(label="X origen", value=0.0, precision=2)
+					origin_y = gr.Number(label="Y origen", value=0.0, precision=2)
+					origin_z = gr.Number(label="Z origen", value=5.0, precision=2)
+					
+				with gr.Column(scale=1):
+					gr.Markdown("### Punto Final")
+					end_x = gr.Number(label="X final", value=5.0, precision=2)
+					end_y = gr.Number(label="Y final", value=5.0, precision=2)
+					end_z = gr.Number(label="Z final", value=5.0, precision=2)
 			
+		with gr.Tab("Esférico (Ángulos)") as spherical_tab:
+			with gr.Row():
+				with gr.Column(scale=1):
+					gr.Markdown("### Ángulos Iniciales")
+					start_theta = gr.Number(label="Theta Inicial (zenit)", value=45.0, precision=2)
+					start_azimuth = gr.Number(label="Azimuth Inicial", value=0.0, precision=2)
+					start_radius = gr.Number(label="Radio Inicial", value=10.0, precision=2)
+					
+				with gr.Column(scale=1):
+					gr.Markdown("### Ángulos Finales")
+					end_theta = gr.Number(label="Theta Final (zenit)", value=45.0, precision=2)
+					end_azimuth = gr.Number(label="Azimuth Final", value=90.0, precision=2)
+					end_radius = gr.Number(label="Radio Final", value=10.0, precision=2)
+			
+			lock_azimuth = gr.Checkbox(label="Bloquear Azimuth al valor final", value=False)
+
+	with gr.Row():
 		with gr.Column(scale=1):
-			gr.Markdown("### Punto Objetivo")
+			gr.Markdown("### Punto Objetivo (Mirar a)")
 			target_x = gr.Number(label="X objetivo", value=0.0, precision=2)
 			target_y = gr.Number(label="Y objetivo", value=0.0, precision=2)
 			target_z = gr.Number(label="Z objetivo", value=0.0, precision=2)
@@ -389,12 +440,22 @@ def build_camera_interpolation_section() -> Dict[str, gr.components.Component]:
 		animation_zip = gr.File(label="Descargar Animación (.zip)")
 	
 	return {
+		"interp_mode": interp_mode,
+		"export_anim_btn": export_anim_btn,
+		"import_anim_btn": import_anim_btn,
 		"origin_x": origin_x,
 		"origin_y": origin_y,
 		"origin_z": origin_z,
 		"end_x": end_x,
 		"end_y": end_y,
 		"end_z": end_z,
+		"start_theta": start_theta,
+		"start_azimuth": start_azimuth,
+		"start_radius": start_radius,
+		"end_theta": end_theta,
+		"end_azimuth": end_azimuth,
+		"end_radius": end_radius,
+		"lock_azimuth": lock_azimuth,
 		"target_x": target_x,
 		"target_y": target_y,
 		"target_z": target_z,

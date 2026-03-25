@@ -14,18 +14,48 @@ class CameraDTO(BaseModel):
     translate_y : float
     translate_z : float
     fov : float
+    # Parametrización esférica (opcional, calculada a partir de cartesianas si no se provee)
+    theta: float | None = None
+    phi: float | None = None
+    radius: float | None = None
+    target_x: float | None = 0.0
+    target_y: float | None = 0.0
+    target_z: float | None = 0.0
 
 class UpdateCameraDTO(BaseModel):
     spp : int
     width : int
     height : int
-    rotate_x : float
-    rotate_y : float
-    rotate_z : float
-    translate_x : float
-    translate_y : float
-    translate_z : float
+    rotate_x : float | None = None
+    rotate_y : float | None = None
+    rotate_z : float | None = None
+    translate_x : float | None = None
+    translate_y : float | None = None
+    translate_z : float | None = None
     fov : float
+    # Nuevos parámetros esféricos
+    theta: float | None = None
+    phi: float | None = None
+    radius: float | None = None
+    target_x: float | None = None
+    target_y: float | None = None
+    target_z: float | None = None
+
+class CameraSpatialConfigDTO(BaseModel):
+    """DTO para exportar/importar solo la configuración espacial de la cámara"""
+    rotate_x: float
+    rotate_y: float
+    rotate_z: float
+    translate_x: float
+    translate_y: float
+    translate_z: float
+    fov: float
+    theta: float | None = None
+    phi: float | None = None
+    radius: float | None = None
+    target_x: float | None = None
+    target_y: float | None = None
+    target_z: float | None = None
 
 class CameraInterpolationDTO(BaseModel):
     """DTO para solicitudes de interpolación de cámara"""
@@ -41,7 +71,15 @@ class SphericalCameraInterpolationDTO(BaseModel):
     end_theta: float
     start_azimuth: float
     end_azimuth: float
-    radius: float
+    start_radius: float | None = None
+    end_radius: float | None = None
+    radius: float | None = None # Mantener para retrocompatibilidad
     tracked_point: List[float]
     num_steps: int = 30
     lock_azimuth_to_end: bool = False
+
+class CameraAnimationConfigDTO(BaseModel):
+    """DTO para exportar/importar la configuración de una animación de cámara completa"""
+    mode: str # "linear" o "spherical"
+    linear_data: CameraInterpolationDTO | None = None
+    spherical_data: SphericalCameraInterpolationDTO | None = None

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import FileResponse
 
-from src.api.dto.cameraDTO import CameraDTO, UpdateCameraDTO
+from src.api.dto.cameraDTO import CameraDTO, UpdateCameraDTO, CameraSpatialConfigDTO
 from src.api.service.config_service import ConfigService
 from fastapi import Query
 from typing import Dict
@@ -35,6 +35,17 @@ async def update_config(camera_update: UpdateCameraDTO) -> CameraDTO:
     updated_camera = config_service.update_camera_config(camera_update)
 
     return updated_camera
+
+@config_router.get("/camera/spatial/export")
+async def export_camera_spatial_config() -> CameraSpatialConfigDTO:
+    """Exporta solo la configuración espacial de la cámara"""
+    config = config_service.export_camera_spatial_config()
+    return CameraSpatialConfigDTO(**config)
+
+@config_router.post("/camera/spatial/import")
+async def import_camera_spatial_config(spatial_config: CameraSpatialConfigDTO) -> CameraDTO:
+    """Importa solo la configuración espacial de la cámara"""
+    return config_service.import_camera_spatial_config(spatial_config.dict())
 
 @config_router.put("/wavelengths")
 async def update_wavelengths(

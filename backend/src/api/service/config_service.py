@@ -26,20 +26,49 @@ class ConfigService:
     def get_camera_config(self) -> CameraDTO:
         
         scene_config = get_config_scene_dict()
+        camera_data = scene_config.get("camera", {})
+
+        # Obtener valores básicos
+        spp = camera_data.get("spp", 256)
+        width = camera_data.get("width", 256)
+        height = camera_data.get("height", 256)
+        fov = camera_data.get("fov", 45.0)
+        
+        rotate_x = camera_data.get("rotate_x", 0.0)
+        rotate_y = camera_data.get("rotate_y", 0.0)
+        rotate_z = camera_data.get("rotate_z", 0.0)
+        
+        translate_x = camera_data.get("translate_x", 0.0)
+        translate_y = camera_data.get("translate_y", 0.0)
+        translate_z = camera_data.get("translate_z", 0.0)
+
+        # Obtener valores esféricos si existen, o calcularlos (opcional)
+        theta = camera_data.get("theta")
+        phi = camera_data.get("phi")
+        radius = camera_data.get("radius")
+        target_x = camera_data.get("target_x", 0.0)
+        target_y = camera_data.get("target_y", 0.0)
+        target_z = camera_data.get("target_z", 0.0)
 
         camera_dto = CameraDTO(
-            spp=scene_config["camera"]["spp"],
-            width=scene_config["camera"]["width"],
-            height=scene_config["camera"]["height"],
-            wavelengths=[w / 1000 for w in scene_config["wavelengths"]],
-            num_bands=scene_config["num_bands"],
-            rotate_x=scene_config["camera"].get("rotate_x", 0.0),
-            rotate_y=scene_config["camera"].get("rotate_y", 0.0),
-            rotate_z=scene_config["camera"].get("rotate_z", 0.0),
-            translate_x=scene_config["camera"].get("translate_x", 0.0),
-            translate_y=scene_config["camera"].get("translate_y", 0.0),
-            translate_z=scene_config["camera"].get("translate_z", 0.0),
-            fov=scene_config["camera"].get("fov", 45.0)
+            spp=spp,
+            width=width,
+            height=height,
+            wavelengths=[w / 1000 for w in scene_config.get("wavelengths", [])],
+            num_bands=scene_config.get("num_bands", 0),
+            rotate_x=rotate_x,
+            rotate_y=rotate_y,
+            rotate_z=rotate_z,
+            translate_x=translate_x,
+            translate_y=translate_y,
+            translate_z=translate_z,
+            fov=fov,
+            theta=theta,
+            phi=phi,
+            radius=radius,
+            target_x=target_x,
+            target_y=target_y,
+            target_z=target_z
         )
 
         return camera_dto
@@ -48,48 +77,78 @@ class ConfigService:
     def update_camera_config(self, camera_update: UpdateCameraDTO) -> CameraDTO:
 
         scene_config = get_config_scene_dict()
+        camera_data = scene_config.setdefault("camera", {})
 
-        scene_config["camera"]["spp"] = camera_update.spp
-        scene_config["camera"]["width"] = camera_update.width
-        scene_config["camera"]["height"] = camera_update.height
-        scene_config["camera"]["rotate_x"] = camera_update.rotate_x
-        scene_config["camera"]["rotate_y"] = camera_update.rotate_y
-        scene_config["camera"]["rotate_z"] = camera_update.rotate_z
-        scene_config["camera"]["translate_x"] = camera_update.translate_x
-        scene_config["camera"]["translate_y"] = camera_update.translate_y
-        scene_config["camera"]["translate_z"] = camera_update.translate_z
-        scene_config["camera"]["fov"] = camera_update.fov
+        # Actualizar valores comunes
+        camera_data["spp"] = camera_update.spp
+        camera_data["width"] = camera_update.width
+        camera_data["height"] = camera_update.height
+        camera_data["fov"] = camera_update.fov
 
-        #validar fov entre 1 y 179
+        # Si se proporcionan coordenadas esféricas, calcular cartesianas
+        if camera_update.theta is not None and camera_update.phi is not None and camera_update.radius is not None:
+            from src.api.service.scene_service import calculate_look_at_blender
+            
+            theta_rad = np.deg2rad(camera_update.theta)
+            phi_rad = np.deg2rad(camera_update.phi)
+            radius = camera_update.radius
+            
+            target_x = camera_update.target_x if camera_update.target_x is not None else camera_data.get("target_x", 0.0)
+            target_y = camera_update.target_y if camera_update.target_y is not None else camera_data.get("target_y", 0.0)
+            target_z = camera_update.target_z if camera_update.target_z is not None else camera_data.get("target_z", 0.0)
+            
+            # Calcular posición relativa
+            x = radius * np.sin(theta_rad) * np.cos(phi_rad)
+            y = radius * np.sin(theta_rad) * np.sin(phi_rad)
+            z = radius * np.cos(theta_rad)
+            
+            # Posición absoluta
+            translate_x = target_x + x
+            translate_y = target_y + y
+            translate_z = target_z + z
+            
+            # Calcular rotación look-at
+            cam_pos = np.array([translate_x, translate_y, translate_z])
+            target_pos = np.array([target_x, target_y, target_z])
+            rx, ry, rz = calculate_look_at_blender(cam_pos, target_pos)
+            
+            # Guardar en config
+            camera_data["translate_x"] = float(translate_x)
+            camera_data["translate_y"] = float(translate_y)
+            camera_data["translate_z"] = float(translate_z)
+            camera_data["rotate_x"] = rx
+            camera_data["rotate_y"] = ry
+            camera_data["rotate_z"] = rz
+            
+            # Guardar esféricas también
+            camera_data["theta"] = camera_update.theta
+            camera_data["phi"] = camera_update.phi
+            camera_data["radius"] = radius
+            camera_data["target_x"] = target_x
+            camera_data["target_y"] = target_y
+            camera_data["target_z"] = target_z
+            
+        else:
+            # Usar cartesianas si se proporcionan, o mantener actuales
+            if camera_update.rotate_x is not None: camera_data["rotate_x"] = camera_update.rotate_x
+            if camera_update.rotate_y is not None: camera_data["rotate_y"] = camera_update.rotate_y
+            if camera_update.rotate_z is not None: camera_data["rotate_z"] = camera_update.rotate_z
+            if camera_update.translate_x is not None: camera_data["translate_x"] = camera_update.translate_x
+            if camera_update.translate_y is not None: camera_data["translate_y"] = camera_update.translate_y
+            if camera_update.translate_z is not None: camera_data["translate_z"] = camera_update.translate_z
+            
+            # Limpiar esféricas si se movió manualmente por cartesianas (opcional)
+            # o podríamos intentar re-calcularlas aquí.
+
+        # Validaciones
         if camera_update.fov < 1 or camera_update.fov > 179:
             raise HTTPException(status_code=400, detail="FOV debe estar entre 1 y 179 grados")
-
-        # validar spp mayor a 0
         if camera_update.spp <= 0:
             raise HTTPException(status_code=400, detail="SPP debe ser mayor a 0")
-        
-        # validar que spp sea potencia de 2
         if (camera_update.spp & (camera_update.spp - 1)) != 0:
             raise HTTPException(status_code=400, detail="SPP debe ser potencia de 2")
-        
-        # validar width y height mayor a 0
         if camera_update.width <= 0 or camera_update.height <= 0:
             raise HTTPException(status_code=400, detail="Alto y ancho deben ser mayores a 0")
-
-        updated_camera = CameraDTO(
-            spp=scene_config["camera"]["spp"],
-            width=scene_config["camera"]["width"],
-            height=scene_config["camera"]["height"],
-            wavelengths=[w / 1000 for w in scene_config["wavelengths"]],
-            num_bands=scene_config["num_bands"],
-            rotate_x=scene_config["camera"]["rotate_x"],
-            rotate_y=scene_config["camera"]["rotate_y"],
-            rotate_z=scene_config["camera"]["rotate_z"],
-            translate_x=scene_config["camera"]["translate_x"],
-            translate_y=scene_config["camera"]["translate_y"],
-            translate_z=scene_config["camera"]["translate_z"],
-            fov=scene_config["camera"]["fov"]
-        )
 
         save_config_scene_dict(scene_config)
 
@@ -99,7 +158,56 @@ class ConfigService:
         scene_service.prepare_transmittance_blackbody_air_scene()
         scene_service.prepare_temperature_map()
 
-        return updated_camera
+        return self.get_camera_config()
+
+    @log_execution()
+    def export_camera_spatial_config(self) -> dict:
+        """Exporta la configuración espacial de la cámara"""
+        config = get_config_scene_dict()
+        cam = config.get("camera", {})
+        return {
+            "rotate_x": cam.get("rotate_x", 0.0),
+            "rotate_y": cam.get("rotate_y", 0.0),
+            "rotate_z": cam.get("rotate_z", 0.0),
+            "translate_x": cam.get("translate_x", 0.0),
+            "translate_y": cam.get("translate_y", 0.0),
+            "translate_z": cam.get("translate_z", 0.0),
+            "fov": cam.get("fov", 45.0),
+            "theta": cam.get("theta"),
+            "phi": cam.get("phi"),
+            "radius": cam.get("radius"),
+            "target_x": cam.get("target_x"),
+            "target_y": cam.get("target_y"),
+            "target_z": cam.get("target_z")
+        }
+
+    @log_execution()
+    def import_camera_spatial_config(self, spatial_config: dict) -> CameraDTO:
+        """Importa la configuración espacial de la cámara"""
+        scene_config = get_config_scene_dict()
+        cam = scene_config.setdefault("camera", {})
+        
+        # Solo actualizar campos espaciales
+        spatial_fields = [
+            "rotate_x", "rotate_y", "rotate_z", 
+            "translate_x", "translate_y", "translate_z", 
+            "fov", "theta", "phi", "radius",
+            "target_x", "target_y", "target_z"
+        ]
+        
+        for field in spatial_fields:
+            if field in spatial_config and spatial_config[field] is not None:
+                cam[field] = spatial_config[field]
+        
+        save_config_scene_dict(scene_config)
+        
+        scene_service.update_scene_camera_all()
+        scene_service.prepare_blackbody_air_scene()
+        scene_service.prepare_depth_scene()
+        scene_service.prepare_transmittance_blackbody_air_scene()
+        scene_service.prepare_temperature_map()
+        
+        return self.get_camera_config()
 
     @log_execution()
     def update_wavelengths(self, w_min: int, w_max: int, bands: int) -> CameraDTO:

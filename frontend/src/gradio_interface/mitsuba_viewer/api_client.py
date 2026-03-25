@@ -6,7 +6,7 @@ import logging
 import base64
 import requests
 import os
-from typing import Dict
+from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -25,24 +25,6 @@ def set_default_base_url(url: str) -> None:
 
 
 class MitsubaAPIClient:
-    def render_thermal(self) -> Dict:
-        try:
-            r = self.session.get(f"{self.base_url}/render/thermal")
-            r.raise_for_status()
-            # Espera un archivo .npy, lo decodifica como base64 para Gradio
-            return {"status": "ok", "npy_bytes": r.content}
-        except Exception as e:
-            logger.error(f"Render thermal error: {e}")
-            return {"status": "error", "detail": str(e)}
-
-    def render_depth(self) -> Dict:
-        try:
-            r = self.session.get(f"{self.base_url}/render/depth")
-            r.raise_for_status()
-            return {"status": "ok", "npy_bytes": r.content}
-        except Exception as e:
-            logger.error(f"Render depth error: {e}")
-            return {"status": "error", "detail": str(e)}
     """Cliente para conectar con la API FastAPI del servidor Mitsuba."""
 
     def __init__(self, base_url: str | None = None):
@@ -228,29 +210,32 @@ class MitsubaAPIClient:
         translate_y: float | None = None,
         translate_z: float | None = None,
         fov: float | None = None,
+        theta: float | None = None,
+        phi: float | None = None,
+        radius: float | None = None,
+        target_x: float | None = None,
+        target_y: float | None = None,
+        target_z: float | None = None,
     ) -> Dict:
         try:
             payload = {}
-            if spp is not None:
-                payload["spp"] = int(spp)
-            if width is not None:
-                payload["width"] = int(width)
-            if height is not None:
-                payload["height"] = int(height)
-            if rotate_x is not None:
-                payload["rotate_x"] = float(rotate_x)
-            if rotate_y is not None:
-                payload["rotate_y"] = float(rotate_y)
-            if rotate_z is not None:
-                payload["rotate_z"] = float(rotate_z)
-            if translate_x is not None:
-                payload["translate_x"] = float(translate_x)
-            if translate_y is not None:
-                payload["translate_y"] = float(translate_y)
-            if translate_z is not None:
-                payload["translate_z"] = float(translate_z)
-            if fov is not None:
-                payload["fov"] = float(fov)
+            if spp is not None: payload["spp"] = int(spp)
+            if width is not None: payload["width"] = int(width)
+            if height is not None: payload["height"] = int(height)
+            if rotate_x is not None: payload["rotate_x"] = float(rotate_x)
+            if rotate_y is not None: payload["rotate_y"] = float(rotate_y)
+            if rotate_z is not None: payload["rotate_z"] = float(rotate_z)
+            if translate_x is not None: payload["translate_x"] = float(translate_x)
+            if translate_y is not None: payload["translate_y"] = float(translate_y)
+            if translate_z is not None: payload["translate_z"] = float(translate_z)
+            if fov is not None: payload["fov"] = float(fov)
+            if theta is not None: payload["theta"] = float(theta)
+            if phi is not None: payload["phi"] = float(phi)
+            if radius is not None: payload["radius"] = float(radius)
+            if target_x is not None: payload["target_x"] = float(target_x)
+            if target_y is not None: payload["target_y"] = float(target_y)
+            if target_z is not None: payload["target_z"] = float(target_z)
+            
             r = self.session.put(f"{self.base_url}/config/camera", json=payload)
             r.raise_for_status()
             return r.json()
@@ -501,6 +486,7 @@ class MitsubaAPIClient:
         except Exception as e:
             logger.error(f"Clear cache error: {e}")
             return {"status": "error", "detail": str(e)}
+
     # ---------------------- Spectral Data Export ----------------------
     def get_emissivity_spectrum(
         self, 
@@ -508,30 +494,10 @@ class MitsubaAPIClient:
         wavelength_min_nm: int = None,
         wavelength_max_nm: int = None
     ) -> Dict:
-        """GET /spectral/emissivity/{object_id}
-        
-        Obtiene el espectro de emisividad de un objeto como datos JSON.
-        
-        Args:
-            object_id: ID del objeto
-            wavelength_min_nm: Longitud de onda mínima en nm (opcional)
-            wavelength_max_nm: Longitud de onda máxima en nm (opcional)
-        
-        Returns: {
-            "wavelengths": [8000.0, 8100.0, ...],
-            "values": [0.85, 0.87, ...],
-            "unit": "Emisividad (0-1)",
-            "label": "Espectro de emisividad: <object_id>",
-            "title": "Emisividad vs Longitud de Onda - <object_id>"
-        }
-        """
         try:
             params = {}
-            if wavelength_min_nm is not None:
-                params["wavelength_min_nm"] = wavelength_min_nm
-            if wavelength_max_nm is not None:
-                params["wavelength_max_nm"] = wavelength_max_nm
-            
+            if wavelength_min_nm is not None: params["wavelength_min_nm"] = wavelength_min_nm
+            if wavelength_max_nm is not None: params["wavelength_max_nm"] = wavelength_max_nm
             r = self.session.get(f"{self.base_url}/spectral/emissivity/{object_id}", params=params)
             r.raise_for_status()
             return {"status": "success", "data": r.json()}
@@ -545,30 +511,10 @@ class MitsubaAPIClient:
         wavelength_min_nm: int = None,
         wavelength_max_nm: int = None
     ) -> Dict:
-        """GET /spectral/reflectance/{object_id}
-        
-        Obtiene el espectro de reflectancia de un objeto como datos JSON.
-        
-        Args:
-            object_id: ID del objeto
-            wavelength_min_nm: Longitud de onda mínima en nm (opcional)
-            wavelength_max_nm: Longitud de onda máxima en nm (opcional)
-        
-        Returns: {
-            "wavelengths": [8000.0, 8100.0, ...],
-            "values": [0.15, 0.13, ...],
-            "unit": "Reflectancia (0-1)",
-            "label": "Espectro de reflectancia: <object_id>",
-            "title": "Reflectancia vs Longitud de Onda - <object_id>"
-        }
-        """
         try:
             params = {}
-            if wavelength_min_nm is not None:
-                params["wavelength_min_nm"] = wavelength_min_nm
-            if wavelength_max_nm is not None:
-                params["wavelength_max_nm"] = wavelength_max_nm
-            
+            if wavelength_min_nm is not None: params["wavelength_min_nm"] = wavelength_min_nm
+            if wavelength_max_nm is not None: params["wavelength_max_nm"] = wavelength_max_nm
             r = self.session.get(f"{self.base_url}/spectral/reflectance/{object_id}", params=params)
             r.raise_for_status()
             return {"status": "success", "data": r.json()}
@@ -582,30 +528,10 @@ class MitsubaAPIClient:
         wavelength_min_nm: int = None,
         wavelength_max_nm: int = None
     ) -> Dict:
-        """GET /spectral/atmosphere?gas=<gas>&wavelength_min_nm=<min>&wavelength_max_nm=<max>
-        
-        Obtiene el espectro de atenuación atmosférica.
-        
-        Args:
-            gas: Tipo de atmósfera ('air', 'CO2', 'H2O', 'O3', 'CH4')
-            wavelength_min_nm: Longitud de onda mínima en nm (opcional)
-            wavelength_max_nm: Longitud de onda máxima en nm (opcional)
-        
-        Returns: {
-            "wavelengths": [8000.0, 8100.0, ...],
-            "attenuation": [0.95, 0.94, ...],
-            "transmittance": [0.05, 0.06, ...],
-            "gas": "air",
-            "title": "Atenuación Atmosférica - air"
-        }
-        """
         try:
             params = {"gas": gas}
-            if wavelength_min_nm is not None:
-                params["wavelength_min_nm"] = wavelength_min_nm
-            if wavelength_max_nm is not None:
-                params["wavelength_max_nm"] = wavelength_max_nm
-            
+            if wavelength_min_nm is not None: params["wavelength_min_nm"] = wavelength_min_nm
+            if wavelength_max_nm is not None: params["wavelength_max_nm"] = wavelength_max_nm
             r = self.session.get(f"{self.base_url}/spectral/atmosphere", params=params)
             r.raise_for_status()
             return {"status": "success", "data": r.json()}
@@ -620,24 +546,6 @@ class MitsubaAPIClient:
         wavelength_max_nm: float = 12000.0,
         num_points: int = 100
     ) -> Dict:
-        """GET /spectral/blackbody?temperature_k=300&wavelength_min_nm=8000&wavelength_max_nm=12000&num_points=100
-        
-        Calcula y obtiene el espectro de radiancia de cuerpo negro (Ley de Planck).
-        
-        Args:
-            temperature_k: Temperatura en Kelvin (default: 300K = ~27°C)
-            wavelength_min_nm: Longitud de onda mínima en nm (default: 8000)
-            wavelength_max_nm: Longitud de onda máxima en nm (default: 12000)
-            num_points: Número de puntos en el espectro (default: 100)
-        
-        Returns: {
-            "wavelengths": [8000.0, 8100.0, ...],
-            "radiance": [1.5e-6, 1.6e-6, ...],
-            "temperature_k": 300.0,
-            "unit": "W/(m^3·sr)",
-            "title": "Radiancia de Cuerpo Negro - 300K"
-        }
-        """
         try:
             params = {
                 "temperature_k": temperature_k,
@@ -658,21 +566,6 @@ class MitsubaAPIClient:
         values_source: list[float],
         wavelengths_target: list[float]
     ) -> Dict:
-        """POST /spectral/interpolate
-        
-        Interpola datos espectrales a una nueva malla de longitudes de onda.
-        
-        Args:
-            wavelengths_source: Array de longitudes de onda originales (nm)
-            values_source: Array de valores espectrales correspondientes
-            wavelengths_target: Array de longitudes de onda destino (nm)
-        
-        Returns: {
-            "wavelengths": [8000.0, 8050.0, ...],
-            "values": [0.85, 0.86, ...],
-            "interpolation_method": "cubic"
-        }
-        """
         try:
             payload = {
                 "wavelengths_source": wavelengths_source,
@@ -684,4 +577,131 @@ class MitsubaAPIClient:
             return {"status": "success", "data": r.json()}
         except Exception as e:
             logger.error(f"Interpolate spectral data error: {e}")
+            return {"status": "error", "detail": str(e)}
+
+    def render_thermal(self) -> Dict:
+        try:
+            r = self.session.get(f"{self.base_url}/render/thermal")
+            r.raise_for_status()
+            return {"status": "ok", "npy_bytes": r.content}
+        except Exception as e:
+            logger.error(f"Render thermal error: {e}")
+            return {"status": "error", "detail": str(e)}
+
+    def render_depth(self) -> Dict:
+        try:
+            r = self.session.get(f"{self.base_url}/render/depth")
+            r.raise_for_status()
+            return {"status": "ok", "npy_bytes": r.content}
+        except Exception as e:
+            logger.error(f"Render depth error: {e}")
+            return {"status": "error", "detail": str(e)}
+
+    # ---------------------- Actualización de Objetos con Modo ----------------------
+    def update_object_with_mode(
+        self, 
+        object_id: str, 
+        mode: str, 
+        temperature: float = None, 
+        emissivity_file_path: str = None
+    ) -> Dict:
+        """PUT /object/update-with-mode"""
+        try:
+            params = {"object_id": object_id, "mode": mode}
+            if temperature is not None: params["temperature"] = temperature
+                
+            files = None
+            f = None
+            if emissivity_file_path:
+                f = open(emissivity_file_path, 'rb')
+                files = {"emissivity_file": (Path(emissivity_file_path).name, f, "text/plain")}
+            
+            r = self.session.put(f"{self.base_url}/object/update-with-mode", params=params, files=files)
+            if f: f.close()
+                
+            r.raise_for_status()
+            return {"status": "success", "data": r.json()}
+        except Exception as e:
+            logger.error(f"Update object with mode error: {e}")
+            return {"status": "error", "detail": str(e)}
+
+    # ---------------------- Configuración Espacial de Cámara ----------------------
+    def export_camera_spatial_config(self) -> Dict:
+        """GET /config/camera/spatial/export"""
+        try:
+            r = self.session.get(f"{self.base_url}/config/camera/spatial/export")
+            r.raise_for_status()
+            return {"status": "success", "data": r.json()}
+        except Exception as e:
+            logger.error(f"Export camera spatial config error: {e}")
+            return {"status": "error", "detail": str(e)}
+
+    def import_camera_spatial_config(self, spatial_config: Dict) -> Dict:
+        """POST /config/camera/spatial/import"""
+        try:
+            r = self.session.post(f"{self.base_url}/config/camera/spatial/import", json=spatial_config)
+            r.raise_for_status()
+            return {"status": "success", "data": r.json()}
+        except Exception as e:
+            logger.error(f"Import camera spatial config error: {e}")
+            return {"status": "error", "detail": str(e)}
+
+    # ---------------------- Animaciones de Cámara ----------------------
+    def generate_spherical_interpolation(
+        self,
+        start_theta: float,
+        end_theta: float,
+        start_azimuth: float,
+        end_azimuth: float,
+        tracked_point: list[float],
+        radius: float = None,
+        start_radius: float = None,
+        end_radius: float = None,
+        num_steps: int = 30,
+        lock_azimuth_to_end: bool = False
+    ) -> Dict:
+        """POST /scene/camera/interpolation/spherical"""
+        try:
+            payload = {
+                "start_theta": start_theta,
+                "end_theta": end_theta,
+                "start_azimuth": start_azimuth,
+                "end_azimuth": end_azimuth,
+                "tracked_point": tracked_point,
+                "num_steps": num_steps,
+                "lock_azimuth_to_end": lock_azimuth_to_end
+            }
+            if radius is not None: payload["radius"] = radius
+            if start_radius is not None: payload["start_radius"] = start_radius
+            if end_radius is not None: payload["end_radius"] = end_radius
+            
+            r = self.session.post(f"{self.base_url}/scene/camera/interpolation/spherical", json=payload)
+            r.raise_for_status()
+            return {"status": "success", "data": r.json()}
+        except Exception as e:
+            logger.error(f"Generate spherical interpolation error: {e}")
+            return {"status": "error", "detail": str(e)}
+
+    def export_camera_animation(self, mode: str, data: Dict) -> Dict:
+        """POST /scene/camera/animation/export"""
+        try:
+            payload = {"mode": mode}
+            if mode == "linear": payload["linear_data"] = data
+            else: payload["spherical_data"] = data
+                
+            r = self.session.post(f"{self.base_url}/scene/camera/animation/export", json=payload)
+            r.raise_for_status()
+            return {"status": "success", "data": r.json()}
+        except Exception as e:
+            logger.error(f"Export camera animation error: {e}")
+            return {"status": "error", "detail": str(e)}
+
+    def load_camera_animation(self, animation_config: Dict) -> Dict:
+        """POST /scene/camera/animation/load"""
+        try:
+            r = self.session.post(f"{self.base_url}/scene/camera/animation/load", json=animation_config)
+            r.raise_for_status()
+            return {"status": "success", "data": r.json()}
+        except Exception as e:
+            logger.error(f"Load camera animation error: {e}")
             return {"status": "error", "detail": str(e)}

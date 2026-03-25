@@ -460,14 +460,18 @@ class ObjService:
                 detail=f"Modo inválido: '{mode}'. Debe ser 'Objeto' o 'Familia'"
             )
         
+        # Validar que el objeto existe físicamente
+        self.validate_object_id_exists(object_id)
+        
         config = get_config_scene_dict()
         
-        # Validar que el objeto existe
+        # Asegurar que el objeto existe en la configuración (auto-registro si falta)
         if object_id not in config.get("objects", {}):
-            raise HTTPException(
-                status_code=404,
-                detail=f"Objeto '{object_id}' no encontrado"
-            )
+            logger.info(f"Objeto '{object_id}' no encontrado en config, auto-registrando...")
+            # Llamar a get_object_info_by_id asegura que se cree la entrada por defecto
+            self.get_object_info_by_id(object_id)
+            # Recargar config después del auto-registro
+            config = get_config_scene_dict()
         
         # Preparar propiedades a actualizar
         properties = {}
