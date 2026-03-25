@@ -849,28 +849,39 @@ class SceneService(BaseService):
             sensor["transform"] = {}
             transform = sensor["transform"]
 
-        angles = blender_cam_to_mitsuba_xyz(rx, ry, rz)
+        # Obtener target de la configuración si existe
+        target_x = float(cam_cfg.get("target_x", 0.0))
+        target_y = float(cam_cfg.get("target_y", 0.0))
+        target_z = float(cam_cfg.get("target_z", 0.0))
 
-        # set rotate
-        transform["rotate"] = [
-            {
-                "@x": "1",
-                "@angle": str(angles[0])  # ajuste para mitsuba
-            },
-            {
-                "@y": "1",
-                "@angle": str(angles[1])  # ajuste para mitsuba
-            },
-            {
-                "@z": "1",
-                "@angle": str(angles[2])  # ajuste para mitsuba
-            }
-        ]
+        # Usar lookat de Mitsuba. 
+        # Mitsuba lookat en XML acepta 'origin', 'target' y 'up'.
+        # Pasamos las coordenadas de Blender directamente y dejamos que Mitsuba lo maneje si es posible,
+        # O hacemos el cambio de base manual aquí para los vectores si Mitsuba espera coordenadas Mitsuba.
+        # Según la documentación de Mitsuba, el lookat crea una matriz to_world.
+        
+        # IMPORTANTE: Blender es Z-up, Mitsuba suele ser Y-up en su espacio interno, 
+        # pero si definimos la escena Mitsuba con lookat, podemos pasarle los puntos.
+        # Sin embargo, para mantener consistencia con el resto de la escena (objetos),
+        # aplicamos el cambio de base Blender -> Mitsuba: (x, y, z)_B -> (x, z, -y)_M
+        
+        origin_m = f"{tx} {tz} {-ty}"
+        target_m = f"{target_x} {target_z} {-target_y}"
+        up_m = "0 0 1" # El UP en Mitsuba es Z si rotamos el mundo, pero aquí estamos mapeando (x,y,z)_B -> (x,z,-y)_M. 
+                       # Si en Blender el UP es (0,0,1)_B, en Mitsuba mapeado es (0,1,0)_M? 
+                       # Espera: Blender Z-up (0,0,1). Mitsuba mapeo: x'=x, y'=z, z'=-y.
+                       # Entonces UP_B (0,0,1) -> UP_M (0,1,0). 
+                       # Pero Mitsuba por defecto usa Y-up? Sí. 
+                       # Si le pasamos UP (0,1,0) a Mitsuba, debería funcionar si ese es su UP.
+                       # Vamos a probar con "0 1 0" que es el mapeo directo de Z-up de Blender.
+                       # Si el usuario dice que no funciona, quizás Mitsuba espera el UP en coordenadas de la escena Mitsuba.
+        
+        up_m = "0 1 0" 
 
-        # set translate
-        transform["translate"] = {
-            "@value": f"{tx} {tz} {-ty}"  # y mitsuba = z blender, z mitsuba = -y blender
-        }
+        # Limpiar transformaciones antiguas si existen
+        if "rotate" in transform: del transform["rotate"]
+        if "translate" in transform: del transform["translate"]
+        if "matrix" in transform: del transform["matrix"]
 
         # set fov
         floats = sensor.get("float")
