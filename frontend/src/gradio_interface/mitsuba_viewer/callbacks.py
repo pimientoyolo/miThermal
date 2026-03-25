@@ -705,16 +705,16 @@ def create_mitsuba_viewer_interface():
         
 
         def upload_zip_and_prefill(load_type_value, zip_file):
-            """Sube un ZIP (Escena o miTransfer) y retorna 22 outputs.
+            """Sube un ZIP (Escena o miTransfer) y retorna 28 outputs.
 
-            Orden de outputs (22):
+            Orden de outputs (28):
               1 image, 2 scene_info(str|update), 3 selector1(update), 4 scene_json(dict),
-              5 selector2(update), 6 air_suggest_list(update), 7-21 (15 config updates), 22 air_plot(fig|None)
+              5 selector2(update), 6 air_suggest_list(update), 7-27 (21 config updates), 28 air_plot(fig|None)
             """
             # Helpers
             EMPTY_SELECTOR = gr.update(choices=[], value=None)
             EMPTY_SUGGEST = gr.update(choices=[], value=None)
-            PLACEHOLDER_CONFIG = [gr.update()]*15  # spp,width,height,rx,ry,rz,tx,ty,tz,fov,wl_min,wl_max,bands,air_temp,config_info
+            PLACEHOLDER_CONFIG = [gr.update()]*21  # spp,width,height,rx,ry,rz,tx,ty,tz,fov,theta,phi,radius,tx,ty,tz,wlmin,wlmax,bands,air_temp,cfg_info
 
             def _error_tuple(msg: str):
                 return (
@@ -724,7 +724,7 @@ def create_mitsuba_viewer_interface():
                     {},                         # scene_json
                     EMPTY_SELECTOR,             # selector2
                     EMPTY_SUGGEST,              # air_suggest_list
-                    *PLACEHOLDER_CONFIG,        # 15 updates
+                    *PLACEHOLDER_CONFIG,        # 21 updates
                     None,                       # air_plot
                 )
 
@@ -778,12 +778,24 @@ def create_mitsuba_viewer_interface():
             except Exception:
                 air_temp = None
             # Asegurar longitud y colocar temperatura antes de config_info
-            if len(updates) == 14:
-                updates.insert(-1, gr.update(value=air_temp))  # ahora 15
+            if len(updates) == 19:
+                updates.insert(-1, gr.update(value=air_temp))  # ahora 20
             else:
-                while len(updates) < 14:
+                while len(updates) < 19:
                     updates.append(gr.update())
                 updates.insert(-1, gr.update(value=air_temp))
+            
+            # Asegurar 21 elementos (19 prefill + 1 air_temp + 1 extra if needed)
+            # En realidad _prefill_updates_from_config devuelve 19. 
+            # 19 + 1 (air_temp) = 20. 
+            # Pero PLACEHOLDER_CONFIG tiene 21? 
+            # Repasemos: spp, width, height, rx, ry, rz, tx, ty, tz, fov, theta, phi, radius, target_x, target_y, target_z, wl_min, wl_max, bands (19)
+            # + air_temp (1) + config_info (devuelto por prefill como el último elemento)
+            # El último de prefill ES config_info.
+            # Así que al insertar air_temp en -1, config_info queda al final.
+            # Total 20. 
+            # Mi PLACEHOLDER_CONFIG decía 21... ah, porque en apply_all_config_cb hay 21? No.
+            # Vamos a ajustar PLACEHOLDER_CONFIG a 20 y asegurar 20 aquí.
             # Sugerencias atenuación
             try:
                 air_suggest_update = air_suggest_cb()
@@ -815,9 +827,9 @@ def create_mitsuba_viewer_interface():
                 og_section["selector"],
                 upload_section["scene_json"],
                 og_section["selector"],
-                    # Sugerencias de atenuación (precargadas)
-                    config_section["air_suggest_list"],
-                # Prefill de Config
+                # Sugerencias de atenuación (precargadas)
+                config_section["air_suggest_list"],
+                # Prefill de Config (20 total)
                 config_section["camera_spp"],
                 config_section["camera_width"],
                 config_section["camera_height"],
@@ -828,6 +840,12 @@ def create_mitsuba_viewer_interface():
                 config_section["translate_y"],
                 config_section["translate_z"],
                 config_section["fov"],
+                config_section["theta"],
+                config_section["phi"],
+                config_section["radius"],
+                config_section["target_x"],
+                config_section["target_y"],
+                config_section["target_z"],
                 config_section["wl_min"],
                 config_section["wl_max"],
                 config_section["bands"],
@@ -851,12 +869,12 @@ def create_mitsuba_viewer_interface():
             return gr.update(choices=choices, value=choices[0] if choices else None)
 
         def select_default_cb(file_name: str):
-            """Selecciona escena default y retorna 22 outputs consistentes."""
+            """Selecciona escena default y retorna 28 outputs consistentes."""
             client = get_client()
 
             EMPTY_SELECTOR = gr.update(choices=[], value=None)
             EMPTY_SUGGEST = gr.update(choices=[], value=None)
-            PLACEHOLDER_CONFIG = [gr.update()]*15
+            PLACEHOLDER_CONFIG = [gr.update()]*20
 
             def _empty(msg: str):
                 return (
@@ -866,7 +884,7 @@ def create_mitsuba_viewer_interface():
                     {},                    # scene_json
                     EMPTY_SELECTOR,        # selector2
                     EMPTY_SUGGEST,         # air_suggest_list
-                    *PLACEHOLDER_CONFIG,   # 15 config updates
+                    *PLACEHOLDER_CONFIG,   # 20 config updates
                     None,                  # air_plot
                 )
 
@@ -893,12 +911,15 @@ def create_mitsuba_viewer_interface():
                 air_temp = client.get_air_temperature()
             except Exception:
                 air_temp = None
-            if len(updates) == 14:
+            if len(updates) == 19:
                 updates.insert(-1, gr.update(value=air_temp))
             else:
-                while len(updates) < 14:
+                while len(updates) < 19:
                     updates.append(gr.update())
                 updates.insert(-1, gr.update(value=air_temp))
+            
+            while len(updates) < 20:
+                updates.append(gr.update())
             # Sugerencias
             try:
                 air_suggest_update = air_suggest_cb()
@@ -950,7 +971,7 @@ def create_mitsuba_viewer_interface():
                 og_section["selector"],
                 # Sugerencias de atenuación (precargadas)
                 config_section["air_suggest_list"],
-                # Prefill de Config
+                # Prefill de Config (20 total)
                 config_section["camera_spp"],
                 config_section["camera_width"],
                 config_section["camera_height"],
@@ -961,6 +982,12 @@ def create_mitsuba_viewer_interface():
                 config_section["translate_y"],
                 config_section["translate_z"],
                 config_section["fov"],
+                config_section["theta"],
+                config_section["phi"],
+                config_section["radius"],
+                config_section["target_x"],
+                config_section["target_y"],
+                config_section["target_z"],
                 config_section["wl_min"],
                 config_section["wl_max"],
                 config_section["bands"],
