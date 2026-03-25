@@ -1823,6 +1823,66 @@ def create_mitsuba_viewer_interface():
         interp_outputs = [camera_interp_section["status_output"]] + interp_inputs
         camera_interp_section["import_anim_btn"].click(fn=import_anim_cb, inputs=[gr.File()], outputs=interp_outputs)
 
+        # Callbacks para gestión de cache
+        def refresh_cache_stats_cb():
+            """Obtiene y muestra las estadísticas del cache."""
+            try:
+                client = get_client()
+                result = client.get_cache_stats()
+                
+                if result.get("status") == "success":
+                    stats = result.get("data", {})
+                    
+                    # Formatear mensaje legible
+                    hits = stats.get("hits", 0)
+                    misses = stats.get("misses", 0)
+                    total = hits + misses
+                    hit_rate = stats.get("hit_rate", 0.0) * 100
+                    size = stats.get("size", 0)
+                    max_size = stats.get("max_size", 0)
+                    
+                    status_msg = (
+                        f"✅ Estadísticas actualizadas:\n"
+                        f"• Aciertos: {hits} / {total} ({hit_rate:.1f}%)\n"
+                        f"• Tamaño: {size} / {max_size} entradas"
+                    )
+                    
+                    return stats, status_msg
+                else:
+                    error_msg = f"❌ Error: {result.get('detail', 'Error desconocido')}"
+                    return {}, error_msg
+                    
+            except Exception as e:
+                error_msg = f"❌ Error al obtener estadísticas: {str(e)}"
+                logger.error(error_msg, exc_info=True)
+                return {}, error_msg
+
+        def clear_cache_cb():
+            """Limpia todo el cache de firmas espectrales."""
+            try:
+                client = get_client()
+                result = client.clear_cache()
+                
+                if result.get("status") == "success":
+                    data = result.get("data", {})
+                    cleared = data.get("entries_cleared", 0)
+                    status_msg = f"✅ Cache limpiado exitosamente. {cleared} entradas eliminadas."
+                    
+                    # Después de limpiar, obtener estadísticas actualizadas
+                    stats_result = client.get_cache_stats()
+                    if stats_result.get("status") == "success":
+                        return stats_result.get("data", {}), status_msg
+                    else:
+                        return {}, status_msg
+                else:
+                    error_msg = f"❌ Error: {result.get('detail', 'Error desconocido')}"
+                    return {}, error_msg
+                    
+            except Exception as e:
+                error_msg = f"❌ Error al limpiar cache: {str(e)}"
+                logger.error(error_msg, exc_info=True)
+                return {}, error_msg
+
         # Cache Management: conectar callbacks
         cache_section["refresh_stats_btn"].click(
             fn=refresh_cache_stats_cb,
