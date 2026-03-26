@@ -1209,6 +1209,20 @@ class SceneService(BaseService):
     ) -> str:
         """
         Renderiza una secuencia completa de frames de animación.
+        
+        Para cada frame: actualiza la configuración de cámara, actualiza las escenas
+        y renderiza todos los tipos (RGB, depth, thermal, etc.).
+        Los resultados se guardan en output/renders/animation/frame_XXXX/
+        
+        Args:
+            camera_frames: Lista de configuraciones de cámara generadas por generate_camera_animation
+            spp: SPP opcional para el renderizado (sobrescribe config actual)
+            width: Ancho opcional
+            height: Alto opcional
+            num_bands: Número de bandas opcional
+            
+        Returns:
+            Ruta del archivo ZIP con todos los renders
         """
         from src.api.service.render_service import RenderService
         from src.config import save_config_scene_dict
@@ -1228,7 +1242,7 @@ class SceneService(BaseService):
         total_frames = len(camera_frames)
         self.logger.info(f"Iniciando renderizado de {total_frames} frames")
         
-        # Obtener configuración actual
+        # Obtener configuración actual para restaurar luego
         config_original = get_config_scene_dict().copy()
         config_scene = get_config_scene_dict()
         
@@ -1240,7 +1254,7 @@ class SceneService(BaseService):
         if height is not None:
             config_scene["camera"]["height"] = int(height)
         
-        # Si cambia el número de bandas
+        # Si cambia el número de bandas, hay que regenerar longitudes de onda
         bands_changed = False
         if num_bands is not None and int(num_bands) != config_scene.get("num_bands"):
             from src.api.service.config_service import ConfigService
@@ -1248,7 +1262,7 @@ class SceneService(BaseService):
             w_min = min(config_scene["wavelengths"])
             w_max = max(config_scene["wavelengths"])
             cfg_service.update_wavelengths(w_min, w_max, int(num_bands))
-            config_scene = get_config_scene_dict()
+            config_scene = get_config_scene_dict() # recargar
             bands_changed = True
 
         try:
@@ -1277,7 +1291,7 @@ class SceneService(BaseService):
                 
                 # Actualizar escenas XML con la nueva posición de cámara
                 self.update_scene_camera_all()
-            
+                
                 # Renderizar todos los tipos
                 try:
                     # RGB
@@ -1345,9 +1359,18 @@ class SceneService(BaseService):
                         
                 except Exception as e:
                     self.logger.error(f"Error renderizando frame {frame_num}: {e}")
-                    # Continuar con el siguiente frame
                     continue
-        
+        finally:
+            # Restaurar configuración original
+            save_config_scene_dict(config_original)
+            if bands_changed:
+                from src.api.service.config_service import ConfigService
+                cfg_service = ConfigService()
+                w_min = min(config_original["wavelengths"])
+                w_max = max(config_original["wavelengths"])
+                cfg_service.update_wavelengths(w_min, w_max, config_original["num_bands"])
+            self.update_scene_camera_all()
+
         # Crear ZIP con todos los frames
         zip_path = OUTPUT_DIR / "renders" / "animation.zip"
         with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zipf:
