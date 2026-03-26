@@ -128,11 +128,11 @@ class ObjService:
         
         config_scene = get_config_scene_dict()
         
-        if object_id not in config_scene:
+        if object_id not in config_scene.get("objects", {}):
             raise HTTPException(status_code=404, detail=f"Configuración no encontrada para el objeto: {object_id}")
         
         # Actualizar la configuración del objeto
-        config_scene[object_id]["temperature"] = object_data.temperature
+        config_scene["objects"][object_id]["temperature"] = object_data.temperature
 
         # Validar temperatura
         if object_data.temperature <= 0:

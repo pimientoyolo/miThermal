@@ -596,7 +596,7 @@ class SceneService(BaseService):
         scene_dict = self.get_dict_scene(thermal_path)
         
         # Verificar que el objeto existe en la configuración
-        if object_id not in config_scene:
+        if object_id not in config_scene.get("objects", {}):
             raise HTTPException(
                 status_code=404,
                 detail=f"El objeto {object_id} no se encuentra en la configuración de la escena"
