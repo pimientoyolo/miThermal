@@ -377,86 +377,84 @@ def create_mitsuba_viewer_interface():
             
             # ==================== TAB 2: 🎯 OBJETOS ====================
             with gr.Tab("🎯 Objetos"):
-                with gr.Tabs(elem_classes=["secondary-tabs"]):
-                    # Subtab: Explorador
-                    with gr.Tab("🔍 Explorador"):
-                        with gr.Row():
-                            with gr.Column(scale=1):
-                                mode_radio = gr.Radio(label="Modo", choices=["Objeto", "Instancia", "Familia"], value="Objeto")
-                                selector = gr.Dropdown(label="Selecciona", choices=[], interactive=True)
-                                members = gr.Dropdown(label="Miembros", choices=[], multiselect=True, interactive=False)
-                                gr.Markdown("#### Propiedades")
-                                temp_input = gr.Number(label="Temperatura (K)", value=None, precision=2)
-                                emissivity_file = gr.File(label="Archivo Emisividad", file_types=[".txt", ".tbs"], interactive=True)
-                                apply_update_btn = gr.Button("✅ Aplicar Cambios", variant="primary")
-                                info_text = gr.Textbox(label="Información del Objeto", lines=10, interactive=False)
+                # Subtab: Explorador
+                with gr.Row():
+                    with gr.Column(scale=1):
+                        mode_radio = gr.Radio(label="Modo", choices=["Objeto", "Instancia", "Familia"], value="Objeto")
+                        selector = gr.Dropdown(label="Selecciona", choices=[], interactive=True)
+                        members = gr.Dropdown(label="Miembros", choices=[], multiselect=True, interactive=False)
+                        gr.Markdown("#### Propiedades")
+                        temp_input = gr.Number(label="Temperatura (K)", value=None, precision=2)
+                        emissivity_file = gr.File(label="Archivo Emisividad", file_types=[".txt", ".tbs"], interactive=True)
+                        apply_update_btn = gr.Button("✅ Aplicar Cambios", variant="primary")
+                        info_text = gr.Textbox(label="Información del Objeto", lines=10, interactive=False)
+                    
+                    with gr.Column(scale=2):
+                        model_viewer = gr.Model3D(label="Vista 3D", height=400)
+                        emissivity_plot = gr.Plot(label="📊 Espectro de Emisividad")
+                
+                og_section = {
+                    "mode_radio": mode_radio,
+                    "selector": selector,
+                    "members": members,
+                    "temp_input": temp_input,
+                    "emissivity_file": emissivity_file,
+                    "apply_update_btn": apply_update_btn,
+                    "info_text": info_text,
+                    "model_viewer": model_viewer,
+                    "emissivity_plot": emissivity_plot,
+                }
+
+            # ==================== TAB 3: 📷 CÁMARA ====================
+            with gr.Tab("📷 Cámara"):
+                gr.Markdown("### Parámetros de Renderizado y Posicionamiento")
+                with gr.Row():
+                    with gr.Column(scale=1):
+                        gr.Markdown("#### Calidad y Resolución")
+                        camera_spp = gr.Slider(label="SPP (2^k)", minimum=1, maximum=13, step=1, value=4)
+                        camera_width = gr.Number(label="Ancho (px)", precision=0, value=640)
+                        camera_height = gr.Number(label="Alto (px)", precision=0, value=480)
+                        fov = gr.Number(label="FOV (deg)", precision=3, value=45)
+                    
+                    with gr.Column(scale=1):
+                        with gr.Tabs():
+                            with gr.Tab("Cartesiano"):
+                                gr.Markdown("#### Transformaciones")
+                                with gr.Row():
+                                    rotate_x = gr.Number(label="Rotar X (°)", precision=3, value=0)
+                                    rotate_y = gr.Number(label="Rotar Y (°)", precision=3, value=0)
+                                    rotate_z = gr.Number(label="Rotar Z (°)", precision=3, value=0)
+                                with gr.Row():
+                                    translate_x = gr.Number(label="Trasladar X", precision=6, value=0)
+                                    translate_y = gr.Number(label="Trasladar Y", precision=6, value=0)
+                                    translate_z = gr.Number(label="Trasladar Z", precision=6, value=0)
                             
-                            with gr.Column(scale=2):
-                                model_viewer = gr.Model3D(label="Vista 3D", height=400)
-                                emissivity_plot = gr.Plot(label="📊 Espectro de Emisividad")
-                        
-                        og_section = {
-                            "mode_radio": mode_radio,
-                            "selector": selector,
-                            "members": members,
-                            "temp_input": temp_input,
-                            "emissivity_file": emissivity_file,
-                            "apply_update_btn": apply_update_btn,
-                            "info_text": info_text,
-                            "model_viewer": model_viewer,
-                            "emissivity_plot": emissivity_plot,
-                        }
-            
-            # ==================== TAB 3: 📊 ANÁLISIS ====================
+                            with gr.Tab("Esférico (Ángulos)"):
+                                gr.Markdown("#### Coordenadas Esféricas")
+                                with gr.Row():
+                                    theta = gr.Number(label="Zenital (theta) [0-180]", precision=3)
+                                    phi = gr.Number(label="Azimutal (phi) [0-360]", precision=3)
+                                    radius = gr.Number(label="Radio", precision=3)
+                                gr.Markdown("#### Punto Objetivo (Target)")
+                                with gr.Row():
+                                    target_x = gr.Number(label="Target X", precision=3, value=0.0)
+                                    target_y = gr.Number(label="Target Y", precision=3, value=0.0)
+                                    target_z = gr.Number(label="Target Z", precision=3, value=0.0)
+
+            # ==================== TAB 4: 🎥 ANIMACIÓN ====================
+            with gr.Tab("🎥 Animación"):
+                camera_interp_section = build_camera_interpolation_section()
+
+            # ==================== TAB 5: 📊 ANÁLISIS ====================
             with gr.Tab("📊 Análisis"):
                 with gr.Tabs(elem_classes=["secondary-tabs"]):
                     # Subtab: Espectros
                     with gr.Tab("📈 Espectros"):
                         spectral_section = build_spectral_plot_section()
             
-            # ==================== TAB 4: ⚙️ CONFIGURACIÓN ====================
+            # ==================== TAB 6: ⚙️ CONFIGURACIÓN ====================
             with gr.Tab("⚙️ Configuración"):
                 with gr.Tabs(elem_classes=["secondary-tabs"]):
-                    # Subtab: Cámara
-                    with gr.Tab("📷 Cámara"):
-                        gr.Markdown("### Parámetros de Renderizado")
-                        with gr.Row():
-                            with gr.Column(scale=1):
-                                gr.Markdown("#### Calidad y Resolución")
-                                camera_spp = gr.Slider(label="SPP (2^k)", minimum=1, maximum=13, step=1, value=4)
-                                camera_width = gr.Number(label="Ancho (px)", precision=0, value=640)
-                                camera_height = gr.Number(label="Alto (px)", precision=0, value=480)
-                                fov = gr.Number(label="FOV (deg)", precision=3, value=45)
-                            
-                            with gr.Column(scale=1):
-                                with gr.Tabs():
-                                    with gr.Tab("Cartesiano"):
-                                        gr.Markdown("#### Transformaciones")
-                                        with gr.Row():
-                                            rotate_x = gr.Number(label="Rotar X (°)", precision=3, value=0)
-                                            rotate_y = gr.Number(label="Rotar Y (°)", precision=3, value=0)
-                                            rotate_z = gr.Number(label="Rotar Z (°)", precision=3, value=0)
-                                        with gr.Row():
-                                            translate_x = gr.Number(label="Trasladar X", precision=6, value=0)
-                                            translate_y = gr.Number(label="Trasladar Y", precision=6, value=0)
-                                            translate_z = gr.Number(label="Trasladar Z", precision=6, value=0)
-                                    
-                                    with gr.Tab("Esférico (Ángulos)"):
-                                        gr.Markdown("#### Coordenadas Esféricas")
-                                        with gr.Row():
-                                            theta = gr.Number(label="Zenital (theta) [0-180]", precision=3)
-                                            phi = gr.Number(label="Azimutal (phi) [0-360]", precision=3)
-                                            radius = gr.Number(label="Radio", precision=3)
-                                        gr.Markdown("#### Punto Objetivo (Target)")
-                                        with gr.Row():
-                                            target_x = gr.Number(label="Target X", precision=3, value=0.0)
-                                            target_y = gr.Number(label="Target Y", precision=3, value=0.0)
-                                            target_z = gr.Number(label="Target Z", precision=3, value=0.0)
-                        
-                        gr.Markdown("---")
-                        gr.Markdown("### Interpolación de Cámara (Animaciones)")
-                        camera_interp_section = build_camera_interpolation_section()
-                    
                     # Subtab: Espectro
                     with gr.Tab("🌈 Espectro"):
                         gr.Markdown("### Configuración Espectral")
@@ -1704,7 +1702,7 @@ def create_mitsuba_viewer_interface():
         # Callback para interpolación de cámara
         # --------------------------------------------------------------------------------------
         def camera_interpolation_cb(
-            mode, ox, oy, oz, ex, ey, ez, st, sa, sr, et, ea, er, lock_a, tx, ty, tz, steps
+            mode, ox, oy, oz, ex, ey, ez, st, sa, sr, et, ea, er, lock_a, tx, ty, tz, steps, *args
         ):
             client = get_client()
             try:
@@ -1731,17 +1729,30 @@ def create_mitsuba_viewer_interface():
             except Exception as e:
                 return f"❌ Error: {str(e)}", []
 
-        def render_camera_animation_cb(mode, ox, oy, oz, ex, ey, ez, st, sa, sr, et, ea, er, lock_a, tx, ty, tz, steps):
+        def render_camera_animation_cb(mode, ox, oy, oz, ex, ey, ez, st, sa, sr, et, ea, er, lock_a, tx, ty, tz, steps, anim_spp, anim_bands, anim_width, anim_height):
             client = get_client()
             try:
                 if mode == "Lineal":
-                    payload = {"origin": [ox, oy, oz], "end": [ex, ey, ez], "tracked_point": [tx, ty, tz], "num_steps": int(steps)}
+                    payload = {
+                        "origin": [ox, oy, oz], 
+                        "end": [ex, ey, ez], 
+                        "tracked_point": [tx, ty, tz], 
+                        "num_steps": int(steps),
+                        "spp": int(2**anim_spp),
+                        "num_bands": int(anim_bands),
+                        "width": int(anim_width),
+                        "height": int(anim_height)
+                    }
                     url = f"{client.base_url}/scene/camera/animation/render"
                 else:
                     payload = {
                         "start_theta": st, "end_theta": et, "start_azimuth": sa, "end_azimuth": ea,
                         "start_radius": sr, "end_radius": er, "lock_azimuth_to_end": lock_a,
-                        "tracked_point": [tx, ty, tz], "num_steps": int(steps)
+                        "tracked_point": [tx, ty, tz], "num_steps": int(steps),
+                        "spp": int(2**anim_spp),
+                        "num_bands": int(anim_bands),
+                        "width": int(anim_width),
+                        "height": int(anim_height)
                     }
                     url = f"{client.base_url}/scene/camera/animation/render/spherical"
 
@@ -1753,7 +1764,7 @@ def create_mitsuba_viewer_interface():
             except Exception as e:
                 return f"❌ Error: {str(e)}", None
 
-        def preview_camera_path_cb(mode, ox, oy, oz, ex, ey, ez, st, sa, sr, et, ea, er, lock_a, tx, ty, tz, steps):
+        def preview_camera_path_cb(mode, ox, oy, oz, ex, ey, ez, st, sa, sr, et, ea, er, lock_a, tx, ty, tz, steps, *args):
             client = get_client()
             try:
                 if mode == "Lineal":
@@ -1775,16 +1786,29 @@ def create_mitsuba_viewer_interface():
             except Exception as e:
                 return f"❌ Error: {str(e)}", None
 
-        def export_anim_cb(mode, ox, oy, oz, ex, ey, ez, st, sa, sr, et, ea, er, lock_a, tx, ty, tz, steps):
+        def export_anim_cb(mode, ox, oy, oz, ex, ey, ez, st, sa, sr, et, ea, er, lock_a, tx, ty, tz, steps, anim_spp, anim_bands, anim_width, anim_height):
             import json
             client = get_client()
             if mode == "Lineal":
-                data = {"origin": [ox, oy, oz], "end": [ex, ey, ez], "tracked_point": [tx, ty, tz], "num_steps": int(steps)}
+                data = {
+                    "origin": [ox, oy, oz], 
+                    "end": [ex, ey, ez], 
+                    "tracked_point": [tx, ty, tz], 
+                    "num_steps": int(steps),
+                    "spp": int(anim_spp),
+                    "num_bands": int(anim_bands),
+                    "width": int(anim_width),
+                    "height": int(anim_height)
+                }
             else:
                 data = {
                     "start_theta": st, "end_theta": et, "start_azimuth": sa, "end_azimuth": ea,
                     "start_radius": sr, "end_radius": er, "lock_azimuth_to_end": lock_a,
-                    "tracked_point": [tx, ty, tz], "num_steps": int(steps)
+                    "tracked_point": [tx, ty, tz], "num_steps": int(steps),
+                    "spp": int(anim_spp),
+                    "num_bands": int(anim_bands),
+                    "width": int(anim_width),
+                    "height": int(anim_height)
                 }
             res = client.export_camera_animation(mode.lower(), data)
             if res.get("status") == "success":
@@ -1795,7 +1819,8 @@ def create_mitsuba_viewer_interface():
 
         def import_anim_cb(file):
             import json
-            if file is None: return "No file selected", gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update()
+            # 1 (msg) + 22 (interp_inputs) = 23 total returns
+            if file is None: return "No file selected", *([gr.update()] * 22)
             try:
                 with open(file.name, "r") as f:
                     data = json.load(f)
@@ -1804,31 +1829,44 @@ def create_mitsuba_viewer_interface():
                 
                 updates = [gr.update(value=mode_label)] # interp_mode
                 
-                if mode == "linear" and "linear_data" in data:
-                    ld = data["linear_data"]
-                    updates.extend([
-                        gr.update(value=ld["origin"][0]), gr.update(value=ld["origin"][1]), gr.update(value=ld["origin"][2]),
-                        gr.update(value=ld["end"][0]), gr.update(value=ld["end"][1]), gr.update(value=ld["end"][2]),
-                        gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(),
-                        gr.update(value=ld["tracked_point"][0]), gr.update(value=ld["tracked_point"][1]), gr.update(value=ld["tracked_point"][2]),
-                        gr.update(value=ld["num_steps"])
-                    ])
-                elif mode == "spherical" and "spherical_data" in data:
-                    sd = data["spherical_data"]
-                    updates.extend([
-                        gr.update(), gr.update(), gr.update(), gr.update(), gr.update(), gr.update(),
-                        gr.update(value=sd["start_theta"]), gr.update(value=sd["start_azimuth"]), gr.update(value=sd.get("start_radius", sd.get("radius"))),
-                        gr.update(value=sd["end_theta"]), gr.update(value=sd["end_azimuth"]), gr.update(value=sd.get("end_radius", sd.get("radius"))),
-                        gr.update(value=sd.get("lock_azimuth_to_end", False)),
-                        gr.update(value=sd["tracked_point"][0]), gr.update(value=sd["tracked_point"][1]), gr.update(value=sd["tracked_point"][2]),
-                        gr.update(value=sd["num_steps"])
-                    ])
-                else:
-                    return "Invalid JSON format", *([gr.update()] * 17)
+                # Extraer datos específicos
+                ld = data.get("linear_data", {})
+                sd = data.get("spherical_data", {})
+                
+                # Campos comunes o por defecto
+                origin = ld.get("origin", [0,0,5])
+                end = ld.get("end", [5,5,5])
+                target = ld.get("tracked_point", sd.get("tracked_point", [0,0,0]))
+                steps = ld.get("num_steps", sd.get("num_steps", 30))
+                
+                # Render parameters
+                spp = ld.get("spp", sd.get("spp", 4))
+                bands = ld.get("num_bands", sd.get("num_bands", 50))
+                width = ld.get("width", sd.get("width", 640))
+                height = ld.get("height", sd.get("height", 480))
+
+                # Construir lista de actualizaciones siguiendo el orden de interp_inputs
+                updates.extend([
+                    gr.update(value=origin[0]), gr.update(value=origin[1]), gr.update(value=origin[2]), # origin
+                    gr.update(value=end[0]), gr.update(value=end[1]), gr.update(value=end[2]), # end
+                    gr.update(value=sd.get("start_theta", 45.0)), 
+                    gr.update(value=sd.get("start_azimuth", 0.0)), 
+                    gr.update(value=sd.get("start_radius", 10.0)),
+                    gr.update(value=sd.get("end_theta", 45.0)), 
+                    gr.update(value=sd.get("end_azimuth", 90.0)), 
+                    gr.update(value=sd.get("end_radius", 10.0)),
+                    gr.update(value=sd.get("lock_azimuth_to_end", False)), # lock_azimuth
+                    gr.update(value=target[0]), gr.update(value=target[1]), gr.update(value=target[2]), # target
+                    gr.update(value=steps), # steps
+                    gr.update(value=spp), # anim_spp
+                    gr.update(value=bands), # anim_bands
+                    gr.update(value=width), # anim_width
+                    gr.update(value=height), # anim_height
+                ])
                 
                 return f"✅ Animación cargada ({mode_label})", *updates
             except Exception as e:
-                return f"❌ Error: {str(e)}", *([gr.update()] * 17)
+                return f"❌ Error importando: {str(e)}", *([gr.update()] * 22)
 
         interp_inputs = [
             camera_interp_section["interp_mode"],
@@ -1839,6 +1877,10 @@ def create_mitsuba_viewer_interface():
             camera_interp_section["lock_azimuth"],
             camera_interp_section["target_x"], camera_interp_section["target_y"], camera_interp_section["target_z"],
             camera_interp_section["num_steps"],
+            camera_interp_section["anim_spp"],
+            camera_interp_section["anim_bands"],
+            camera_interp_section["anim_width"],
+            camera_interp_section["anim_height"],
         ]
 
         camera_interp_section["generate_btn"].click(fn=camera_interpolation_cb, inputs=interp_inputs, outputs=[camera_interp_section["status_output"], camera_interp_section["interpolation_result"]])

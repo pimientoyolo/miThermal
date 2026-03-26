@@ -63,6 +63,11 @@ class CameraInterpolationDTO(BaseModel):
     end: List[float]     # [x, y, z] posición final de la cámara
     tracked_point: List[float]  # [x, y, z] punto objetivo que la cámara mira
     num_steps: int = 30  # número de frames a generar
+    # Parámetros de renderizado opcionales para la animación
+    spp: int | None = None
+    width: int | None = None
+    height: int | None = None
+    num_bands: int | None = None
 
 
 class SphericalCameraInterpolationDTO(BaseModel):
@@ -77,6 +82,11 @@ class SphericalCameraInterpolationDTO(BaseModel):
     tracked_point: List[float]
     num_steps: int = 30
     lock_azimuth_to_end: bool = False
+    # Parámetros de renderizado opcionales para la animación
+    spp: int | None = None
+    width: int | None = None
+    height: int | None = None
+    num_bands: int | None = None
 
 class CameraAnimationConfigDTO(BaseModel):
     """DTO para exportar/importar la configuración de una animación de cámara completa"""

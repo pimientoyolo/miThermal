@@ -1199,19 +1199,16 @@ class SceneService(BaseService):
                     f"No se pudo restaurar XML de cámara tras preview: {restore_err}"
                 )
 
-    def render_camera_animation_sequence(self, camera_frames: list[dict]) -> str:
+    def render_camera_animation_sequence(
+        self, 
+        camera_frames: list[dict],
+        spp: int = None,
+        width: int = None,
+        height: int = None,
+        num_bands: int = None
+    ) -> str:
         """
         Renderiza una secuencia completa de frames de animación.
-        
-        Para cada frame: actualiza la configuración de cámara, actualiza las escenas
-        y renderiza todos los tipos (RGB, depth, thermal, etc.).
-        Los resultados se guardan en output/renders/animation/frame_XXXX/
-        
-        Args:
-            camera_frames: Lista de configuraciones de cámara generadas por generate_camera_animation
-            
-        Returns:
-            Ruta del archivo ZIP con todos los renders
         """
         from src.api.service.render_service import RenderService
         from src.config import save_config_scene_dict
@@ -1232,103 +1229,124 @@ class SceneService(BaseService):
         self.logger.info(f"Iniciando renderizado de {total_frames} frames")
         
         # Obtener configuración actual
+        config_original = get_config_scene_dict().copy()
         config_scene = get_config_scene_dict()
         
-        for idx, frame_config in enumerate(camera_frames):
-            frame_num = idx + 1
-            self.logger.info(f"Renderizando frame {frame_num}/{total_frames}")
+        # Aplicar overrides si se proporcionan
+        if spp is not None:
+            config_scene["camera"]["spp"] = int(spp)
+        if width is not None:
+            config_scene["camera"]["width"] = int(width)
+        if height is not None:
+            config_scene["camera"]["height"] = int(height)
+        
+        # Si cambia el número de bandas
+        bands_changed = False
+        if num_bands is not None and int(num_bands) != config_scene.get("num_bands"):
+            from src.api.service.config_service import ConfigService
+            cfg_service = ConfigService()
+            w_min = min(config_scene["wavelengths"])
+            w_max = max(config_scene["wavelengths"])
+            cfg_service.update_wavelengths(w_min, w_max, int(num_bands))
+            config_scene = get_config_scene_dict()
+            bands_changed = True
+
+        try:
+            for idx, frame_config in enumerate(camera_frames):
+                frame_num = idx + 1
+                self.logger.info(f"Renderizando frame {frame_num}/{total_frames}")
+                
+                # Crear carpeta para este frame
+                frame_dir = animation_dir / f"frame_{frame_num:04d}"
+                frame_dir.mkdir(exist_ok=True)
+                
+                # Actualizar configuración de cámara (manteniendo spp/size seteados arriba)
+                config_scene["camera"].update({
+                    "translate_x": frame_config["translate_x"],
+                    "translate_y": frame_config["translate_y"],
+                    "translate_z": frame_config["translate_z"],
+                    "rotate_x": frame_config["rotate_x"],
+                    "rotate_y": frame_config["rotate_y"],
+                    "rotate_z": frame_config["rotate_z"],
+                    "target_x": frame_config.get("target_x", 0.0),
+                    "target_y": frame_config.get("target_y", 0.0),
+                    "target_z": frame_config.get("target_z", 0.0),
+                    "is_spherical": frame_config.get("is_spherical", False),
+                })
+                save_config_scene_dict(config_scene)
+                
+                # Actualizar escenas XML con la nueva posición de cámara
+                self.update_scene_camera_all()
             
-            # Crear carpeta para este frame
-            frame_dir = animation_dir / f"frame_{frame_num:04d}"
-            frame_dir.mkdir(exist_ok=True)
-            
-            # Actualizar configuración de cámara
-            config_scene["camera"].update({
-                "translate_x": frame_config["translate_x"],
-                "translate_y": frame_config["translate_y"],
-                "translate_z": frame_config["translate_z"],
-                "rotate_x": frame_config["rotate_x"],
-                "rotate_y": frame_config["rotate_y"],
-                "rotate_z": frame_config["rotate_z"],
-                "target_x": frame_config.get("target_x", 0.0),
-                "target_y": frame_config.get("target_y", 0.0),
-                "target_z": frame_config.get("target_z", 0.0),
-                "is_spherical": frame_config.get("is_spherical", False),
-            })
-            save_config_scene_dict(config_scene)
-            
-            # Actualizar escenas XML con la nueva posición de cámara
-            self.update_scene_camera_all()
-            
-            # Renderizar todos los tipos
-            try:
-                # RGB
-                render_service.render_basic_scene()
-                rgb_src = path_manager.get_result_path("rgb")
-                if os.path.exists(rgb_src):
-                    shutil.copy(rgb_src, frame_dir / "rgb.png")
-                
-                # Depth
-                render_service.render_depth_image()
-                depth_src = path_manager.get_result_path("depth")
-                if os.path.exists(depth_src):
-                    shutil.copy(depth_src, frame_dir / "depth.npy")
-                
-                # Thermal
-                render_service.render_thermal_image()
-                thermal_src = path_manager.get_result_path("thermal")
-                if os.path.exists(thermal_src):
-                    shutil.copy(thermal_src, frame_dir / "thermal.npy")
-                
-                # Blackbody Air
+                # Renderizar todos los tipos
                 try:
-                    blackbody_src = path_manager.get_result_path("blackbody_air")
-                    if os.path.exists(blackbody_src):
-                        shutil.copy(blackbody_src, frame_dir / "blackbody_air.npy")
-                except Exception as e:
-                    self.logger.warning(
-                        f"Frame {frame_num}: no se pudo copiar blackbody_air.npy: {e}"
-                    )
-                
-                # Transmittance Blackbody Air
-                try:
-                    trans_src = path_manager.get_result_path("transmittance_blackbody_air")
-                    if os.path.exists(trans_src):
-                        shutil.copy(trans_src, frame_dir / "transmittance_blackbody_air.npy")
-                except Exception as e:
-                    self.logger.warning(
-                        f"Frame {frame_num}: no se pudo copiar transmittance_blackbody_air.npy: {e}"
-                    )
-                
-                # Contribution Air
-                try:
-                    contrib_src = path_manager.get_result_path("contribution_blackbody_air")
-                    if os.path.exists(contrib_src):
-                        shutil.copy(contrib_src, frame_dir / "contribution_blackbody_air.npy")
-                except Exception as e:
-                    self.logger.warning(
-                        f"Frame {frame_num}: no se pudo copiar contribution_blackbody_air.npy: {e}"
-                    )
-                
-                # Temperature Map
-                try:
-                    render_service.render_temperature_map()
-                    tmap_src = path_manager.get_result_path("temperature_map")
-                    if os.path.exists(tmap_src):
-                        shutil.copy(tmap_src, frame_dir / "temperature_map.npy")
-                    else:
-                        self.logger.warning(
-                            f"Frame {frame_num}: no existe temperature_map.npy tras render"
-                        )
-                except Exception as e:
-                    self.logger.warning(
-                        f"Frame {frame_num}: no se pudo renderizar/copiar temperature_map.npy: {e}"
-                    )
+                    # RGB
+                    render_service.render_basic_scene()
+                    rgb_src = path_manager.get_result_path("rgb")
+                    if os.path.exists(rgb_src):
+                        shutil.copy(rgb_src, frame_dir / "rgb.png")
                     
-            except Exception as e:
-                self.logger.error(f"Error renderizando frame {frame_num}: {e}")
-                # Continuar con el siguiente frame
-                continue
+                    # Depth
+                    render_service.render_depth_image()
+                    depth_src = path_manager.get_result_path("depth")
+                    if os.path.exists(depth_src):
+                        shutil.copy(depth_src, frame_dir / "depth.npy")
+                    
+                    # Thermal
+                    render_service.render_thermal_image()
+                    thermal_src = path_manager.get_result_path("thermal")
+                    if os.path.exists(thermal_src):
+                        shutil.copy(thermal_src, frame_dir / "thermal.npy")
+                    
+                    # Blackbody Air
+                    try:
+                        blackbody_src = path_manager.get_result_path("blackbody_air")
+                        if os.path.exists(blackbody_src):
+                            shutil.copy(blackbody_src, frame_dir / "blackbody_air.npy")
+                    except Exception as e:
+                        self.logger.warning(
+                            f"Frame {frame_num}: no se pudo copiar blackbody_air.npy: {e}"
+                        )
+                    
+                    # Transmittance Blackbody Air
+                    try:
+                        trans_src = path_manager.get_result_path("transmittance_blackbody_air")
+                        if os.path.exists(trans_src):
+                            shutil.copy(trans_src, frame_dir / "transmittance_blackbody_air.npy")
+                    except Exception as e:
+                        self.logger.warning(
+                            f"Frame {frame_num}: no se pudo copiar transmittance_blackbody_air.npy: {e}"
+                        )
+                    
+                    # Contribution Air
+                    try:
+                        contrib_src = path_manager.get_result_path("contribution_blackbody_air")
+                        if os.path.exists(contrib_src):
+                            shutil.copy(contrib_src, frame_dir / "contribution_blackbody_air.npy")
+                    except Exception as e:
+                        self.logger.warning(
+                            f"Frame {frame_num}: no se pudo copiar contribution_blackbody_air.npy: {e}"
+                        )
+                    
+                    # Temperature Map
+                    try:
+                        render_service.render_temperature_map()
+                        tmap_src = path_manager.get_result_path("temperature_map")
+                        if os.path.exists(tmap_src):
+                            shutil.copy(tmap_src, frame_dir / "temperature_map.npy")
+                        else:
+                            self.logger.warning(
+                                f"Frame {frame_num}: no existe temperature_map.npy tras render"
+                            )
+                    except Exception as e:
+                        self.logger.warning(
+                            f"Frame {frame_num}: no se pudo renderizar/copiar temperature_map.npy: {e}"
+                        )
+                        
+                except Exception as e:
+                    self.logger.error(f"Error renderizando frame {frame_num}: {e}")
+                    # Continuar con el siguiente frame
+                    continue
         
         # Crear ZIP con todos los frames
         zip_path = OUTPUT_DIR / "renders" / "animation.zip"

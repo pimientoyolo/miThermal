@@ -420,9 +420,17 @@ def build_camera_interpolation_section() -> Dict[str, gr.components.Component]:
 				step=1,
 				value=30
 			)
+		with gr.Column(scale=1):
+			gr.Markdown("### Configuración de Renderizado (Animación)")
+			with gr.Row():
+				anim_spp = gr.Slider(label="SPP (2^k)", minimum=1, maximum=13, step=1, value=4)
+				anim_bands = gr.Number(label="Bandas Hiperespectrales", value=50, precision=0)
+			with gr.Row():
+				anim_width = gr.Number(label="Ancho (px)", value=640, precision=0)
+				anim_height = gr.Number(label="Alto (px)", value=480, precision=0)
 			
-		with gr.Column(scale=2):
-			status_output = gr.Textbox(label="Estado", lines=4, interactive=False)
+		with gr.Column(scale=1):
+			status_output = gr.Textbox(label="Estado", lines=6, interactive=False)
 	
 	with gr.Row():
 		with gr.Column(scale=1):
@@ -460,6 +468,10 @@ def build_camera_interpolation_section() -> Dict[str, gr.components.Component]:
 		"target_y": target_y,
 		"target_z": target_z,
 		"num_steps": num_steps,
+		"anim_spp": anim_spp,
+		"anim_bands": anim_bands,
+		"anim_width": anim_width,
+		"anim_height": anim_height,
 		"generate_btn": generate_btn,
 		"preview_btn": preview_btn,
 		"render_btn": render_btn,

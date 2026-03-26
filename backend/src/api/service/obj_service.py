@@ -437,7 +437,7 @@ class ObjService:
         object_id: str,
         mode: str,
         temperature: float = None,
-        emissivity_file: str = None
+        emissivity_file: UploadFile = None
     ) -> Dict[str, Any]:
         """
         Actualiza objeto(s) según modo seleccionado.
@@ -446,13 +446,10 @@ class ObjService:
             object_id: ID del objeto seleccionado
             mode: "Objeto" para individual, "Familia" para toda la familia
             temperature: Nueva temperatura en Kelvin (opcional)
-            emissivity_file: Nueva emisividad (opcional)
+            emissivity_file: Nuevo archivo de emisividad (opcional)
             
         Returns:
             Dict con objects_updated, count, mode y family_name
-            
-        Raises:
-            HTTPException: Si el objeto no existe o el modo es inválido
         """
         if mode not in ["Objeto", "Familia"]:
             raise HTTPException(
@@ -468,17 +465,27 @@ class ObjService:
         # Asegurar que el objeto existe en la configuración (auto-registro si falta)
         if object_id not in config.get("objects", {}):
             logger.info(f"Objeto '{object_id}' no encontrado en config, auto-registrando...")
-            # Llamar a get_object_info_by_id asegura que se cree la entrada por defecto
             self.get_object_info_by_id(object_id)
-            # Recargar config después del auto-registro
             config = get_config_scene_dict()
         
         # Preparar propiedades a actualizar
         properties = {}
         if temperature is not None:
             properties["temperature"] = temperature
-        if emissivity_file is not None:
-            properties["emissivity_file"] = emissivity_file
+        
+        # Manejar archivo de emisividad si se proporciona
+        if emissivity_file is not None and emissivity_file.filename:
+            raw = emissivity_file.file.read()
+            if raw:
+                # Generar nombre único persistente (basado en hash)
+                hash_value = hashlib.md5(raw).hexdigest()[:16]
+                unique_name = f"emissivity_{hash_value}.txt"
+                dst_path = os.path.join(OUTPUT_STATIC_DIR, unique_name)
+                os.makedirs(os.path.dirname(dst_path), exist_ok=True)
+                with open(dst_path, "wb") as f:
+                    f.write(raw)
+                properties["emissivity_file"] = dst_path
+                logger.info(f"Nuevo archivo de emisividad guardado en {dst_path}")
         
         if not properties:
             raise HTTPException(

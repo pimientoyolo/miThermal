@@ -147,7 +147,13 @@ async def render_camera_animation(
     )
     
     # Renderizar secuencia completa
-    zip_path = scene_service.render_camera_animation_sequence(camera_frames)
+    zip_path = scene_service.render_camera_animation_sequence(
+        camera_frames,
+        spp=data.spp,
+        width=data.width,
+        height=data.height,
+        num_bands=data.num_bands
+    )
     
     return FileResponse(
         zip_path,
@@ -219,7 +225,13 @@ async def render_camera_animation_spherical(
         num_steps=data.num_steps,
         lock_azimuth_to_end=data.lock_azimuth_to_end,
     )
-    zip_path = scene_service.render_camera_animation_sequence(camera_frames)
+    zip_path = scene_service.render_camera_animation_sequence(
+        camera_frames,
+        spp=data.spp,
+        width=data.width,
+        height=data.height,
+        num_bands=data.num_bands
+    )
     return FileResponse(
         zip_path,
         media_type="application/zip",

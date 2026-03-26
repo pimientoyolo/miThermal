@@ -217,7 +217,7 @@ async def update_object_with_mode(
         None,
         description="Nueva temperatura en Kelvin"
     ),
-    emissivity_file: str = Query(
+    emissivity_file: UploadFile | None = File(
         None,
         description="Archivo de emisividad"
     )
