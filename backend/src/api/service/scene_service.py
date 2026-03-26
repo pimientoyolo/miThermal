@@ -81,15 +81,21 @@ class SceneService(BaseService):
 
         scene_dict = self.get_dict_scene(scene_rgb_path)
 
-        # cambiar el spp de la scenea por defecto
-        scene_dict['scene']['default'][0]['@value'] = 256
-
-        # cambiar el width y height de la escena por defecto
-        # resx -> width
-        scene_dict['scene']['default'][1]['@value'] = 256
-
-        # resy -> height
-        scene_dict['scene']['default'][2]['@value'] = 256
+        # cambiar el spp, width y height de la escena por defecto buscando por nombre
+        defaults = scene_dict.get('scene', {}).get('default', [])
+        if isinstance(defaults, list):
+            for d in defaults:
+                name = d.get("@name")
+                if name == "spp":
+                    d["@value"] = "256"
+                elif name == "resx":
+                    d["@value"] = "256"
+                elif name == "resy":
+                    d["@value"] = "256"
+        elif isinstance(defaults, dict):
+            name = defaults.get("@name")
+            if name in ["spp", "resx", "resy"]:
+                defaults["@value"] = "256"
 
         # cambiar el tipo de emiter a uno de uniforme luz ambiente
         if "emitter" in scene_dict["scene"]:
@@ -832,9 +838,24 @@ class SceneService(BaseService):
         tz = float(cam_cfg.get("translate_z", 0.0))
         fov = float(cam_cfg.get("fov", 45.0))
 
-        defaults[0]["@value"] = spp      # spp
-        defaults[1]["@value"] = width    # resx
-        defaults[2]["@value"] = height   # resy
+        # 1) Actualizar valores por defecto (spp, resx, resy) buscando por nombre
+        if isinstance(defaults, list):
+            for d in defaults:
+                name = d.get("@name")
+                if name == "spp":
+                    d["@value"] = str(spp)
+                elif name == "resx":
+                    d["@value"] = str(width)
+                elif name == "resy":
+                    d["@value"] = str(height)
+        elif isinstance(defaults, dict):
+            name = defaults.get("@name")
+            if name == "spp":
+                defaults["@value"] = str(spp)
+            elif name == "resx":
+                defaults["@value"] = str(width)
+            elif name == "resy":
+                defaults["@value"] = str(height)
 
         scene = scene_dict["scene"]
         sensor = scene.get("sensor")
@@ -843,6 +864,34 @@ class SceneService(BaseService):
                 status_code=400,
                 detail=f"No se encontró sensor en la escena '{scene_type}'"
             )
+
+        # 2) Actualizar sampler (spp) si está hardcodeado en el sensor
+        sampler = sensor.get("sampler")
+        if sampler:
+            sintegers = sampler.get("integer")
+            if isinstance(sintegers, list):
+                for i in sintegers:
+                    if i.get("@name") == "sample_count":
+                        i["@value"] = str(spp)
+            elif isinstance(sintegers, dict):
+                if sintegers.get("@name") == "sample_count":
+                    sintegers["@value"] = str(spp)
+
+        # 3) Actualizar film (width, height) si están hardcodeados en el sensor
+        film = sensor.get("film")
+        if film:
+            fintegers = film.get("integer")
+            if isinstance(fintegers, list):
+                for i in fintegers:
+                    if i.get("@name") == "width":
+                        i["@value"] = str(width)
+                    elif i.get("@name") == "height":
+                        i["@value"] = str(height)
+            elif isinstance(fintegers, dict):
+                if fintegers.get("@name") == "width":
+                    fintegers["@value"] = str(width)
+                elif fintegers.get("@name") == "height":
+                    fintegers["@value"] = str(height)
 
         transform = sensor.get("transform")
         if transform is None:
