@@ -853,35 +853,49 @@ class SceneService(BaseService):
         target_x = float(cam_cfg.get("target_x", 0.0))
         target_y = float(cam_cfg.get("target_y", 0.0))
         target_z = float(cam_cfg.get("target_z", 0.0))
-
-        # Usar lookat de Mitsuba. 
-        # Mitsuba lookat en XML acepta 'origin', 'target' y 'up'.
-        # Pasamos las coordenadas de Blender directamente y dejamos que Mitsuba lo maneje si es posible,
-        # O hacemos el cambio de base manual aquí para los vectores si Mitsuba espera coordenadas Mitsuba.
-        # Según la documentación de Mitsuba, el lookat crea una matriz to_world.
-        
-        # IMPORTANTE: Blender es Z-up, Mitsuba suele ser Y-up en su espacio interno, 
-        # pero si definimos la escena Mitsuba con lookat, podemos pasarle los puntos.
-        # Sin embargo, para mantener consistencia con el resto de la escena (objetos),
-        # aplicamos el cambio de base Blender -> Mitsuba: (x, y, z)_B -> (x, z, -y)_M
-        
-        origin_m = f"{tx} {tz} {-ty}"
-        target_m = f"{target_x} {target_z} {-target_y}"
-        up_m = "0 0 1" # El UP en Mitsuba es Z si rotamos el mundo, pero aquí estamos mapeando (x,y,z)_B -> (x,z,-y)_M. 
-                       # Si en Blender el UP es (0,0,1)_B, en Mitsuba mapeado es (0,1,0)_M? 
-                       # Espera: Blender Z-up (0,0,1). Mitsuba mapeo: x'=x, y'=z, z'=-y.
-                       # Entonces UP_B (0,0,1) -> UP_M (0,1,0). 
-                       # Pero Mitsuba por defecto usa Y-up? Sí. 
-                       # Si le pasamos UP (0,1,0) a Mitsuba, debería funcionar si ese es su UP.
-                       # Vamos a probar con "0 1 0" que es el mapeo directo de Z-up de Blender.
-                       # Si el usuario dice que no funciona, quizás Mitsuba espera el UP en coordenadas de la escena Mitsuba.
-        
-        up_m = "0 1 0" 
+        is_spherical = cam_cfg.get("is_spherical", False)
 
         # Limpiar transformaciones antiguas si existen
-        if "rotate" in transform: del transform["rotate"]
-        if "translate" in transform: del transform["translate"]
-        if "matrix" in transform: del transform["matrix"]
+        for key in ["rotate", "translate", "matrix", "lookat"]:
+            if key in transform:
+                del transform[key]
+
+        # Si se usa modo esférico o hay un target explícito, usar lookat de Mitsuba
+        # Esto es mucho más robusto para órbitas que usar ángulos Euler
+        if is_spherical or any(v != 0.0 for v in [target_x, target_y, target_z]):
+            # Aplicar cambio de base Blender -> Mitsuba: (x, y, z)_B -> (x, z, -y)_M
+            origin_m = f"{tx} {tz} {-ty}"
+            target_m = f"{target_x} {target_z} {-target_y}"
+            
+            # Determinar vector UP robusto
+            # Por defecto UP en Blender es (0,0,1)_B -> (0,1,0)_M
+            up_m = "0 1 0"
+            
+            # Si estamos mirando exactamente hacia arriba o abajo, cambiar UP para evitar singularidad
+            # Forward en Mitsuba
+            fx, fy, fz = target_x - tx, target_z - tz, -(target_y - ty)
+            fnorm = np.sqrt(fx*fx + fy*fy + fz*fz)
+            if fnorm > 1e-6:
+                if abs(fy / fnorm) > 0.999:
+                    # Si el eje de visión es paralelo al UP (0,1,0), usamos (0,0,1)
+                    up_m = "0 0 1"
+            
+            transform["lookat"] = {
+                "@origin": origin_m,
+                "@target": target_m,
+                "@up": up_m
+            }
+        else:
+            # Si no hay target y no es esférico, usar el método de rotación Euler + Traslación
+            angles = blender_cam_to_mitsuba_xyz(rx, ry, rz)
+            transform["rotate"] = [
+                {"@x": "1", "@angle": str(angles[0])},
+                {"@y": "1", "@angle": str(angles[1])},
+                {"@z": "1", "@angle": str(angles[2])}
+            ]
+            transform["translate"] = {
+                "@value": f"{tx} {tz} {-ty}"
+            }
 
         # set fov
         floats = sensor.get("float")
@@ -1132,6 +1146,10 @@ class SceneService(BaseService):
                     "rotate_x": frame_config["rotate_x"],
                     "rotate_y": frame_config["rotate_y"],
                     "rotate_z": frame_config["rotate_z"],
+                    "target_x": frame_config.get("target_x", 0.0),
+                    "target_y": frame_config.get("target_y", 0.0),
+                    "target_z": frame_config.get("target_z", 0.0),
+                    "is_spherical": frame_config.get("is_spherical", False),
                 })
                 save_config_scene_dict(config_scene)
 
@@ -1232,6 +1250,10 @@ class SceneService(BaseService):
                 "rotate_x": frame_config["rotate_x"],
                 "rotate_y": frame_config["rotate_y"],
                 "rotate_z": frame_config["rotate_z"],
+                "target_x": frame_config.get("target_x", 0.0),
+                "target_y": frame_config.get("target_y", 0.0),
+                "target_z": frame_config.get("target_z", 0.0),
+                "is_spherical": frame_config.get("is_spherical", False),
             })
             save_config_scene_dict(config_scene)
             
@@ -1507,7 +1529,11 @@ def generate_camera_interpolation(origin, end, tracked_point, num_steps=30):
             "translate_z": float(current_pos[2]),
             "rotate_x": rot_x,
             "rotate_y": rot_y,
-            "rotate_z": rot_z
+            "rotate_z": rot_z,
+            "target_x": float(target_np[0]),
+            "target_y": float(target_np[1]),
+            "target_z": float(target_np[2]),
+            "is_spherical": True
         }
         camera_frames.append(frame_config)
         
@@ -1573,6 +1599,10 @@ def generate_camera_interpolation_spherical(
             "rotate_x": rot_x,
             "rotate_y": rot_y,
             "rotate_z": rot_z,
+            "target_x": float(target_np[0]),
+            "target_y": float(target_np[1]),
+            "target_z": float(target_np[2]),
+            "is_spherical": True,
             "theta": theta_deg,
             "azimuth": azimuth_deg,
             "radius": current_radius,

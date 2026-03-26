@@ -1,5 +1,4 @@
 import logging
-import os
 from uuid import uuid4
 
 from fastapi import APIRouter, File, UploadFile, Body, HTTPException
@@ -251,35 +250,3 @@ async def render_camera_animation_preview_spherical(
         media_type="image/gif",
         filename="camera_path_preview_spherical.gif",
     )
-
-@scene_router.post("/camera/animation/export")
-async def export_camera_animation(data: CameraAnimationConfigDTO) -> CameraAnimationConfigDTO:
-    """Exporta la configuración de una animación de cámara."""
-    return data
-
-@scene_router.post("/camera/animation/load")
-async def load_camera_animation(data: CameraAnimationConfigDTO) -> list[dict]:
-    """Carga una configuración de animación y devuelve los frames generados."""
-    if data.mode == "linear" and data.linear_data:
-        return scene_service.generate_camera_animation(
-            origin=data.linear_data.origin,
-            end=data.linear_data.end,
-            tracked_point=data.linear_data.tracked_point,
-            num_steps=data.linear_data.num_steps
-        )
-    elif data.mode == "spherical" and data.spherical_data:
-        d = data.spherical_data
-        return scene_service.generate_camera_animation_spherical(
-            start_theta=d.start_theta,
-            end_theta=d.end_theta,
-            start_azimuth=d.start_azimuth,
-            end_azimuth=d.end_azimuth,
-            radius=d.radius,
-            start_radius=d.start_radius,
-            end_radius=d.end_radius,
-            tracked_point=d.tracked_point,
-            num_steps=d.num_steps,
-            lock_azimuth_to_end=d.lock_azimuth_to_end
-        )
-    else:
-        raise HTTPException(status_code=400, detail="Configuración de animación inválida o incompleta")

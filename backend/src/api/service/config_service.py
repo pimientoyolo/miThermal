@@ -127,6 +127,7 @@ class ConfigService:
             camera_data["target_x"] = target_x
             camera_data["target_y"] = target_y
             camera_data["target_z"] = target_z
+            camera_data["is_spherical"] = True
             
         else:
             # Usar cartesianas si se proporcionan, o mantener actuales
@@ -136,6 +137,14 @@ class ConfigService:
             if camera_update.translate_x is not None: camera_data["translate_x"] = camera_update.translate_x
             if camera_update.translate_y is not None: camera_data["translate_y"] = camera_update.translate_y
             if camera_update.translate_z is not None: camera_data["translate_z"] = camera_update.translate_z
+            
+            # Actualizar target si se provee explícitamente en modo cartesiano
+            if camera_update.target_x is not None: camera_data["target_x"] = camera_update.target_x
+            if camera_update.target_y is not None: camera_data["target_y"] = camera_update.target_y
+            if camera_update.target_z is not None: camera_data["target_z"] = camera_update.target_z
+            
+            # Limpiar flag esférico si se movió manualmente por cartesianas
+            camera_data["is_spherical"] = False
             
             # Limpiar esféricas si se movió manualmente por cartesianas (opcional)
             # o podríamos intentar re-calcularlas aquí.
