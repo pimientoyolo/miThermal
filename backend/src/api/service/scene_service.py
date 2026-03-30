@@ -1188,6 +1188,9 @@ class SceneService(BaseService):
         end_radius: float = None,
         num_steps: int = 30,
         lock_azimuth_to_end: bool = False,
+        theta_expr: str | None = None,
+        azimuth_expr: str | None = None,
+        radius_expr: str | None = None,
     ) -> list[dict]:
         """Genera frames de cámara usando coordenadas esféricas alrededor de un objetivo."""
         try:
@@ -1202,6 +1205,9 @@ class SceneService(BaseService):
                 tracked_point=tracked_point,
                 num_steps=num_steps,
                 lock_azimuth_to_end=lock_azimuth_to_end,
+                theta_expr=theta_expr,
+                azimuth_expr=azimuth_expr,
+                radius_expr=radius_expr,
             )
             self.logger.info(
                 "Generada interpolación esférica con %s frames",
