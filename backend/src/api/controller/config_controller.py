@@ -49,12 +49,16 @@ async def import_camera_spatial_config(spatial_config: CameraSpatialConfigDTO) -
 
 @config_router.put("/wavelengths")
 async def update_wavelengths(
-    wavelength_min: int = Query(..., ge=0, description="Longitud de onda minima en μm"),
-    wavelength_max: int = Query(..., gt=0, description="Longitud de onda maxima en μm"),
-    bands: int = Query(..., gt=2, description="Numero de bandas"),
+    wavelength_min: float = Query(..., ge=0, description="Longitud de onda mínima en μm"),
+    wavelength_max: float = Query(..., gt=0, description="Longitud de onda máxima en μm"),
+    bands: int = Query(..., gt=2, description="Número de bandas"),
 ) -> CameraDTO:
 
-    updated_camera = config_service.update_wavelengths(wavelength_min*1000, wavelength_max*1000, bands)
+    updated_camera = config_service.update_wavelengths(
+        wavelength_min * 1000.0, 
+        wavelength_max * 1000.0, 
+        bands
+    )
 
     return updated_camera
 

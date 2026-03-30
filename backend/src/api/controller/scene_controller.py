@@ -205,11 +205,14 @@ async def generate_camera_interpolation_spherical(
         tracked_point=data.tracked_point,
         num_steps=data.num_steps,
         lock_azimuth_to_end=data.lock_azimuth_to_end,
+        theta_expr=data.theta_expr,
+        azimuth_expr=data.azimuth_expr,
+        radius_expr=data.radius_expr,
     )
 
 
 @scene_router.post("/camera/animation/render/spherical")
-async def render_camera_animation_spherical(
+async def render_camera_animation_render_spherical(
     data: SphericalCameraInterpolationDTO = Body(...)
 ) -> FileResponse:
     """Genera y renderiza una animación completa usando interpolación esférica."""
@@ -224,6 +227,9 @@ async def render_camera_animation_spherical(
         tracked_point=data.tracked_point,
         num_steps=data.num_steps,
         lock_azimuth_to_end=data.lock_azimuth_to_end,
+        theta_expr=data.theta_expr,
+        azimuth_expr=data.azimuth_expr,
+        radius_expr=data.radius_expr,
     )
     zip_path = scene_service.render_camera_animation_sequence(
         camera_frames,
@@ -255,6 +261,9 @@ async def render_camera_animation_preview_spherical(
         tracked_point=data.tracked_point,
         num_steps=data.num_steps,
         lock_azimuth_to_end=data.lock_azimuth_to_end,
+        theta_expr=data.theta_expr,
+        azimuth_expr=data.azimuth_expr,
+        radius_expr=data.radius_expr,
     )
     gif_path = scene_service.render_camera_path_preview_gif(camera_frames)
     return FileResponse(

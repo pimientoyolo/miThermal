@@ -82,6 +82,10 @@ class SphericalCameraInterpolationDTO(BaseModel):
     tracked_point: List[float]
     num_steps: int = 30
     lock_azimuth_to_end: bool = False
+    # Expresiones personalizadas para la trayectoria (funciones de 't' de 0 a 1)
+    theta_expr: str | None = None
+    azimuth_expr: str | None = None
+    radius_expr: str | None = None
     # Parámetros de renderizado opcionales para la animación
     spp: int | None = None
     width: int | None = None

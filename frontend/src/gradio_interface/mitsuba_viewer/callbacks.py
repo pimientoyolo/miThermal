@@ -385,7 +385,13 @@ def create_mitsuba_viewer_interface():
                         members = gr.Dropdown(label="Miembros", choices=[], multiselect=True, interactive=False)
                         gr.Markdown("#### Propiedades")
                         temp_input = gr.Number(label="Temperatura (K)", value=None, precision=2)
-                        emissivity_file = gr.File(label="Archivo Emisividad", file_types=[".txt", ".tbs"], interactive=True)
+                        spectrum_type = gr.Radio(
+                            label="Tipo de Datos",
+                            choices=["Emisividad", "Reflectancia"],
+                            value="Emisividad",
+                            info="Selecciona si el archivo subido es Emisividad o Reflectancia (1-E)"
+                        )
+                        emissivity_file = gr.File(label="Archivo Espectral", file_types=[".txt", ".tbs"], interactive=True)
                         apply_update_btn = gr.Button("✅ Aplicar Cambios", variant="primary")
                         info_text = gr.Textbox(label="Información del Objeto", lines=10, interactive=False)
                     
@@ -398,6 +404,7 @@ def create_mitsuba_viewer_interface():
                     "selector": selector,
                     "members": members,
                     "temp_input": temp_input,
+                    "spectrum_type": spectrum_type,
                     "emissivity_file": emissivity_file,
                     "apply_update_btn": apply_update_btn,
                     "info_text": info_text,
@@ -440,6 +447,12 @@ def create_mitsuba_viewer_interface():
                                     target_x = gr.Number(label="Target X", precision=3, value=0.0)
                                     target_y = gr.Number(label="Target Y", precision=3, value=0.0)
                                     target_z = gr.Number(label="Target Z", precision=3, value=0.0)
+                
+                with gr.Row():
+                    apply_cam_btn = gr.Button("✅ Aplicar Configuración de Cámara", variant="primary")
+                
+                with gr.Row():
+                    cam_status = gr.Textbox(label="Estado de Cámara", lines=2, interactive=False)
 
             # ==================== TAB 4: 🎥 ANIMACIÓN ====================
             with gr.Tab("🎥 Animación"):
@@ -460,8 +473,8 @@ def create_mitsuba_viewer_interface():
                         gr.Markdown("### Configuración Espectral")
                         with gr.Row():
                             with gr.Column(scale=1):
-                                wl_min = gr.Number(label="λ mínima (nm)", precision=0, value=8000)
-                                wl_max = gr.Number(label="λ máxima (nm)", precision=0, value=12000)
+                                wl_min = gr.Number(label="λ mínima (μm)", value=8.0)
+                                wl_max = gr.Number(label="λ máxima (μm)", value=12.0)
                                 bands = gr.Number(label="Número de bandas", precision=0, value=50)
                                 spectrum_apply_btn = gr.Button("✅ Aplicar Configuración Espectral", variant="primary")
                             
@@ -504,8 +517,6 @@ def create_mitsuba_viewer_interface():
                         gr.Markdown("### Aplicar Toda la Configuración")
                         with gr.Row():
                             load_config_btn = gr.Button("📥 Cargar Config Actual", variant="secondary")
-                            export_cam_btn = gr.Button("📤 Exportar Cámara", variant="secondary")
-                            import_cam_btn = gr.Button("📥 Importar Cámara", variant="secondary")
                             apply_all_btn = gr.Button("✅ Aplicar Toda la Config", variant="primary", size="lg")
                         
                         with gr.Row():
@@ -518,42 +529,84 @@ def create_mitsuba_viewer_interface():
                         gr.Markdown("### Gestión de Cache")
                         cache_section = build_cache_management_section()
                 
-                # Unified config section para compatibilidad con callbacks
-                config_section = {
-                    "camera_spp": camera_spp,
-                    "camera_width": camera_width,
-                    "camera_height": camera_height,
-                    "rotate_x": rotate_x,
-                    "rotate_y": rotate_y,
-                    "rotate_z": rotate_z,
-                    "translate_x": translate_x,
-                    "translate_y": translate_y,
-                    "translate_z": translate_z,
-                    "theta": theta,
-                    "phi": phi,
-                    "radius": radius,
-                    "target_x": target_x,
-                    "target_y": target_y,
-                    "target_z": target_z,
-                    "fov": fov,
-                    "wl_min": wl_min,
-                    "wl_max": wl_max,
-                    "bands": bands,
-                    "spectrum_apply_btn": spectrum_apply_btn,
-                    "spectrum_status": spectrum_status,
-                    "air_temperature": air_temperature,
-                    "air_file": air_file,
-                    "air_suggest_list": air_suggest_list,
-                    "air_apply_suggest_btn": air_apply_suggest_btn,
-                    "air_plot": air_plot,
-                    "atm_status": atm_status,
-                    "load_config_btn": load_config_btn,
-                    "export_cam_btn": export_cam_btn,
-                    "import_cam_btn": import_cam_btn,
-                    "apply_all_btn": apply_all_btn,
-                    "config_status": config_status,
-                    "config_info": config_info,
+        # Callback para aplicar solo configuración de cámara
+        def apply_camera_config_cb(spp_k, width, height, fov, rx, ry, rz, tx, ty, tz, theta, phi, radius, tgx, tgy, tgz):
+            client = get_client()
+            try:
+                k = int(float(spp_k)) if spp_k is not None else None
+                spp_val = 2 ** k if k is not None else None
+                
+                cam_args = {
+                    "spp": int(spp_val) if spp_val is not None else None,
+                    "width": int(width) if width is not None else None,
+                    "height": int(height) if height is not None else None,
+                    "fov": float(fov) if fov is not None else None,
                 }
+                
+                if all(v is not None for v in [theta, phi, radius]):
+                    cam_args.update({
+                        "theta": float(theta), "phi": float(phi), "radius": float(radius),
+                        "target_x": float(tgx), "target_y": float(tgy), "target_z": float(tgz),
+                    })
+                else:
+                    cam_args.update({
+                        "rotate_x": float(rx), "rotate_y": float(ry), "rotate_z": float(rz),
+                        "translate_x": float(tx), "translate_y": float(ty), "translate_z": float(tz),
+                    })
+                
+                res = client.update_camera_config(**cam_args)
+                if res.get("status") == "success":
+                    return "✅ Cámara actualizada correctamente"
+                return f"❌ Error: {res.get('detail', 'Desconocido')}"
+            except Exception as e:
+                return f"❌ Error: {str(e)}"
+
+        apply_cam_btn.click(
+            fn=apply_camera_config_cb,
+            inputs=[
+                camera_spp, camera_width, camera_height, fov,
+                rotate_x, rotate_y, rotate_z,
+                translate_x, translate_y, translate_z,
+                theta, phi, radius, target_x, target_y, target_z
+            ],
+            outputs=[cam_status]
+        )
+
+        # Unified config section para compatibilidad con callbacks
+        config_section = {
+            "camera_spp": camera_spp,
+            "camera_width": camera_width,
+            "camera_height": camera_height,
+            "rotate_x": rotate_x,
+            "rotate_y": rotate_y,
+            "rotate_z": rotate_z,
+            "translate_x": translate_x,
+            "translate_y": translate_y,
+            "translate_z": translate_z,
+            "theta": theta,
+            "phi": phi,
+            "radius": radius,
+            "target_x": target_x,
+            "target_y": target_y,
+            "target_z": target_z,
+            "fov": fov,
+            "wl_min": wl_min,
+            "wl_max": wl_max,
+            "bands": bands,
+            "spectrum_apply_btn": spectrum_apply_btn,
+            "spectrum_status": spectrum_status,
+            "air_temperature": air_temperature,
+            "air_file": air_file,
+            "air_suggest_list": air_suggest_list,
+            "air_apply_suggest_btn": air_apply_suggest_btn,
+            "air_plot": air_plot,
+            "atm_status": atm_status,
+            "load_config_btn": load_config_btn,
+            "apply_all_btn": apply_all_btn,
+            "config_status": config_status,
+
+            "config_info": config_info,
+        }
 
         # Visualización: ejecutar todos los renders y mostrarlos en galería
         def run_simulation_cb():
@@ -657,7 +710,7 @@ def create_mitsuba_viewer_interface():
             try:
                 import math
                 if not isinstance(cfg, dict):
-                    return (gr.update(),) * 19
+                    return (gr.update(),) * 20
                 
                 spp = cfg.get("spp")
                 k_val = None
@@ -668,8 +721,9 @@ def create_mitsuba_viewer_interface():
                         k_val = None
                 
                 wavelengths = cfg.get("wavelengths") or []
-                wl_min = int(min(wavelengths)) if wavelengths else None
-                wl_max = int(max(wavelengths)) if wavelengths else None
+                # Convertir de nm a um para el UI
+                wl_min = float(min(wavelengths)) / 1000.0 if wavelengths else None
+                wl_max = float(max(wavelengths)) / 1000.0 if wavelengths else None
                 bands = cfg.get("num_bands")
 
                 return (
@@ -684,7 +738,7 @@ def create_mitsuba_viewer_interface():
                 )
             except Exception as e:
                 logger.error(f"_prefill_updates_from_config fallo: {e}")
-                return (gr.update(),) * 19
+                return (gr.update(),) * 20
 
         # Actualizar label del slider SPP cuando el usuario cambia k
         def _update_spp_label(k):
@@ -1163,21 +1217,20 @@ def create_mitsuba_viewer_interface():
             ],
         )
 
-        def og_apply_update(mode: str, selection: str, temp_value, emissivity_file):
+        def og_apply_update(mode: str, selection: str, temp_value, spec_type: str, emissivity_file):
             """
             Actualiza objeto(s) según el modo seleccionado.
-            
-            - Objeto: Actualiza solo el objeto seleccionado
-            - Familia: Actualiza todos los miembros de la familia
             
             Args:
                 mode: "Objeto", "Instancia", o "Familia"
                 selection: Objeto/grupo seleccionado
                 temp_value: Nueva temperatura (opcional)
+                spec_type: "Emisividad" o "Reflectancia"
                 emissivity_file: Archivo de emisividad (opcional)
             """
             mode_l = (mode or '').lower()
             client = get_client()
+            is_refl = spec_type == "Reflectancia"
             
             # Validar que hay algo que actualizar
             if not selection:
@@ -1245,8 +1298,13 @@ def create_mitsuba_viewer_interface():
                 except ValueError:
                     return gr.update(value='❌ Temperatura inválida')
             
-            # Manejar archivo de emisividad (TODO: subir primero al backend)
-            emissivity_file_path = getattr(emissivity_file, 'name', None)
+            # Manejar archivo de emisividad
+            emissivity_file_path = None
+            if isinstance(emissivity_file, str):
+                emissivity_file_path = emissivity_file
+            else:
+                emissivity_file_path = getattr(emissivity_file, 'name', None)
+                
             if emissivity_file_path:
                 # Por ahora, usar el nombre del archivo
                 # En una versión futura, se debería subir el archivo primero
@@ -1259,21 +1317,24 @@ def create_mitsuba_viewer_interface():
                 )
             
             try:
-                # Llamar al nuevo endpoint
-                params["object_id"] = oid
-                response = client.session.put(
-                    f"{client.base_url}/object/update-with-mode",
-                    params=params
+                # Usar el método del cliente que ya maneja la subida de archivos
+                result = client.update_object_with_mode(
+                    object_id=oid,
+                    mode="Familia" if mode_l.startswith("fam") else "Objeto",
+                    temperature=float(temp_value) if temp_value not in (None, '') else None,
+                    emissivity_file_path=emissivity_file_path,
+                    is_reflectance=is_refl
                 )
-                response.raise_for_status()
-                result = response.json()
                 
-                # Construir mensaje de éxito
-                count = result.get("count", 0)
-                mode_text = result.get("mode", "")
+                if result.get("status") == "error":
+                    return gr.update(value=f"❌ Error: {result.get('detail')}")
+                
+                data = result.get("data", {})
+                count = data.get("count", 0)
+                mode_text = data.get("mode", "")
                 
                 if mode_text == "family":
-                    family_name = result.get("family_name", "")
+                    family_name = data.get("family_name", "")
                     msg = (
                         f"✅ Familia '{family_name}' actualizada\n"
                         f"📦 {count} objetos modificados"
@@ -1281,7 +1342,7 @@ def create_mitsuba_viewer_interface():
                 else:
                     msg = f"✅ Objeto '{oid}' actualizado"
                 
-                props_updated = result.get("properties_updated", [])
+                props_updated = data.get("properties_updated", [])
                 if props_updated:
                     msg += f"\n🔧 Propiedades: {', '.join(props_updated)}"
                 
@@ -1293,7 +1354,13 @@ def create_mitsuba_viewer_interface():
 
         og_section['apply_update_btn'].click(
             fn=og_apply_update,
-            inputs=[og_section['mode_radio'], og_section['selector'], og_section['temp_input'], og_section['emissivity_file']],
+            inputs=[
+                og_section['mode_radio'], 
+                og_section['selector'], 
+                og_section['temp_input'], 
+                og_section['spectrum_type'],
+                og_section['emissivity_file']
+            ],
             outputs=[og_section['info_text']],
         )
 
@@ -1480,21 +1547,6 @@ def create_mitsuba_viewer_interface():
                     return f.name
             return None
 
-        config_section["export_cam_btn"].click(fn=export_cam_cb, outputs=[gr.File(label="Cam Config JSON")])
-
-        def import_cam_cb(file):
-            import json
-            if file is None: return "No file selected"
-            try:
-                with open(file.name, "r") as f:
-                    data = json.load(f)
-                res = get_client().import_camera_spatial_config(data)
-                return f"Import status: {res.get('status')}"
-            except Exception as e:
-                return f"Error: {str(e)}"
-
-        config_section["import_cam_btn"].click(fn=import_cam_cb, inputs=[gr.File()], outputs=[config_section["config_status"]])
-
 
         # Utilidad local: parsear texto de aire a pares (x, y)
         def parse_air_text_to_xy(text: str):
@@ -1570,13 +1622,13 @@ def create_mitsuba_viewer_interface():
             """Actualiza solo los parámetros espectrales."""
             try:
                 client = get_client()
-                result = client.update_camera_config(
-                    wavelength_min=int(wl_min),
-                    wavelength_max=int(wl_max),
-                    num_bands=int(bands)
+                result = client.update_wavelengths(
+                    wavelength_min=float(wl_min),
+                    wavelength_max=float(wl_max),
+                    bands=int(bands)
                 )
                 if result.get("status") == "success":
-                    msg = f"✅ Configuración espectral actualizada:\n• λ: {wl_min}-{wl_max} nm\n• Bandas: {bands}"
+                    msg = f"✅ Configuración espectral actualizada:\n• λ: {wl_min}-{wl_max} μm\n• Bandas: {bands}"
                 else:
                     msg = f"❌ Error: {result.get('detail', 'Error desconocido')}"
                 return msg
@@ -1817,57 +1869,6 @@ def create_mitsuba_viewer_interface():
                     return f.name
             return None
 
-        def import_anim_cb(file):
-            import json
-            # 1 (msg) + 22 (interp_inputs) = 23 total returns
-            if file is None: return "No file selected", *([gr.update()] * 22)
-            try:
-                with open(file.name, "r") as f:
-                    data = json.load(f)
-                mode = data.get("mode", "linear")
-                mode_label = "Lineal" if mode == "linear" else "Esférico"
-                
-                updates = [gr.update(value=mode_label)] # interp_mode
-                
-                # Extraer datos específicos
-                ld = data.get("linear_data", {})
-                sd = data.get("spherical_data", {})
-                
-                # Campos comunes o por defecto
-                origin = ld.get("origin", [0,0,5])
-                end = ld.get("end", [5,5,5])
-                target = ld.get("tracked_point", sd.get("tracked_point", [0,0,0]))
-                steps = ld.get("num_steps", sd.get("num_steps", 30))
-                
-                # Render parameters
-                spp = ld.get("spp", sd.get("spp", 4))
-                bands = ld.get("num_bands", sd.get("num_bands", 50))
-                width = ld.get("width", sd.get("width", 640))
-                height = ld.get("height", sd.get("height", 480))
-
-                # Construir lista de actualizaciones siguiendo el orden de interp_inputs
-                updates.extend([
-                    gr.update(value=origin[0]), gr.update(value=origin[1]), gr.update(value=origin[2]), # origin
-                    gr.update(value=end[0]), gr.update(value=end[1]), gr.update(value=end[2]), # end
-                    gr.update(value=sd.get("start_theta", 45.0)), 
-                    gr.update(value=sd.get("start_azimuth", 0.0)), 
-                    gr.update(value=sd.get("start_radius", 10.0)),
-                    gr.update(value=sd.get("end_theta", 45.0)), 
-                    gr.update(value=sd.get("end_azimuth", 90.0)), 
-                    gr.update(value=sd.get("end_radius", 10.0)),
-                    gr.update(value=sd.get("lock_azimuth_to_end", False)), # lock_azimuth
-                    gr.update(value=target[0]), gr.update(value=target[1]), gr.update(value=target[2]), # target
-                    gr.update(value=steps), # steps
-                    gr.update(value=spp), # anim_spp
-                    gr.update(value=bands), # anim_bands
-                    gr.update(value=width), # anim_width
-                    gr.update(value=height), # anim_height
-                ])
-                
-                return f"✅ Animación cargada ({mode_label})", *updates
-            except Exception as e:
-                return f"❌ Error importando: {str(e)}", *([gr.update()] * 22)
-
         interp_inputs = [
             camera_interp_section["interp_mode"],
             camera_interp_section["origin_x"], camera_interp_section["origin_y"], camera_interp_section["origin_z"],
@@ -1886,11 +1887,7 @@ def create_mitsuba_viewer_interface():
         camera_interp_section["generate_btn"].click(fn=camera_interpolation_cb, inputs=interp_inputs, outputs=[camera_interp_section["status_output"], camera_interp_section["interpolation_result"]])
         camera_interp_section["render_btn"].click(fn=render_camera_animation_cb, inputs=interp_inputs, outputs=[camera_interp_section["status_output"], camera_interp_section["animation_zip"]])
         camera_interp_section["preview_btn"].click(fn=preview_camera_path_cb, inputs=interp_inputs, outputs=[camera_interp_section["status_output"], camera_interp_section["preview_gif"]])
-        camera_interp_section["export_anim_btn"].click(fn=export_anim_cb, inputs=interp_inputs, outputs=[gr.File(label="Anim Config JSON")])
-        
-        # Para import, necesitamos que devuelva updates a todos los campos
-        interp_outputs = [camera_interp_section["status_output"]] + interp_inputs
-        camera_interp_section["import_anim_btn"].click(fn=import_anim_cb, inputs=[gr.File()], outputs=interp_outputs)
+        camera_interp_section["export_anim_btn"].click(fn=export_anim_cb, inputs=interp_inputs, outputs=[camera_interp_section["anim_config_json"]])
 
         # Callbacks para gestión de cache
         def refresh_cache_stats_cb():

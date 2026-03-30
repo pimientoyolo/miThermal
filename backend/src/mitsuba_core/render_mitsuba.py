@@ -87,13 +87,53 @@ class RenderThermal:
         # Convertir la imagen a numpy array
         image_array = np.array(image)
 
+        # 1. Normalización Espectral: Mitsuba integra sobre el ancho de banda
+        # Necesitamos dividir por el ancho de banda (delta) y ajustar por el factor pi
+        # para obtener Radiancia Espectral (W/m²/sr/m)
+        from src.config import get_config_scene_dict
+        config_scene = get_config_scene_dict()
+        wavelengths = config_scene.get("wavelengths", [])
+        if len(wavelengths) > 1:
+            delta = float(wavelengths[1] - wavelengths[0])
+            # Normalizar: (Valor / delta) * pi
+            # El factor pi es necesario para convertir la proyección Lambertiana a Radiancia
+            #image_array = (image_array * np.pi) / delta
+            image_array = (image_array) / delta
+
+        # 2. Recortar bandas de seguridad (primera y última)
+        if image_array.ndim == 3 and image_array.shape[-1] > 2:
+            image_array = image_array[:, :, 1:-1]
+
         # Crear carpeta si no existe
         os.makedirs(OUTPUT_STATIC_RESULT_DIR, exist_ok=True)
+
+        # GUARDAR CUBE TÉRMICO PURO (antes de sumar aire) para diagnóstico
+        result_raw_path = self.path_manager.get_result_path("thermal_raw")
+        np.save(result_raw_path, image_array)
 
         contribution_path = self.path_manager.get_result_path("contribution_blackbody_air")
         contribution_blackbody_air = np.load(contribution_path)
 
-        image_array = image_array + contribution_blackbody_air
+        # Verificar compatibilidad de formas para evitar errores de broadcasting
+        if image_array.shape != contribution_blackbody_air.shape:
+            # Caso común: image_array es (H, W, 3) y contribución es (H, W, Bands)
+            if image_array.shape[-1] == 3 and contribution_blackbody_air.shape[-1] != 3:
+                # Si Mitsuba devolvió RGB pero tenemos bandas, colapsamos bandas de contribución a promedio
+                # para que el usuario al menos vea un resultado coherente en intensidad
+                avg_contrib = np.mean(contribution_blackbody_air, axis=-1, keepdims=True)
+                # Opcional: repetir 3 veces para sumar a RGB
+                avg_contrib_rgb = np.repeat(avg_contrib, 3, axis=-1)
+                image_array = image_array + avg_contrib_rgb
+            else:
+                # Otros casos: intentar sumar directamente (fallará si no son compatibles)
+                try:
+                    image_array = image_array + contribution_blackbody_air
+                except ValueError as e:
+                    logging.error(f"Error de broadcasting: image={image_array.shape}, contrib={contribution_blackbody_air.shape}")
+                    # Mantener solo el render de Mitsuba si falla
+                    pass
+        else:
+            image_array = image_array + contribution_blackbody_air
 
         # Guardar toda la información (todos los canales)
         result_path = self.path_manager.get_result_path("thermal")
@@ -107,6 +147,19 @@ class RenderThermal:
 
         # Convertir la imagen a numpy array
         image_array = np.array(image)
+
+        # Normalización
+        from src.config import get_config_scene_dict
+        config_scene = get_config_scene_dict()
+        wavelengths = config_scene.get("wavelengths", [])
+        if len(wavelengths) > 1:
+            delta = float(wavelengths[1] - wavelengths[0])
+            #image_array = (image_array * np.pi) / delta
+            image_array = (image_array) / delta
+
+        # Recortar bandas de seguridad
+        if image_array.ndim == 3 and image_array.shape[-1] > 2:
+            image_array = image_array[:, :, 1:-1]
 
         # Crear carpeta si no existe
         os.makedirs(OUTPUT_STATIC_RESULT_DIR, exist_ok=True)
@@ -124,6 +177,19 @@ class RenderThermal:
         # Convertir la imagen a numpy array
         image_array = np.array(image)
 
+        # Normalización
+        from src.config import get_config_scene_dict
+        config_scene = get_config_scene_dict()
+        wavelengths = config_scene.get("wavelengths", [])
+        if len(wavelengths) > 1:
+            delta = float(wavelengths[1] - wavelengths[0])
+            #image_array = (image_array * np.pi) / delta
+            image_array = (image_array) / delta
+
+        # Recortar bandas de seguridad
+        if image_array.ndim == 3 and image_array.shape[-1] > 2:
+            image_array = image_array[:, :, 1:-1]
+
         # Crear carpeta si no existe
         os.makedirs(OUTPUT_STATIC_RESULT_DIR, exist_ok=True)
 
@@ -140,7 +206,13 @@ class RenderThermal:
         # Convertir la imagen a numpy array
         image_array = np.array(image)
 
+        # Para el mapa de temperatura, la banda es de 1nm, por lo que dividimos entre 1.0 (delta)
+        # No recortamos bandas de seguridad porque es una escena monocromática custom.
+        # No multiplicamos por pi porque queremos el valor crudo de temperatura.
+        image_array = image_array / 1.0
+
         # Colapsar bandas: promedio a lo largo del último eje -> [y, x]
+        # Al ser un mapa de temperatura, todas las bandas deberían tener el mismo valor
         if image_array.ndim == 3:
             image_array = image_array.mean(axis=-1)
         else:

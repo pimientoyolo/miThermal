@@ -30,7 +30,6 @@ class RenderService(RenderServiceBase):
         self._validate_file_exists(scene_path, f"escena {scene_type}")
         self._validate_is_file(scene_path)
 
-    @log_execution()
     def render_basic_scene(self):
         """Renderiza escena RGB básica."""
         self._validate_scene_file(SceneType.RGB.value)
@@ -39,7 +38,6 @@ class RenderService(RenderServiceBase):
             self.render_rgb.render
         )
 
-    @log_execution()
     def render_depth_image(self):
         """Renderiza mapa de profundidad."""
         self._validate_scene_file(SceneType.DEPTH.value)
@@ -48,7 +46,6 @@ class RenderService(RenderServiceBase):
             self.render_depth.render
         )
 
-    @log_execution()
     def render_thermal_image(self):
         """Renderiza imagen térmica con calcología de contribución de aire."""
         self.render_contribution_air()
@@ -58,7 +55,6 @@ class RenderService(RenderServiceBase):
             self.render_thermal.render
         )
 
-    @log_execution()
     def render_blackbody_air_image(self):
         """Renderiza escena blackbody air."""
         self._validate_scene_file(SceneType.BLACKBODY_AIR.value)
@@ -67,7 +63,6 @@ class RenderService(RenderServiceBase):
             self.render_thermal.render_blackbody_air
         )
 
-    @log_execution()
     def render_transmittance_blackbody_air_image(self):
         """Renderiza escena transmittance blackbody air."""
         self._validate_scene_file(SceneType.TRANSMITTANCE_BLACKBODY_AIR.value)
@@ -76,24 +71,62 @@ class RenderService(RenderServiceBase):
             self.render_thermal.render_transmittance_blackbody_air
         )
 
-    @log_execution()
     def render_contribution_air(self):
-        """Calcula contribución de aire restando transmittance de blackbody."""
-        self.render_blackbody_air_image()
-        self.render_transmittance_blackbody_air_image()
+        """
+        Calcula la contribución de radiancia del aire (path radiance) analíticamente
+        usando el mapa de profundidad y la ley de Beer-Lambert.
+        L_path = L_air * (1 - exp(-sigma_t * depth))
+        """
+        from src.config import get_config_scene_dict
+        from src.atmosphere.attenuation import read_air_attenuation_file
+        from src.utils.objects.objects import ObjectUtils
         
-        blackbody_path = self.path_manager.get_result_path(SceneType.BLACKBODY_AIR.value)
-        transmittance_path = self.path_manager.get_result_path(SceneType.TRANSMITTANCE_BLACKBODY_AIR.value)
-        contribution_path = self.path_manager.get_result_path("contribution_blackbody_air")
+        # 1. Asegurar que tenemos el mapa de profundidad
+        self.render_depth_image()
+        depth_path = self.path_manager.get_result_path(SceneType.DEPTH.value)
+        depth = load_numpy_array(depth_path) # [H, W]
         
-        # Usar helpers para manejo robusto de archivos numpy
-        blackbody_air = load_numpy_array(blackbody_path)
-        transmittance_blackbody_air = load_numpy_array(transmittance_path)
-        contribution_blackbody_air = blackbody_air - transmittance_blackbody_air
-        save_numpy_array(contribution_path, contribution_blackbody_air)
+        # Manejar fondo (Mitsuba depth suele retornar 0 o valores muy grandes para el infinito)
+        # Si es 0, lo tratamos como infinito para que tenga radiancia de aire completa
+        depth[depth == 0] = 1e6 
 
-    @log_execution()
-    @log_execution()
+        # 2. Obtener datos de atmósfera y cámara
+        config_scene = get_config_scene_dict()
+        t_air = config_scene["air"]["temperature"]
+        wavelengths_scene = np.array(config_scene["wavelengths"]) # nm
+        
+        # Leer sigma_t (ya corregido a m^-1)
+        wl_air, sigma_t_air = read_air_attenuation_file()
+        
+        # Interpolar sigma_t a las longitudes de onda de la cámara
+        sigma_t_interp = np.interp(wavelengths_scene, wl_air, sigma_t_air)
+        
+        # 3. Calcular radiancia de cuerpo negro del aire para cada banda
+        obj_utils = ObjectUtils()
+        l_air_spectral = obj_utils.blackbody_radiance_nm(wavelengths_scene, t_air) # [Bands]
+        
+        # 4. Calcular contribución (H, W, Bands)
+        # Expandir dimensiones para broadcasting: depth[H,W,1] * sigma[1,1,B]
+        depth_exp = depth[:, :, np.newaxis]
+        sigma_exp = sigma_t_interp[np.newaxis, np.newaxis, :]
+        l_air_exp = l_air_spectral[np.newaxis, np.newaxis, :]
+        
+        # Transmitancia: tau = exp(-sigma * d)
+        transmittance = np.exp(-sigma_exp * depth_exp)
+        
+        # Radiancia de camino: L_path = L_air * (1 - tau)
+        contribution = l_air_exp * (1.0 - transmittance)
+        
+        # 4.5 Recortar bandas de seguridad (primera y última)
+        if contribution.shape[-1] > 2:
+            contribution = contribution[:, :, 1:-1]
+            logger.info(f"Bandas de seguridad recortadas de la contribución de aire. Nueva forma: {contribution.shape}")
+
+        # 5. Guardar resultado
+        contribution_path = self.path_manager.get_result_path("contribution_blackbody_air")
+        save_numpy_array(contribution_path, contribution)
+        logger.info(f"Contribución de aire calculada analíticamente usando depth map")
+
     def render_temperature_map(self):
         """Renderiza mapa de temperatura."""
         self._validate_scene_file(SceneType.TEMPERATURE_MAP.value)

@@ -219,7 +219,7 @@ class ConfigService:
         return self.get_camera_config()
 
     @log_execution()
-    def update_wavelengths(self, w_min: int, w_max: int, bands: int) -> CameraDTO:
+    def update_wavelengths(self, w_min: float, w_max: float, bands: int) -> CameraDTO:
 
         # validar que w_max sea mayor que w_min
         if w_max < w_min:
@@ -227,20 +227,31 @@ class ConfigService:
 
         scene_config = get_config_scene_dict()
 
-        wavelengths = np.linspace(w_min, w_max, bands, endpoint=True, dtype=int).tolist()
+        # Calcular el paso entre bandas para extender el rango
+        if bands > 1:
+            step = (w_max - w_min) / (bands - 1)
+        else:
+            step = 10.0 # valor por defecto si solo hay una banda
+            
+        # Añadir una banda extra al inicio y otra al final para evitar problemas de interpolación
+        w_padded_min = w_min - step
+        w_padded_max = w_max + step
+        total_bands = bands + 2
+
+        # Generar wavelengths con los extremos extendidos
+        wavelengths = np.linspace(w_padded_min, w_padded_max, total_bands, endpoint=True, dtype=float).tolist()
 
         scene_config["wavelengths"] = wavelengths
-        scene_config["num_bands"] = bands
+        scene_config["num_bands"] = total_bands
 
         save_config_scene_dict(scene_config)
 
-        update = scene_service.update_film_spectrum()
-
-        if update:
-            scene_service.prepare_blackbody_air_scene()
-            scene_service.prepare_depth_scene()
-            scene_service.prepare_transmittance_blackbody_air_scene()
-            scene_service.prepare_temperature_map()
+        # Re-preparar todas las escenas derivadas para reflejar el cambio espectral
+        scene_service.prepare_thermal_scene()
+        scene_service.prepare_blackbody_air_scene()
+        scene_service.prepare_depth_scene()
+        scene_service.prepare_transmittance_blackbody_air_scene()
+        scene_service.prepare_temperature_map()
 
         return self.get_camera_config()
     

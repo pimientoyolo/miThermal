@@ -52,7 +52,8 @@ def get_attenuation(attenuation_file: str = "air.txt") -> tuple[np.ndarray, np.n
         wavelengths_nm = wavelengths_um * 1000.0
 
         # Convertir atenuación a neper: multiplicar por ln(10)/10
-        sigma_t_neper = attenuation_vals * (np.log(10.0) / 10.0)
+        # Y convertir de km^-1 a m^-1 (asumiendo escena en metros)
+        sigma_t_neper = (attenuation_vals * (np.log(10.0) / 10.0)) / 1000.0
 
         # Ordenar de menor a mayor por longitud de onda, manteniendo pares
         order = np.argsort(wavelengths_nm)

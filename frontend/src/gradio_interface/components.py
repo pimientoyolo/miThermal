@@ -365,30 +365,11 @@ def build_camera_interpolation_section() -> Dict[str, gr.components.Component]:
 	with gr.Row():
 		gr.Markdown("## 🎥 Interpolación de Cámara")
 	
-	with gr.Row():
-		with gr.Column(scale=1):
-			interp_mode = gr.Radio(label="Modo de Interpolación", choices=["Lineal", "Esférico"], value="Lineal")
-		with gr.Column(scale=1):
-			with gr.Row():
-				export_anim_btn = gr.Button("📤 Exportar Animación", variant="secondary")
-				import_anim_btn = gr.Button("📥 Importar Animación", variant="secondary")
+	# Campo oculto para el modo actual, se actualiza al cambiar de pestaña
+	interp_mode = gr.Textbox(value="Esférico", visible=False)
 
 	with gr.Tabs() as tabs:
-		with gr.Tab("Lineal (Cartesiano)") as linear_tab:
-			with gr.Row():
-				with gr.Column(scale=1):
-					gr.Markdown("### Punto Inicial")
-					origin_x = gr.Number(label="X origen", value=0.0, precision=2)
-					origin_y = gr.Number(label="Y origen", value=0.0, precision=2)
-					origin_z = gr.Number(label="Z origen", value=5.0, precision=2)
-					
-				with gr.Column(scale=1):
-					gr.Markdown("### Punto Final")
-					end_x = gr.Number(label="X final", value=5.0, precision=2)
-					end_y = gr.Number(label="Y final", value=5.0, precision=2)
-					end_z = gr.Number(label="Z final", value=5.0, precision=2)
-			
-		with gr.Tab("Esférico (Ángulos)") as spherical_tab:
+		with gr.Tab("Esférico (Ángulos)", id="spherical_tab") as spherical_tab:
 			with gr.Row():
 				with gr.Column(scale=1):
 					gr.Markdown("### Ángulos Iniciales")
@@ -402,7 +383,34 @@ def build_camera_interpolation_section() -> Dict[str, gr.components.Component]:
 					end_azimuth = gr.Number(label="Azimuth Final", value=90.0, precision=2)
 					end_radius = gr.Number(label="Radio Final", value=10.0, precision=2)
 			
-			lock_azimuth = gr.Checkbox(label="Bloquear Azimuth al valor final", value=False)
+			with gr.Row():
+				lock_azimuth = gr.Checkbox(label="Bloquear Azimuth al valor final", value=False)
+			
+			with gr.Row():
+				gr.Markdown("### Funciones Personalizadas (Opcional)")
+			with gr.Row():
+				theta_expr = gr.Textbox(label="Función Theta (t)", placeholder="Ej: t**2 o sin(t*pi/2)")
+				azimuth_expr = gr.Textbox(label="Función Azimuth (t)", placeholder="Ej: t**3")
+				radius_expr = gr.Textbox(label="Función Radio (t)", placeholder="Ej: 1 - t**2")
+			gr.Markdown("*Variable 't' de 0 a 1. Si se deja vacío, se usa interpolación lineal (t).*")
+
+		with gr.Tab("Lineal (Cartesiano)", id="linear_tab") as linear_tab:
+			with gr.Row():
+				with gr.Column(scale=1):
+					gr.Markdown("### Punto Inicial")
+					origin_x = gr.Number(label="X origen", value=0.0, precision=2)
+					origin_y = gr.Number(label="Y origen", value=0.0, precision=2)
+					origin_z = gr.Number(label="Z origen", value=5.0, precision=2)
+					
+				with gr.Column(scale=1):
+					gr.Markdown("### Punto Final")
+					end_x = gr.Number(label="X final", value=5.0, precision=2)
+					end_y = gr.Number(label="Y final", value=5.0, precision=2)
+					end_z = gr.Number(label="Z final", value=5.0, precision=2)
+
+	# Listeners para actualizar el modo oculto
+	linear_tab.select(fn=lambda: "Lineal", outputs=interp_mode)
+	spherical_tab.select(fn=lambda: "Esférico", outputs=interp_mode)
 
 	with gr.Row():
 		with gr.Column(scale=1):
@@ -413,12 +421,10 @@ def build_camera_interpolation_section() -> Dict[str, gr.components.Component]:
 	
 	with gr.Row():
 		with gr.Column(scale=1):
-			num_steps = gr.Slider(
+			num_steps = gr.Number(
 				label="Número de frames",
-				minimum=5,
-				maximum=100,
-				step=1,
-				value=30
+				value=30,
+				precision=0
 			)
 		with gr.Column(scale=1):
 			gr.Markdown("### Configuración de Renderizado (Animación)")
@@ -439,6 +445,8 @@ def build_camera_interpolation_section() -> Dict[str, gr.components.Component]:
 			preview_btn = gr.Button("👀 Preview Rápido del Path (GIF)", variant="secondary")
 		with gr.Column(scale=1):
 			render_btn = gr.Button("🎞️ Renderizar Animación Completa", variant="primary")
+		with gr.Column(scale=1):
+			export_anim_btn = gr.Button("📤 Exportar Anim JSON", variant="secondary")
 	
 	with gr.Row():
 		preview_gif = gr.Image(label="Preview Path (GIF)", type="filepath", height=280)
@@ -446,11 +454,10 @@ def build_camera_interpolation_section() -> Dict[str, gr.components.Component]:
 	with gr.Row():
 		interpolation_result = gr.JSON(label="Frames Generados", visible=False)
 		animation_zip = gr.File(label="Descargar Animación (.zip)")
+		anim_config_json = gr.File(label="Descargar Anim Config (.json)")
 	
 	return {
 		"interp_mode": interp_mode,
-		"export_anim_btn": export_anim_btn,
-		"import_anim_btn": import_anim_btn,
 		"origin_x": origin_x,
 		"origin_y": origin_y,
 		"origin_z": origin_z,
@@ -464,6 +471,9 @@ def build_camera_interpolation_section() -> Dict[str, gr.components.Component]:
 		"end_azimuth": end_azimuth,
 		"end_radius": end_radius,
 		"lock_azimuth": lock_azimuth,
+		"theta_expr": theta_expr,
+		"azimuth_expr": azimuth_expr,
+		"radius_expr": radius_expr,
 		"target_x": target_x,
 		"target_y": target_y,
 		"target_z": target_z,
@@ -475,10 +485,12 @@ def build_camera_interpolation_section() -> Dict[str, gr.components.Component]:
 		"generate_btn": generate_btn,
 		"preview_btn": preview_btn,
 		"render_btn": render_btn,
+		"export_anim_btn": export_anim_btn,
 		"status_output": status_output,
 		"preview_gif": preview_gif,
 		"interpolation_result": interpolation_result,
 		"animation_zip": animation_zip,
+		"anim_config_json": anim_config_json,
 	}
 
 

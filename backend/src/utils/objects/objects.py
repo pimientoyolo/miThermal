@@ -1,6 +1,7 @@
 import logging
 import json
 import numpy as np
+import hashlib
 from pathlib import Path
 from fastapi import HTTPException
 from src.utils.scene.parser import SceneParser
@@ -10,6 +11,7 @@ import shutil
 from src.config import (
     DEFAULT_EMISSIVITY_FILE,
     OUTPUT_STATIC_DIR,
+    OUTPUT_SPD_DIR,
     get_config_scene_dict
 )
 
@@ -25,6 +27,8 @@ try:
     import open3d
 except Exception:
     open3d = None
+
+logger = logging.getLogger(__name__)
 
 
 class ObjectUtils:
@@ -256,64 +260,110 @@ class ObjectUtils:
     @staticmethod
     def blackbody_radiance_nm(wavelengths_nm, temperature):
         """
-        Compute spectral radiance B(λ, T) of a black body
-        using scipy constants.
-
+        Calcula la radiancia espectral B(λ, T) de un cuerpo negro usando la ley de Planck.
+        
         Args:
-            wavelengths_nm: array-like of wavelengths in nanometers (nm).
-            temperature:    temperature in Kelvin (K).
-
+            wavelengths_nm: Longitudes de onda en nanómetros (nm).
+            temperature: Temperatura en Kelvin (K).
+            
         Returns:
-            numpy array of spectral radiance in μW/cm²/sr/μm (microflicks)
+            Radiancia espectral en W/(m²·sr·m).
         """
-        # Convert wavelengths to meters
+
+        logger.info(f"Calculando radiancia espectral para λ={np.min(wavelengths_nm)}-{np.max(wavelengths_nm)}, T={temperature}")
+        # Convertir longitudes de onda a metros
         wavelengths_m = np.array(wavelengths_nm, dtype=float) * 1e-9
 
-        # Planck's law for spectral radiance: from W/m²/sr/m
-        exponent = (const.h * const.c) / (wavelengths_m * const.k * temperature)
-        radiance = (2 * const.h * const.c**2) / (wavelengths_m**5) / (np.exp(exponent) - 1)
-
-        # Convert radiance from W/m²/sr/m to μW/cm²/sr/μm
-        radiance = radiance * 1e-4
+        # Ley de Planck: B_λ(T) = (2hc²) / (λ⁵ * (exp(hc/λkT) - 1))
+        # Usamos constantes de alta precisión de scipy
+        c1 = 2 * const.h * const.c**2
+        c2 = (const.h * const.c) / const.k
+        
+        exponent = c2 / (wavelengths_m * temperature)
+        radiance = c1 / (wavelengths_m**5 * (np.exp(exponent) - 1))
 
         return radiance
     
-    def create_reflectance_material(self, wavelengths: np.ndarray, reflectance: np.ndarray) -> dict:
+    def _save_spectrum_spd(self, wavelengths_nm: np.ndarray, values: np.ndarray, filename: str, spectrum_type: str = "spectral distribution") -> tuple[str, str]:
         """
-        Crea un diccionario para un material con reflectancia espectral irregular.
+        Guarda un espectro en un archivo .spd externo con un nombre significativo.
+        Retorna (shasum, safe_filename_with_ext)
         
         Args:
-            wavelengths (np.ndarray): Array con las longitudes de onda en nanómetros
-            reflectance (np.ndarray): Array con los valores de reflectancia correspondientes
+            wavelengths_nm: Array de longitudes de onda en nanómetros.
+            values: Array de valores (radiancia o reflectancia 0-1).
+            filename: Nombre base del archivo (sin extensión).
+            spectrum_type: Tipo de espectro para el encabezado (reflectance/radiance).
             
         Returns:
-            dict: Diccionario del material listo para Mitsuba/XML
-            
-        Raises:
-            HTTPException: Si las longitudes de los arrays no coinciden
+            tuple: (Hash SHA-256, nombre de archivo final con extensión)
+        """
+        # Mitsuba requiere que las longitudes de onda estén en orden ASCENDENTE
+        # Ordenar ambos arrays basados en las longitudes de onda
+        idx = np.argsort(wavelengths_nm)
+        w_sorted = wavelengths_nm[idx]
+        v_sorted = values[idx]
+
+        # Generar contenido del archivo con tipo específico en el comentario
+        lines = [f"# This file contains a measured {spectrum_type}"]
+        for wl, val in zip(w_sorted, v_sorted):
+            lines.append(f"{wl:.4f} {val:.6f}")
+        
+        content = "\n".join(lines)
+        sha256_hash = hashlib.sha256(content.encode()).hexdigest()
+        
+        # Sanitizar nombre de archivo (reemplazar caracteres no permitidos)
+        safe_name = filename.replace("/", "_").replace("\\", "_").replace(" ", "_")
+        safe_filename = f"{safe_name}.spd"
+        file_path = OUTPUT_SPD_DIR / safe_filename
+        
+        # Determinar si necesitamos escribir el archivo
+        should_write = True
+        if file_path.exists():
+            with open(file_path, "r", encoding="utf-8") as f:
+                existing_content = f.read()
+            existing_hash = hashlib.sha256(existing_content.encode()).hexdigest()
+            if existing_hash == sha256_hash:
+                should_write = False
+        
+        if should_write:
+            # Asegurar que el directorio existe
+            OUTPUT_SPD_DIR.mkdir(parents=True, exist_ok=True)
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            self.logger.info(f"Espectro ({spectrum_type}) guardado/actualizado en: {file_path}")
+        
+        return sha256_hash, safe_filename
+
+    def create_reflectance_material(self, wavelengths: np.ndarray, reflectance: np.ndarray, identifier: str = "default") -> tuple[dict, str]:
+        """
+        Crea un material con reflectancia usando un archivo .spd con nombre significativo.
+        Retorna (mitsuba_dict, shasum).
         """
         try:
-            # Validar que ambos arrays tengan la misma longitud
             if len(wavelengths) != len(reflectance):
                 raise HTTPException(
                     status_code=400, 
                     detail=f"Las longitudes no coinciden: wavelengths={len(wavelengths)}, reflectance={len(reflectance)}"
                 )
             
-            # Crear el diccionario del material con estructura para XML
+            # Guardar en archivo .spd con nombre descriptivo y tipo
+            spd_base_name = f"object_{identifier}"
+            shasum, safe_filename = self._save_spectrum_spd(wavelengths, reflectance, spd_base_name, "spectrum reflectance")
+            
+            # Ruta relativa para el XML: spds/nombre_archivo.spd
+            # Mitsuba busca relativo al archivo .xml de la escena
+            relative_spd_path = f"spds/{safe_filename}"
+
             material_dict = {
                 "@type": "diffuse",
                 "spectrum": {
-                    "@type": "irregular",
                     "@name": "reflectance",
-                    "string": [
-                        {"@name": "wavelengths", "@value": self.lista_a_string(wavelengths)},
-                        {"@name": "values", "@value": self.lista_a_string(reflectance)},
-                    ]
+                    "@filename": relative_spd_path
                 }
             }
             
-            return material_dict
+            return material_dict, shasum
             
         except HTTPException:
             raise
@@ -321,42 +371,35 @@ class ObjectUtils:
             self.logger.error(f"Error creando material de reflectancia: {e}")
             raise HTTPException(status_code=500, detail=f"Error al crear material de reflectancia: {e}")
 
-    def create_spectral_emitter(self, wavelengths: np.ndarray, emission: np.ndarray, type: str = "area") -> dict:
+    def create_spectral_emitter(self, wavelengths: np.ndarray, emission: np.ndarray, identifier: str = "default", type: str = "area") -> tuple[dict, str]:
         """
-        Crea un diccionario para un emisor con radiancia espectral irregular.
-        
-        Args:
-            wavelengths (np.ndarray): Array con las longitudes de onda en nanómetros
-            emission (np.ndarray): Array con los valores de emisión correspondientes
-            
-        Returns:
-            dict: Diccionario del emisor listo para Mitsuba/XML
-            
-        Raises:
-            HTTPException: Si las longitudes de los arrays no coinciden
+        Crea un emisor espectral usando un archivo .spd con nombre significativo.
+        Retorna (mitsuba_dict, shasum).
         """
         try:
-            # Validar que ambos arrays tengan la misma longitud
             if len(wavelengths) != len(emission):
                 raise HTTPException(
                     status_code=400, 
                     detail=f"Las longitudes no coinciden: wavelengths={len(wavelengths)}, emission={len(emission)}"
                 )
             
-            # Crear el diccionario del emisor con estructura para XML
+            # Guardar en archivo .spd con nombre descriptivo y tipo
+            prefix = "atmosphere" if type == "constant" else "emitter"
+            spd_base_name = f"{prefix}_{identifier}"
+            shasum, safe_filename = self._save_spectrum_spd(wavelengths, emission, spd_base_name, "spectrum radiance")
+            
+            # Ruta relativa para el XML
+            relative_spd_path = f"spds/{safe_filename}"
+
             emitter_dict = {
                 "@type": type,
                 "spectrum": {
-                    "@type": "irregular",
                     "@name": "radiance",
-                    "string": [
-                        {"@name": "wavelengths", "@value": self.lista_a_string(wavelengths)},
-                        {"@name": "values", "@value": self.lista_a_string(emission)},
-                    ]
+                    "@filename": relative_spd_path
                 }
             }
             
-            return emitter_dict
+            return emitter_dict, shasum
             
         except HTTPException:
             raise
@@ -385,33 +428,6 @@ class ObjectUtils:
             HTTPException: Si las longitudes de los arrays no coinciden
         """
         return _create_homogeneous_medium(wavelengths, sigma_t, medium_id, g_value)
-
-    def get_attenuation(self, attenuation_file: str = "air.txt") -> tuple[np.ndarray, np.ndarray]:
-        """
-        Lee el archivo de atenuación completo y retorna dos arrays alineados.
-        
-        DEPRECATED: Use src.atmosphere.get_attenuation directly.
-        This method is kept for backwards compatibility.
-        
-        Args:
-            attenuation_file (str): Nombre del archivo de atenuación (sin extensión) en assets/reference_data.
-
-        Returns:
-            tuple[np.ndarray, np.ndarray]: (wavelengths_nm_desc, sigma_t_neper_desc)
-        """
-        return _get_attenuation(attenuation_file)
-
-    def read_air_attenuation_file(self) -> tuple[np.ndarray, np.ndarray]:
-        """
-        Lee el archivo configurado en AIR_ATTENUATION_FILE.
-        
-        DEPRECATED: Use src.atmosphere.read_air_attenuation_file directly.
-        This method is kept for backwards compatibility.
-
-        Returns:
-            tuple[np.ndarray, np.ndarray]: (wavelengths_nm_desc, sigma_t_desc)
-        """
-        return _read_air_attenuation_file()
     
     def save_new_emissivity(self, object_id: str, wavelengths_nm: np.ndarray, emissivity: np.ndarray) -> None:
         """

@@ -20,6 +20,8 @@ SCRIPTS_DIR = PROJECT_ROOT / "scripts"
 # Directorios de salida
 OUTPUT_STATIC_DIR = OUTPUT_DIR / "static"
 OUTPUT_STATIC_RESULT_DIR = OUTPUT_STATIC_DIR / "result"
+OUTPUT_SPD_DIR = OUTPUT_STATIC_DIR / "spds"
+OUTPUT_ASSETS_DIR = OUTPUT_DIR / "assets"
 
 # Directorios de assets
 DEFAULT_SCENES_DIR = ASSETS_DIR / "mitsuba_scenes"
@@ -36,6 +38,8 @@ def _setup_directories():
     (OUTPUT_DIR / "exports").mkdir(exist_ok=True)
     OUTPUT_STATIC_DIR.mkdir(exist_ok=True)
     OUTPUT_STATIC_RESULT_DIR.mkdir(exist_ok=True)
+    OUTPUT_SPD_DIR.mkdir(exist_ok=True)
+    OUTPUT_ASSETS_DIR.mkdir(exist_ok=True)
     
     # Copiar archivo air.txt por defecto si no existe
     _air_output = OUTPUT_STATIC_DIR / "air.txt"
@@ -87,6 +91,7 @@ class PathManager:
             "rgb": "rgb.png",
             "depth": "depth.npy",
             "thermal": "thermal.npy",
+            "thermal_raw": "thermal_raw.npy",
             "blackbody_air": "blackbody_air.npy",
             "transmittance_blackbody_air": "transmittance_blackbody_air.npy",
             "contribution_blackbody_air": "contribution_blackbody_air.npy",

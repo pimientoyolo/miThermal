@@ -6,7 +6,14 @@ from fastapi.responses import FileResponse
 from fastapi import HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 from src.utils.decorators import handle_file_errors, log_execution
-from src.config import PathManager, OUTPUT_STATIC_DIR, DEFAULT_EMISIVITY_DIR, get_config_scene_dict, save_config_scene_dict
+from src.config import (
+    PathManager, 
+    OUTPUT_STATIC_DIR, 
+    OUTPUT_ASSETS_DIR,
+    DEFAULT_EMISIVITY_DIR, 
+    get_config_scene_dict, 
+    save_config_scene_dict
+)
 from src.api.dto.objectDTO import ObjectDTO, UpdateObjectDTO
 import numpy as np
 from src.api.service.scene_service import SceneService
@@ -46,7 +53,7 @@ class ObjService:
                 return self.get_obj_response(path_obj)
             except HTTPException as exc:
                 logger.warning(
-                    "No se pudo convertir PLY a OBJ para '%s': %s. "
+                    "No se pudo convertir PLY a OBJ para '%s': %s. "/
                     "Se enviará el PLY original.",
                     object_id,
                     exc.detail,
@@ -432,12 +439,13 @@ class ObjService:
         
         return family_mgr.preview_family_update(object_id)
     
-    def update_object_with_mode(
+    async def update_object_with_mode(
         self,
         object_id: str,
         mode: str,
         temperature: float = None,
-        emissivity_file: UploadFile = None
+        emissivity_file: UploadFile = None,
+        is_reflectance: bool = False
     ) -> Dict[str, Any]:
         """
         Actualiza objeto(s) según modo seleccionado.
@@ -447,6 +455,7 @@ class ObjService:
             mode: "Objeto" para individual, "Familia" para toda la familia
             temperature: Nueva temperatura en Kelvin (opcional)
             emissivity_file: Nuevo archivo de emisividad (opcional)
+            is_reflectance: Si el archivo subido es reflectancia (convertir 1-R)
             
         Returns:
             Dict con objects_updated, count, mode y family_name
@@ -475,16 +484,35 @@ class ObjService:
         
         # Manejar archivo de emisividad si se proporciona
         if emissivity_file is not None and emissivity_file.filename:
-            raw = emissivity_file.file.read()
+            raw = await emissivity_file.read()
             if raw:
+                # Si es reflectancia, convertir a emisividad
+                if is_reflectance:
+                    logger.info("Convirtiendo reflectancia a emisividad (100 - R)")
+                    lines = raw.decode("utf-8").splitlines()
+                    converted_lines = []
+                    for line in lines:
+                        parts = line.split()
+                        if len(parts) >= 2:
+                            try:
+                                wl = parts[0]
+                                refl = float(parts[1])
+                                emiss = max(0.0, 100.0 - refl)
+                                converted_lines.append(f"{wl}\t{emiss:.4f}")
+                            except ValueError:
+                                converted_lines.append(line)
+                        else:
+                            converted_lines.append(line)
+                    raw = "\n".join(converted_lines).encode("utf-8")
+
                 # Generar nombre único persistente (basado en hash)
                 hash_value = hashlib.md5(raw).hexdigest()[:16]
                 unique_name = f"emissivity_{hash_value}.txt"
-                dst_path = os.path.join(OUTPUT_STATIC_DIR, unique_name)
+                dst_path = os.path.join(OUTPUT_ASSETS_DIR, unique_name)
                 os.makedirs(os.path.dirname(dst_path), exist_ok=True)
                 with open(dst_path, "wb") as f:
                     f.write(raw)
-                properties["emissivity_file"] = dst_path
+                properties["emissivity_file"] = str(dst_path)
                 logger.info(f"Nuevo archivo de emisividad guardado en {dst_path}")
         
         if not properties:
@@ -501,6 +529,8 @@ class ObjService:
             config["objects"][object_id].update(properties)
             updated_objects = [object_id]
             logger.info(f"Objeto '{object_id}' actualizado")
+            # GUARDAR CONFIGURACIÓN para que persista
+            save_config_scene_dict(config)
         
         elif mode == "Familia":
             # Actualizar toda la familia

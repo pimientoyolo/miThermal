@@ -40,8 +40,9 @@ class BaseService(ABC):
         except HTTPException:
             raise
         except Exception as e:
-            self.logger.error(f"{error_message}: {e}")
-            raise HTTPException(status_code=status_code, detail=error_message)
+            # Loguear solo el error específico para reducir ruido como pidió el usuario
+            self.logger.error(f"{e}")
+            raise HTTPException(status_code=status_code, detail=f"{error_message}: {e}")
     
     def _validate_file_exists(self, file_path: str, file_type: str = "file") -> None:
         """
@@ -217,17 +218,16 @@ class RenderServiceBase(BaseService):
     def _render_with_validation(self, scene_type: str, render_func: Callable) -> None:
         """
         Ejecuta renderizado con validación y manejo de errores centralizado.
-        
+
         Args:
             scene_type: Tipo de escena (rgb, thermal, etc.)
             render_func: Función de renderizado a ejecutar
         """
         def _execute():
             render_func()
-        
-        error_msg = f"Error al renderizar la escena {scene_type}: prueba bajar spp y resolución"
-        self._safe_execute(_execute, error_msg)
 
+        error_msg = f"Error al renderizar la escena {scene_type}"
+        self._safe_execute(_execute, error_msg)
 
 class FileHandler:
     """

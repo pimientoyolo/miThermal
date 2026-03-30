@@ -238,7 +238,7 @@ class MitsubaAPIClient:
             
             r = self.session.put(f"{self.base_url}/config/camera", json=payload)
             r.raise_for_status()
-            return r.json()
+            return {"status": "success", "data": r.json()}
         except Exception as e:
             logger.error(f"Update camera config error: {e}")
             return {"status": "error", "detail": str(e)}
@@ -325,20 +325,20 @@ class MitsubaAPIClient:
             logger.error(f"Get air temperature error: {e}")
             return None
 
-    def update_wavelengths(self, wavelength_min: int, wavelength_max: int, bands: int) -> Dict:
+    def update_wavelengths(self, wavelength_min: float, wavelength_max: float, bands: int) -> Dict:
         """Actualiza las longitudes de onda y número de bandas.
 
         Endpoint: PUT /config/wavelengths (query params)
         """
         try:
             params = {
-                "wavelength_min": int(wavelength_min),
-                "wavelength_max": int(wavelength_max),
+                "wavelength_min": float(wavelength_min),
+                "wavelength_max": float(wavelength_max),
                 "bands": int(bands),
             }
             r = self.session.put(f"{self.base_url}/config/wavelengths", params=params)
             r.raise_for_status()
-            return r.json()
+            return {"status": "success", "data": r.json()}
         except Exception as e:
             logger.error(f"Update wavelengths error: {e}")
             return {"status": "error", "detail": str(e)}
@@ -603,11 +603,12 @@ class MitsubaAPIClient:
         object_id: str, 
         mode: str, 
         temperature: float = None, 
-        emissivity_file_path: str = None
+        emissivity_file_path: str = None,
+        is_reflectance: bool = False
     ) -> Dict:
         """PUT /object/update-with-mode"""
         try:
-            params = {"object_id": object_id, "mode": mode}
+            params = {"object_id": object_id, "mode": mode, "is_reflectance": is_reflectance}
             if temperature is not None: params["temperature"] = temperature
                 
             files = None
@@ -658,7 +659,10 @@ class MitsubaAPIClient:
         start_radius: float = None,
         end_radius: float = None,
         num_steps: int = 30,
-        lock_azimuth_to_end: bool = False
+        lock_azimuth_to_end: bool = False,
+        theta_expr: str | None = None,
+        azimuth_expr: str | None = None,
+        radius_expr: str | None = None
     ) -> Dict:
         """POST /scene/camera/interpolation/spherical"""
         try:
@@ -674,12 +678,106 @@ class MitsubaAPIClient:
             if radius is not None: payload["radius"] = radius
             if start_radius is not None: payload["start_radius"] = start_radius
             if end_radius is not None: payload["end_radius"] = end_radius
+            if theta_expr is not None: payload["theta_expr"] = theta_expr
+            if azimuth_expr is not None: payload["azimuth_expr"] = azimuth_expr
+            if radius_expr is not None: payload["radius_expr"] = radius_expr
             
             r = self.session.post(f"{self.base_url}/scene/camera/interpolation/spherical", json=payload)
             r.raise_for_status()
             return {"status": "success", "data": r.json()}
         except Exception as e:
             logger.error(f"Generate spherical interpolation error: {e}")
+            return {"status": "error", "detail": str(e)}
+
+    def render_spherical_animation(
+        self,
+        start_theta: float,
+        end_theta: float,
+        start_azimuth: float,
+        end_azimuth: float,
+        tracked_point: list[float],
+        radius: float = None,
+        start_radius: float = None,
+        end_radius: float = None,
+        num_steps: int = 30,
+        lock_azimuth_to_end: bool = False,
+        theta_expr: str | None = None,
+        azimuth_expr: str | None = None,
+        radius_expr: str | None = None,
+        spp: int | None = None,
+        width: int | None = None,
+        height: int | None = None,
+        num_bands: int | None = None
+    ) -> Dict:
+        """POST /scene/camera/animation/render/spherical"""
+        try:
+            payload = {
+                "start_theta": start_theta,
+                "end_theta": end_theta,
+                "start_azimuth": start_azimuth,
+                "end_azimuth": end_azimuth,
+                "tracked_point": tracked_point,
+                "num_steps": num_steps,
+                "lock_azimuth_to_end": lock_azimuth_to_end
+            }
+            if radius is not None: payload["radius"] = radius
+            if start_radius is not None: payload["start_radius"] = start_radius
+            if end_radius is not None: payload["end_radius"] = end_radius
+            if theta_expr is not None: payload["theta_expr"] = theta_expr
+            if azimuth_expr is not None: payload["azimuth_expr"] = azimuth_expr
+            if radius_expr is not None: payload["radius_expr"] = radius_expr
+            
+            if spp is not None: payload["spp"] = int(spp)
+            if width is not None: payload["width"] = int(width)
+            if height is not None: payload["height"] = int(height)
+            if num_bands is not None: payload["num_bands"] = int(num_bands)
+            
+            r = self.session.post(f"{self.base_url}/scene/camera/animation/render/spherical", json=payload)
+            r.raise_for_status()
+            return {"status": "ok", "zip_bytes": r.content}
+        except Exception as e:
+            logger.error(f"Render spherical animation error: {e}")
+            return {"status": "error", "detail": str(e)}
+
+    def preview_spherical_animation(
+        self,
+        start_theta: float,
+        end_theta: float,
+        start_azimuth: float,
+        end_azimuth: float,
+        tracked_point: list[float],
+        radius: float = None,
+        start_radius: float = None,
+        end_radius: float = None,
+        num_steps: int = 30,
+        lock_azimuth_to_end: bool = False,
+        theta_expr: str | None = None,
+        azimuth_expr: str | None = None,
+        radius_expr: str | None = None
+    ) -> Dict:
+        """POST /scene/camera/animation/preview/spherical"""
+        try:
+            payload = {
+                "start_theta": start_theta,
+                "end_theta": end_theta,
+                "start_azimuth": start_azimuth,
+                "end_azimuth": end_azimuth,
+                "tracked_point": tracked_point,
+                "num_steps": num_steps,
+                "lock_azimuth_to_end": lock_azimuth_to_end
+            }
+            if radius is not None: payload["radius"] = radius
+            if start_radius is not None: payload["start_radius"] = start_radius
+            if end_radius is not None: payload["end_radius"] = end_radius
+            if theta_expr is not None: payload["theta_expr"] = theta_expr
+            if azimuth_expr is not None: payload["azimuth_expr"] = azimuth_expr
+            if radius_expr is not None: payload["radius_expr"] = radius_expr
+            
+            r = self.session.post(f"{self.base_url}/scene/camera/animation/preview/spherical", json=payload)
+            r.raise_for_status()
+            return {"status": "ok", "gif_bytes": r.content}
+        except Exception as e:
+            logger.error(f"Preview spherical animation error: {e}")
             return {"status": "error", "detail": str(e)}
 
     def export_camera_animation(self, mode: str, data: Dict) -> Dict:

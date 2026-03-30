@@ -20,10 +20,12 @@ from src.config import (
     PathManager, 
     OUTPUT_STATIC_DIR, 
     OUTPUT_STATIC_RESULT_DIR, 
+    OUTPUT_SPD_DIR,
     OUTPUT_DIR,
     ASSETS_DIR,
     DEFAULT_SCENES_DIR,
-    get_config_scene_dict
+    get_config_scene_dict,
+    save_config_scene_dict
 )
 from src.api.service.base_services import BaseService, ZipHandler, FileHandler
 from src.utils.cache import get_cache_manager
@@ -58,8 +60,11 @@ class SceneService(BaseService):
         if os.path.exists(scene_zip_path):
             os.remove(scene_zip_path)
         
-        # Recrear subdirectorios y archivo air.txt de referencia
+        # Recrear subdirectorios necesarios (asegurar que spds exista tras limpiar static)
         os.makedirs(OUTPUT_STATIC_RESULT_DIR, exist_ok=True)
+        if os.path.exists(OUTPUT_SPD_DIR):
+            shutil.rmtree(OUTPUT_SPD_DIR)
+        os.makedirs(OUTPUT_SPD_DIR, exist_ok=True)
         air_file = os.path.join(OUTPUT_STATIC_DIR, "air.txt")
         air_default = os.path.join(ASSETS_DIR, "reference_data", "air.txt")
         if not os.path.exists(air_file) and os.path.exists(air_default):
@@ -317,19 +322,9 @@ class SceneService(BaseService):
             if scene_dict and "scene" in scene_dict and "sensor" in scene_dict["scene"]:
                 if "film" in scene_dict["scene"]["sensor"]:
                     scene_dict["scene"]["sensor"]["film"]["@type"] = "specfilm"
-                    # Agregar bandas espectrales al film
-                    bands = create_specfilm_bands(wavelengths)
-                    # Usar la estructura que retorna create_specfilm_bands directamente
-                    scene_dict["scene"]["sensor"]["film"]["spectrum"] = bands
                     
-                    # Agregar filtro gaussiano para mejor suavizado de la imagen
-                    scene_dict["scene"]["sensor"]["film"]["rfilter"] = {
-                        "@type": "gaussian",
-                        "float": {
-                            "@name": "stddev",
-                            "@value": "0.5"
-                        }
-                    }
+                    # Agregar bandas espectrales al film usando el helper para specfilm
+                    scene_dict["scene"]["sensor"]["film"]["spectrum"] = create_specfilm_bands(wavelengths)
                 
                 # Cambiar el sampler a multijitter para mejor calidad de muestreo
                 if "sampler" in scene_dict["scene"]["sensor"]:
@@ -378,8 +373,17 @@ class SceneService(BaseService):
                         radiance = object_utils.blackbody_radiance_nm(wavelengths_obj, temperature)
                         emission = radiance * emissivity
                         reflectance = 1 - np.array(emissivity)
-                        dict_reflectance = object_utils.create_reflectance_material(wavelengths_obj, reflectance)
-                        dict_emission = object_utils.create_spectral_emitter(wavelengths_obj, emission)
+                        
+                        # Generar material y emisor con nombres significativos y obtener shasums
+                        dict_reflectance, refl_sha = object_utils.create_reflectance_material(wavelengths_obj, reflectance, object_id)
+                        dict_emission, emi_sha = object_utils.create_spectral_emitter(wavelengths_obj, emission, object_id)
+                        
+                        # Guardar info en configuración (Ruta absoluta para persistencia)
+                        config_scene["objects"][object_id]["reflectance_shasum"] = refl_sha
+                        config_scene["objects"][object_id]["reflectance_spd"] = str(OUTPUT_SPD_DIR / dict_reflectance["spectrum"]["@filename"].split('/')[-1])
+                        config_scene["objects"][object_id]["emission_shasum"] = emi_sha
+                        config_scene["objects"][object_id]["emission_spd"] = str(OUTPUT_SPD_DIR / dict_emission["spectrum"]["@filename"].split('/')[-1])
+                        
                         shape["emitter"] = dict_emission
                         shape['bsdf'] = dict_reflectance
                         
@@ -391,10 +395,21 @@ class SceneService(BaseService):
                     radiance = object_utils.blackbody_radiance_nm(wavelengths_obj, temperature)
                     emission = radiance * emissivity
                     reflectance = 1 - np.array(emissivity)
-                    dict_reflectance = object_utils.create_reflectance_material(wavelengths_obj, reflectance)
-                    dict_emission = object_utils.create_spectral_emitter(wavelengths_obj, emission)
+                    
+                    dict_reflectance, refl_sha = object_utils.create_reflectance_material(wavelengths_obj, reflectance, object_id)
+                    dict_emission, emi_sha = object_utils.create_spectral_emitter(wavelengths_obj, emission, object_id)
+                    
+                    # Guardar info en configuración (Ruta absoluta para persistencia)
+                    config_scene["objects"][object_id]["reflectance_shasum"] = refl_sha
+                    config_scene["objects"][object_id]["reflectance_spd"] = str(OUTPUT_SPD_DIR / dict_reflectance["spectrum"]["@filename"].split('/')[-1])
+                    config_scene["objects"][object_id]["emission_shasum"] = emi_sha
+                    config_scene["objects"][object_id]["emission_spd"] = str(OUTPUT_SPD_DIR / dict_emission["spectrum"]["@filename"].split('/')[-1])
+                    
                     shapes["emitter"] = dict_emission
                     shapes['bsdf'] = dict_reflectance
+
+            # Guardar configuración con shasums
+            save_config_scene_dict(config_scene)
 
 
             # Agregar medio homogéneo con coeficiente de extinción espectral
@@ -403,12 +418,9 @@ class SceneService(BaseService):
             t_air = config_scene["air"]["temperature"]
             wavelengths_air, sigma_t_values = read_air_attenuation_file()
 
-            emission_air = object_utils.blackbody_radiance_nm(wavelengths_air, t_air)
-
-            emitter_air_dict = object_utils.create_spectral_emitter(wavelengths_air, emission_air, "constant")
-
-            # Agregar emisor de aire a la escena
-            scene_dict["scene"]["emitter"] = emitter_air_dict
+            # La radiancia del aire se sumará analíticamente usando el mapa de profundidad
+            # para evitar artefactos de aliasing y doble conteo en volpathmis.
+            # Solo mantenemos el medium para que atenúe la radiación de los objetos.
             
             # Crear el medium usando la función de atmosphere
             medium_dict = create_homogeneous_medium(
@@ -418,7 +430,6 @@ class SceneService(BaseService):
                 g_value=0.95  # Valor para infrarrojo lejano
             )
 
-            
             # Agregar el medium a la escena
             scene_dict["scene"]["medium"] = medium_dict
 
@@ -493,7 +504,7 @@ class SceneService(BaseService):
 
         emission_air = object_utils.blackbody_radiance_nm(wavelengths_air, t_air)
 
-        emitter_air_dict = object_utils.create_spectral_emitter(wavelengths_air, emission_air)
+        emitter_air_dict, _ = object_utils.create_spectral_emitter(wavelengths_air, emission_air)
 
         if scene_dict and "scene" in scene_dict and "shape" in scene_dict["scene"]:
                 shapes = scene_dict["scene"]["shape"]
@@ -503,13 +514,13 @@ class SceneService(BaseService):
                     for i, shape in enumerate(shapes):
                         
                         shape["emitter"] = emitter_air_dict
-                        del shape["bsdf"]
+                        if "bsdf" in shape: del shape["bsdf"]
                         
                 elif isinstance(shapes, dict):
                     # Para un solo shape
 
                     shapes["emitter"] = emitter_air_dict
-                    del shapes['bsdf']
+                    if "bsdf" in shapes: del shapes['bsdf']
 
         # eliminar emisor de aire
         if scene_dict and "scene" in scene_dict and "emitter" in scene_dict["scene"]:
@@ -534,9 +545,26 @@ class SceneService(BaseService):
         scene_dict = self.get_dict_scene(temperature_map_xml)
 
         config_scene = get_config_scene_dict()
-
         wavelengths = config_scene["wavelengths"]
-
+        
+        # Para mapa de temperatura, usamos una sola banda monocromática (el centro del rango)
+        w_center = float(np.mean(wavelengths)) if wavelengths else 10000.0
+        
+        # Configurar sensor monocromático para Tmap
+        if scene_dict and "scene" in scene_dict and "sensor" in scene_dict["scene"]:
+            sensor = scene_dict["scene"]["sensor"]
+            if "film" in sensor:
+                sensor["film"]["@type"] = "specfilm"
+                # Una sola banda de 1nm de ancho centrada en w_center
+                sensor["film"]["spectrum"] = {
+                    "@type": "regular",
+                    "@name": "band_tmap",
+                    "string": {"@name": "values", "@value": "1.0, 1.0"},
+                    "float": [
+                        {"@name": "wavelength_min", "@value": f"{w_center - 0.5:.4f}"},
+                        {"@name": "wavelength_max", "@value": f"{w_center + 0.5:.4f}"},
+                    ]
+                }
 
         if scene_dict and "scene" in scene_dict and "shape" in scene_dict["scene"]:
                 shapes = scene_dict["scene"]["shape"]
@@ -546,17 +574,26 @@ class SceneService(BaseService):
                     for i, shape in enumerate(shapes):
                         id = shape["string"]["@value"]
                         temperature = config_scene["objects"][id]["temperature"]
-                        emission = [temperature for _ in wavelengths]
-                        shape["emitter"] = object_utils.create_spectral_emitter(wavelengths, emission)
-                        del shape["bsdf"]
+                        emission = [float(temperature) for _ in wavelengths]
+                        
+                        # Usar identificador específico para mapa de temperatura
+                        dict_emission, emi_sha = object_utils.create_spectral_emitter(
+                            np.array(wavelengths), np.array(emission), f"tmap_{id}"
+                        )
+                        shape["emitter"] = dict_emission
+                        if "bsdf" in shape: del shape["bsdf"]
                         
                 elif isinstance(shapes, dict):
                     # Para un solo shape
                     id = shapes["string"]["@value"]
                     temperature = config_scene["objects"][id]["temperature"]
-                    emission = [temperature for _ in wavelengths]
-                    shapes["emitter"] = object_utils.create_spectral_emitter(wavelengths, emission)
-                    del shapes['bsdf']
+                    emission = [float(temperature) for _ in wavelengths]
+                    
+                    dict_emission, emi_sha = object_utils.create_spectral_emitter(
+                        np.array(wavelengths), np.array(emission), f"tmap_{id}"
+                    )
+                    shapes["emitter"] = dict_emission
+                    if "bsdf" in shapes: del shapes['bsdf']
 
         # Cambiar el integrador a path para reducir ruido
         if scene_dict and "scene" in scene_dict:
@@ -629,15 +666,33 @@ class SceneService(BaseService):
                         result = cache.get(emissivity_file, temperature)
                         
                         if result is not None:
-                            # Cargar de cache
-                            dict_reflectance, dict_emission = result
-                        else:
+                            # Cargar de cache, pero verificar que los archivos .spd existan en disco
+                            dict_refl, dict_emiss = result
+                            refl_path = dict_refl.get("spectrum", {}).get("@filename")
+                            emiss_path = dict_emiss.get("spectrum", {}).get("@filename")
+                            
+                            if refl_path and os.path.exists(refl_path) and emiss_path and os.path.exists(emiss_path):
+                                dict_reflectance, dict_emission = result
+                            else:
+                                # Archivos borrados, forzar recalculación
+                                result = None
+                        
+                        if result is None:
                             # Calcular y guardar en cache
                             radiance = object_utils.blackbody_radiance_nm(wavelengths_obj, temperature)
                             emission = radiance * emissivity
                             reflectance = 1 - np.array(emissivity)
-                            dict_reflectance = object_utils.create_reflectance_material(wavelengths_obj, reflectance)
-                            dict_emission = object_utils.create_spectral_emitter(wavelengths_obj, emission)
+                            
+                            dict_reflectance, refl_sha = object_utils.create_reflectance_material(wavelengths_obj, reflectance, object_id)
+                            dict_emission, emi_sha = object_utils.create_spectral_emitter(wavelengths_obj, emission, object_id)
+                            
+                            # Actualizar config con shasums (Ruta absoluta para persistencia)
+                            config_scene["objects"][object_id]["reflectance_shasum"] = refl_sha
+                            config_scene["objects"][object_id]["reflectance_spd"] = str(OUTPUT_SPD_DIR / dict_reflectance["spectrum"]["@filename"].split('/')[-1])
+                            config_scene["objects"][object_id]["emission_shasum"] = emi_sha
+                            config_scene["objects"][object_id]["emission_spd"] = str(OUTPUT_SPD_DIR / dict_emission["spectrum"]["@filename"].split('/')[-1])
+                            save_config_scene_dict(config_scene)
+                            
                             cache.set(emissivity_file, temperature, dict_reflectance, dict_emission)
 
                         # Actualizar solo este objeto
@@ -662,8 +717,17 @@ class SceneService(BaseService):
                         radiance = object_utils.blackbody_radiance_nm(wavelengths_obj, temperature)
                         emission = radiance * emissivity
                         reflectance = 1 - np.array(emissivity)
-                        dict_reflectance = object_utils.create_reflectance_material(wavelengths_obj, reflectance)
-                        dict_emission = object_utils.create_spectral_emitter(wavelengths_obj, emission)
+                        
+                        dict_reflectance, refl_sha = object_utils.create_reflectance_material(wavelengths_obj, reflectance, object_id)
+                        dict_emission, emi_sha = object_utils.create_spectral_emitter(wavelengths_obj, emission, object_id)
+                        
+                        # Actualizar config con shasums
+                        config_scene["objects"][object_id]["reflectance_shasum"] = refl_sha
+                        config_scene["objects"][object_id]["reflectance_spd"] = dict_reflectance["spectrum"]["@filename"]
+                        config_scene["objects"][object_id]["emission_shasum"] = emi_sha
+                        config_scene["objects"][object_id]["emission_spd"] = dict_emission["spectrum"]["@filename"]
+                        save_config_scene_dict(config_scene)
+                        
                         cache.set(emissivity_file, temperature, dict_reflectance, dict_emission)
                     
                     shapes["emitter"] = dict_emission
@@ -721,9 +785,17 @@ class SceneService(BaseService):
             result = cache.get(emissivity_file, temperature)
             
             if result is not None:
-                # Cargar de cache
-                dict_reflectance, dict_emission = result
-            else:
+                # Cargar de cache, pero verificar que existan archivos físicos
+                dict_refl, dict_emiss = result
+                refl_path = dict_refl.get("spectrum", {}).get("@filename")
+                emiss_path = dict_emiss.get("spectrum", {}).get("@filename")
+                
+                if refl_path and os.path.exists(refl_path) and emiss_path and os.path.exists(emiss_path):
+                    dict_reflectance, dict_emission = result
+                else:
+                    result = None
+
+            if result is None:
                 # Calcular y guardar en cache
                 wavelengths_obj, emissivity = object_utils.read_object_emissivity_file(object_id)
 
@@ -731,8 +803,14 @@ class SceneService(BaseService):
                 emission = radiance * emissivity
                 reflectance = 1 - np.array(emissivity)
 
-                dict_reflectance = object_utils.create_reflectance_material(wavelengths_obj, reflectance)
-                dict_emission = object_utils.create_spectral_emitter(wavelengths_obj, emission)
+                dict_reflectance, refl_sha = object_utils.create_reflectance_material(wavelengths_obj, reflectance, object_id)
+                dict_emission, emi_sha = object_utils.create_spectral_emitter(wavelengths_obj, emission, object_id)
+                
+                # Actualizar config (Ruta absoluta para persistencia)
+                config_scene["objects"][object_id]["reflectance_shasum"] = refl_sha
+                config_scene["objects"][object_id]["reflectance_spd"] = str(OUTPUT_SPD_DIR / dict_reflectance["spectrum"]["@filename"].split('/')[-1])
+                config_scene["objects"][object_id]["emission_shasum"] = emi_sha
+                config_scene["objects"][object_id]["emission_spd"] = str(OUTPUT_SPD_DIR / dict_emission["spectrum"]["@filename"].split('/')[-1])
 
                 cache.set(emissivity_file, temperature, dict_reflectance, dict_emission)
 
@@ -740,7 +818,8 @@ class SceneService(BaseService):
             shape["emitter"] = dict_emission
             shape["bsdf"] = dict_reflectance
 
-        # Guardar la escena actualizada
+        # Guardar la escena actualizada y la configuración
+        save_config_scene_dict(config_scene)
         self.scene_parser.save_dict_as_xml(scene_dict, thermal_path)
 
     def update_thermal_scene_air(self):
@@ -765,7 +844,15 @@ class SceneService(BaseService):
 
         # Recalcular emisión del aire
         emission_air = object_utils.blackbody_radiance_nm(wavelengths, t_air)
-        emitter_air_dict = object_utils.create_spectral_emitter(wavelengths, emission_air, "constant")
+        emitter_air_dict, air_sha = object_utils.create_spectral_emitter(
+            wavelengths, emission_air, "air", "constant"
+        )
+        
+        # Actualizar config con shasums (Ruta absoluta para persistencia)
+        config_scene["air"]["emission_shasum"] = air_sha
+        config_scene["air"]["emission_spd"] = str(OUTPUT_SPD_DIR / emitter_air_dict["spectrum"]["@filename"].split('/')[-1])
+        save_config_scene_dict(config_scene)
+
         scene_dict["scene"]["emitter"] = emitter_air_dict
 
         # Medium actualizado
@@ -1361,6 +1448,11 @@ class SceneService(BaseService):
                     if os.path.exists(thermal_src):
                         shutil.copy(thermal_src, frame_dir / "thermal.npy")
                     
+                    # Thermal Raw (diagnóstico)
+                    thermal_raw_src = path_manager.get_result_path("thermal_raw")
+                    if os.path.exists(thermal_raw_src):
+                        shutil.copy(thermal_raw_src, frame_dir / "thermal_raw.npy")
+                    
                     # Blackbody Air
                     try:
                         blackbody_src = path_manager.get_result_path("blackbody_air")
@@ -1630,6 +1722,8 @@ def generate_camera_interpolation(origin, end, tracked_point, num_steps=30):
     return camera_frames
 
 
+from src.utils.math_evaluator import safe_eval_t
+
 def generate_camera_interpolation_spherical(
     start_theta,
     end_theta,
@@ -1641,8 +1735,11 @@ def generate_camera_interpolation_spherical(
     tracked_point=[0, 0, 0],
     num_steps=30,
     lock_azimuth_to_end=False,
+    theta_expr=None,
+    azimuth_expr=None,
+    radius_expr=None,
 ):
-    """Genera interpolación de cámara en coordenadas esféricas sobre un hemisferio."""
+    """Genera interpolación de cámara en coordenadas esféricas sobre un hemisferio con soporte opcional para funciones personalizadas."""
     if num_steps <= 0:
         raise ValueError("num_steps debe ser mayor que 0")
     
@@ -1659,13 +1756,24 @@ def generate_camera_interpolation_spherical(
     for i in range(num_steps):
         t = i / max(1, (num_steps - 1))
 
-        theta_deg = float(start_theta * (1.0 - t) + end_theta * t)
+        # 1) Interpolación base (lineal)
+        t_base = t
+        
+        # 2) Aplicar expresiones personalizadas si existen
+        # La expresión transforma 't' (0 a 1) en otro valor (normalmente 0 a 1)
+        t_theta = safe_eval_t(theta_expr, t, t_base)
+        t_azimuth = safe_eval_t(azimuth_expr, t, t_base)
+        t_radius = safe_eval_t(radius_expr, t, t_base)
+
+        # 3) Calcular ángulos finales
+        theta_deg = float(start_theta * (1.0 - t_theta) + end_theta * t_theta)
+        
         if lock_azimuth_to_end:
             azimuth_deg = float(end_azimuth)
         else:
-            azimuth_deg = float(start_azimuth * (1.0 - t) + end_azimuth * t)
+            azimuth_deg = float(start_azimuth * (1.0 - t_azimuth) + end_azimuth * t_azimuth)
             
-        current_radius = float(s_rad * (1.0 - t) + e_rad * t)
+        current_radius = float(s_rad * (1.0 - t_radius) + e_rad * t_radius)
 
         theta_rad = np.deg2rad(theta_deg)
         azimuth_rad = np.deg2rad(azimuth_deg)

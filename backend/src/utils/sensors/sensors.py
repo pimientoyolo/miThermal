@@ -242,35 +242,42 @@ def lista_a_string(lista):
 
 def create_specfilm_bands(wavelengths: np.ndarray) -> list:
     """
-    Crea las bandas para el film de un sensor espectral usando un array de longitudes de onda.
-    Cada longitud de onda se usa como centro y se extiende igualmente hacia ambos lados.
+    Crea las bandas para el plugin 'specfilm' de Mitsuba.
+    Genera intervalos contiguos centrados en cada longitud de onda.
 
     Args:
-        wavelengths (np.ndarray): Array con las longitudes de onda centrales para cada banda.
+        wavelengths (np.ndarray): Longitudes de onda centrales en nm.
 
     Returns:
-        list: Lista con las bandas para el film del sensor espectral.
+        list: Lista de diccionarios <spectrum> para el film.
     """
     band_list = []
+    num_bands = len(wavelengths)
+    
+    if num_bands == 0:
+        return []
+        
+    # Calcular el ancho de banda (distancia entre centros)
+    if num_bands > 1:
+        delta = float(wavelengths[1] - wavelengths[0])
+    else:
+        delta = 10.0
+        
+    half_delta = delta / 2.0
 
-    for i, wave_length in enumerate(wavelengths):
+    for wave_length in wavelengths:
+        wmin = float(wave_length - half_delta)
+        wmax = float(wave_length + half_delta)
 
-        if i == 0:  # Primera banda
-            wmin_band = int(wave_length)
-            wmax_band = int(wave_length+1)
-        else:    
-            wmin_band = int(wave_length-1)
-            wmax_band = int(wave_length)
-
+        # Mitsuba specfilm: cada <spectrum> define una SRF (Sensor Response Function)
+        # que se convierte en un canal del archivo EXR/Tensor de salida.
         band_list.append({
             "@type": "regular",
-            "@name": f"band_{int(wave_length)}",
-            "string": [
-                {"@name": "values", "@value": "1.0, 1.0"},
-            ],
-            "float":[
-                {"@name": "wavelength_min", "@value": wmin_band},
-                {"@name": "wavelength_max", "@value": wmax_band},
+            "@name": f"band_{wave_length:.2f}",
+            "string": {"@name": "values", "@value": "1.0, 1.0"},
+            "float": [
+                {"@name": "wavelength_min", "@value": f"{wmin:.4f}"},
+                {"@name": "wavelength_max", "@value": f"{wmax:.4f}"},
             ]
         })
     return band_list

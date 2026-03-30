@@ -220,6 +220,10 @@ async def update_object_with_mode(
     emissivity_file: UploadFile | None = File(
         None,
         description="Archivo de emisividad"
+    ),
+    is_reflectance: bool = Query(
+        False,
+        description="Indica si el archivo es de reflectancia (se convertirá a emisividad: 1-R)"
     )
 ):
     """
@@ -230,6 +234,7 @@ async def update_object_with_mode(
         mode: "Objeto" para actualizar solo este, "Familia" para toda la familia
         temperature: Nueva temperatura (opcional)
         emissivity_file: Nueva emisividad (opcional)
+        is_reflectance: Si el archivo es de reflectancia
         
     Returns:
         {
@@ -246,9 +251,10 @@ async def update_object_with_mode(
             detail="Debe proporcionar object_id en query",
         )
 
-    return object_service.update_object_with_mode(
+    return await object_service.update_object_with_mode(
         object_id=object_id,
         mode=mode,
         temperature=temperature,
-        emissivity_file=emissivity_file
+        emissivity_file=emissivity_file,
+        is_reflectance=is_reflectance
     )
