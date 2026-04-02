@@ -3,13 +3,14 @@ import io
 import os
 from src.api.dto.cameraDTO import CameraDTO, UpdateCameraDTO
 from src.api.service.scene_service import SceneService
-from src.config import PathManager, DEFAULT_ATTENNUATION_DIR, get_config_scene_dict, save_config_scene_dict
+from src.config import PathManager, get_config_scene_dict, save_config_scene_dict
 import numpy as np
 
 from fastapi import HTTPException, UploadFile
 
 from src.utils.objects.objects import ObjectUtils
 from src.utils.decorators import log_execution, handle_file_errors
+from src.atmosphere import get_gas_manager
 
 
 logger = logging.getLogger(__name__)
@@ -107,18 +108,30 @@ class ConfigService:
             translate_y = target_y + y
             translate_z = target_z + z
             
-            # Calcular rotación look-at
+            # Calcular vector UP tangente al meridiano (norte local) para evitar singularidades
+            up_tangent = np.array([
+                -np.cos(theta_rad) * np.cos(phi_rad),
+                -np.cos(theta_rad) * np.sin(phi_rad),
+                np.sin(theta_rad)
+            ])
+
+            # Calcular rotación look-at usando el UP tangente
             cam_pos = np.array([translate_x, translate_y, translate_z])
             target_pos = np.array([target_x, target_y, target_z])
-            rx, ry, rz = calculate_look_at_blender(cam_pos, target_pos)
+            rx, ry, rz = calculate_look_at_blender(cam_pos, target_pos, up_global=up_tangent)
             
             # Guardar en config
             camera_data["translate_x"] = float(translate_x)
             camera_data["translate_y"] = float(translate_y)
             camera_data["translate_z"] = float(translate_z)
-            camera_data["rotate_x"] = rx
-            camera_data["rotate_y"] = ry
-            camera_data["rotate_z"] = rz
+            camera_data["rotate_x"] = float(rx)
+            camera_data["rotate_y"] = float(ry)
+            camera_data["rotate_z"] = float(rz)
+            
+            # Guardar vector UP explícito
+            camera_data["up_x"] = float(up_tangent[0])
+            camera_data["up_y"] = float(up_tangent[1])
+            camera_data["up_z"] = float(up_tangent[2])
             
             # Guardar esféricas también
             camera_data["theta"] = camera_update.theta
@@ -145,6 +158,11 @@ class ConfigService:
             
             # Limpiar flag esférico si se movió manualmente por cartesianas
             camera_data["is_spherical"] = False
+            
+            # Limpiar vector UP explícito para volver al comportamiento por defecto
+            camera_data["up_x"] = None
+            camera_data["up_y"] = None
+            camera_data["up_z"] = None
             
             # Limpiar esféricas si se movió manualmente por cartesianas (opcional)
             # o podríamos intentar re-calcularlas aquí.
@@ -391,7 +409,7 @@ class ConfigService:
     
     def suggest_air_attenuation(self) -> list[str]:
 
-        path = os.fspath(DEFAULT_ATTENNUATION_DIR)
+        path = os.fspath(PathManager.get_attenuation_dir())
 
         if not os.path.exists(path):
             raise HTTPException(status_code=404, detail=f"Directorio no encontrado: {path}")
@@ -405,7 +423,7 @@ class ConfigService:
         
     def set_air_attenuation_by_filename(self, file_name: str) -> str:
 
-        path = os.fspath(DEFAULT_ATTENNUATION_DIR)
+        path = os.fspath(PathManager.get_attenuation_dir())
 
         # Validaciones de entrada
         if not file_name:
@@ -427,7 +445,8 @@ class ConfigService:
         if not os.path.exists(src_file) or not os.path.isfile(src_file):
             raise HTTPException(status_code=404, detail=f"Archivo no encontrado: {src_file}")
 
-        wavelengths_nm, sigma_t = object_utils.get_attenuation(file_name)
+        gas_name = base_name.replace(".txt", "")
+        wavelengths_nm, sigma_t = get_gas_manager().load_gas(gas_name)
 
         data = np.column_stack((wavelengths_nm / 1000.0, sigma_t))  # Convertir nm a um
 

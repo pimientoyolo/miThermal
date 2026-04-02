@@ -78,7 +78,7 @@ class RenderService(RenderServiceBase):
         L_path = L_air * (1 - exp(-sigma_t * depth))
         """
         from src.config import get_config_scene_dict
-        from src.atmosphere.attenuation import read_air_attenuation_file
+        from src.atmosphere import get_gas_manager
         from src.utils.objects.objects import ObjectUtils
         
         # 1. Asegurar que tenemos el mapa de profundidad
@@ -96,7 +96,7 @@ class RenderService(RenderServiceBase):
         wavelengths_scene = np.array(config_scene["wavelengths"]) # nm
         
         # Leer sigma_t (ya corregido a m^-1)
-        wl_air, sigma_t_air = read_air_attenuation_file()
+        wl_air, sigma_t_air = get_gas_manager().load_gas("air")
         
         # Interpolar sigma_t a las longitudes de onda de la cámara
         sigma_t_interp = np.interp(wavelengths_scene, wl_air, sigma_t_air)

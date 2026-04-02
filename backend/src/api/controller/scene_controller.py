@@ -208,6 +208,8 @@ async def generate_camera_interpolation_spherical(
         theta_expr=data.theta_expr,
         azimuth_expr=data.azimuth_expr,
         radius_expr=data.radius_expr,
+        auto_fov=data.auto_fov,
+        initial_fov=data.initial_fov,
     )
 
 
@@ -230,6 +232,8 @@ async def render_camera_animation_render_spherical(
         theta_expr=data.theta_expr,
         azimuth_expr=data.azimuth_expr,
         radius_expr=data.radius_expr,
+        auto_fov=data.auto_fov,
+        initial_fov=data.initial_fov,
     )
     zip_path = scene_service.render_camera_animation_sequence(
         camera_frames,
@@ -264,6 +268,8 @@ async def render_camera_animation_preview_spherical(
         theta_expr=data.theta_expr,
         azimuth_expr=data.azimuth_expr,
         radius_expr=data.radius_expr,
+        auto_fov=data.auto_fov,
+        initial_fov=data.initial_fov,
     )
     gif_path = scene_service.render_camera_path_preview_gif(camera_frames)
     return FileResponse(

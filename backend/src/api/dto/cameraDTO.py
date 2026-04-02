@@ -21,6 +21,10 @@ class CameraDTO(BaseModel):
     target_x: float | None = 0.0
     target_y: float | None = 0.0
     target_z: float | None = 0.0
+    # Vector UP explícito para evitar singularidades (opcional)
+    up_x: float | None = None
+    up_y: float | None = None
+    up_z: float | None = None
 
 class UpdateCameraDTO(BaseModel):
     spp : int
@@ -40,6 +44,9 @@ class UpdateCameraDTO(BaseModel):
     target_x: float | None = None
     target_y: float | None = None
     target_z: float | None = None
+    up_x: float | None = None
+    up_y: float | None = None
+    up_z: float | None = None
 
 class CameraSpatialConfigDTO(BaseModel):
     """DTO para exportar/importar solo la configuración espacial de la cámara"""
@@ -56,6 +63,9 @@ class CameraSpatialConfigDTO(BaseModel):
     target_x: float | None = None
     target_y: float | None = None
     target_z: float | None = None
+    up_x: float | None = None
+    up_y: float | None = None
+    up_z: float | None = None
 
 class CameraInterpolationDTO(BaseModel):
     """DTO para solicitudes de interpolación de cámara"""
@@ -86,6 +96,9 @@ class SphericalCameraInterpolationDTO(BaseModel):
     theta_expr: str | None = None
     azimuth_expr: str | None = None
     radius_expr: str | None = None
+    # Auto-FOV basado en radio
+    auto_fov: bool = False
+    initial_fov: float | None = None
     # Parámetros de renderizado opcionales para la animación
     spp: int | None = None
     width: int | None = None

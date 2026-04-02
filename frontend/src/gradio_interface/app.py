@@ -37,11 +37,6 @@ def launch_gradio_app():
         raise
 
 
-def create_app() -> gr.Blocks:  # compat
-    logger.warning("create_app() deprecated; usar create_gradio_app().")
-    return create_gradio_app()
-
-
 def main():  # pragma: no cover
     launch_gradio_app()
 

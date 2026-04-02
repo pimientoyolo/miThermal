@@ -8,7 +8,8 @@ from fastapi import APIRouter, HTTPException, Query
 from src.api.dto.spectralDTO import (
     SpectralDataResponse, 
     AtmosphericDataResponse,
-    BlackbodyDataResponse
+    BlackbodyDataResponse,
+    ObjectSpectralDataResponse
 )
 from src.utils.spectral.data_export import (
     load_emissivity_spectrum,
@@ -17,96 +18,70 @@ from src.utils.spectral.data_export import (
     load_blackbody_spectrum,
     interpolate_spectral_data
 )
-from src.config import OUTPUT_STATIC_DIR
+from src.config import get_config_scene_dict
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/spectral", tags=["spectral"])
 
 
-@router.get("/emissivity/{object_id}", response_model=SpectralDataResponse)
-async def get_emissivity_spectrum(
+@router.get("/object/{object_id:path}", response_model=ObjectSpectralDataResponse)
+async def get_object_spectral_data(
     object_id: str,
-    wavelength_min_nm: Optional[int] = Query(None, description="Longitud de onda mínima (nm)"),
-    wavelength_max_nm: Optional[int] = Query(None, description="Longitud de onda máxima (nm)")
+    wavelength_min_nm: Optional[float] = Query(None, description="Longitud de onda mínima (nm)"),
+    wavelength_max_nm: Optional[float] = Query(None, description="Longitud de onda máxima (nm)")
 ):
     """
-    Retorna espectro de emisividad de un objeto para plotear en el frontend.
-    
-    Args:
-        object_id: ID del objeto (ej: "concrete.solid")
-        wavelength_min_nm: Longitud de onda mínima en nm (opcional)
-        wavelength_max_nm: Longitud de onda máxima en nm (opcional)
-        
-    Returns:
-        SpectralDataResponse con wavelengths, values, unit, label
+    Retorna datos espectrales unificados (emisividad y reflectancia) de un objeto.
+    Busca las rutas de los archivos SPD en la configuración de la escena.
     """
     try:
-        emissivity_file = f"{OUTPUT_STATIC_DIR}/{object_id}.txt"
-        wavelengths, emissivity = load_emissivity_spectrum(
-            emissivity_file,
-            wavelength_min_nm=wavelength_min_nm,
-            wavelength_max_nm=wavelength_max_nm
-        )
+        config = get_config_scene_dict()
+        obj_info = config.get("objects", {}).get(object_id)
         
-        return SpectralDataResponse(
-            wavelengths=wavelengths.tolist(),
-            values=emissivity.tolist(),
-            unit="Emisividad (0-1)",
-            label=f"Espectro de emisividad: {object_id}",
-            title=f"Emisividad vs Longitud de Onda - {object_id}"
-        )
-        
-    except FileNotFoundError:
-        raise HTTPException(
-            status_code=404, 
-            detail=f"Objeto no encontrado: {object_id}"
-        )
-    except Exception as e:
-        logger.error(f"Error obteniendo emisividad: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        if not obj_info:
+            # Reintentar con el basename si el ID tiene ruta (ej: meshes/Cube.ply -> meshes/Cube.ply)
+            # En realidad el ID en config suele ser la ruta completa.
+            raise FileNotFoundError(f"Objeto no encontrado en configuración: {object_id}")
 
+        emi_path = obj_info.get("emission_spd")
+        refl_path = obj_info.get("reflectance_spd")
 
-@router.get("/reflectance/{object_id}", response_model=SpectralDataResponse)
-async def get_reflectance_spectrum(
-    object_id: str,
-    wavelength_min_nm: Optional[int] = Query(None, description="Longitud de onda mínima (nm)"),
-    wavelength_max_nm: Optional[int] = Query(None, description="Longitud de onda máxima (nm)")
-):
-    """
-    Retorna espectro de reflectancia de un objeto para plotear.
-    
-    Args:
-        object_id: ID del objeto
-        wavelength_min_nm: Longitud de onda mínima en nm (opcional)
-        wavelength_max_nm: Longitud de onda máxima en nm (opcional)
+        if not emi_path or not refl_path:
+            raise FileNotFoundError(f"No se encontraron rutas SPD para el objeto: {object_id}")
+
+        # Cargar emisividad (ojo: el archivo emission_spd es radiancia, el original suele ser Cube.txt)
+        # Pero podemos cargar el reflectancia y calcular emisividad = 1 - refl si es más directo,
+        # o buscar el archivo .txt original en static.
         
-    Returns:
-        SpectralDataResponse con datos de reflectancia
-    """
-    try:
-        reflectance_file = f"{OUTPUT_STATIC_DIR}/{object_id}_reflectance.txt"
-        wavelengths, reflectance = load_reflectance_spectrum(
-            reflectance_file,
-            wavelength_min_nm=wavelength_min_nm,
-            wavelength_max_nm=wavelength_max_nm
+        import os
+        from src.config import OUTPUT_STATIC_DIR
+        base_name = os.path.splitext(os.path.basename(object_id))[0]
+        # El archivo original de emisividad que subió el usuario o el default
+        orig_emi_file = f"{OUTPUT_STATIC_DIR}/{base_name}.txt"
+        
+        # Intentar cargar desde el archivo original de emisividad si existe
+        if os.path.exists(orig_emi_file):
+            wl, emi = load_emissivity_spectrum(orig_emi_file, wavelength_min_nm, wavelength_max_nm)
+            refl = 1.0 - emi
+        else:
+            # Fallback: cargar desde el SPD de reflectancia generado por Mitsuba
+            wl, refl = load_reflectance_spectrum(refl_path, wavelength_min_nm, wavelength_max_nm)
+            emi = 1.0 - refl
+
+        return ObjectSpectralDataResponse(
+            wavelengths=wl.tolist(),
+            emissivity=emi.tolist(),
+            reflectance=refl.tolist(),
+            object_id=object_id,
+            label=f"Datos espectrales: {base_name}",
+            title=f"Propiedades Espectrales - {base_name}"
         )
         
-        return SpectralDataResponse(
-            wavelengths=wavelengths.tolist(),
-            values=reflectance.tolist(),
-            unit="Reflectancia (0-1)",
-            label=f"Espectro de reflectancia: {object_id}",
-            title=f"Reflectancia vs Longitud de Onda - {object_id}"
-        )
-        
-    except FileNotFoundError:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Datos de reflectancia no encontrados: {object_id}"
-        )
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
-        logger.error(f"Error obteniendo reflectancia: {e}")
+        logger.error(f"Error obteniendo datos espectrales de objeto: {e}")
         raise HTTPException(status_code=400, detail=str(e))
 
 
@@ -150,9 +125,9 @@ async def get_atmospheric_spectrum(
 
 @router.get("/blackbody", response_model=BlackbodyDataResponse)
 async def get_blackbody_spectrum(
-    temperature_k: int = Query(300, ge=100, le=10000, description="Temperatura en Kelvin"),
-    wavelength_min_nm: int = Query(8000, description="Longitud de onda mínima (nm)"),
-    wavelength_max_nm: int = Query(12000, description="Longitud de onda máxima (nm)"),
+    temperature_k: float = Query(300.0, ge=100.0, le=10000.0, description="Temperatura en Kelvin"),
+    wavelength_min_nm: float = Query(8000.0, description="Longitud de onda mínima (nm)"),
+    wavelength_max_nm: float = Query(12000.0, description="Longitud de onda máxima (nm)"),
     num_points: int = Query(100, ge=10, le=1000, description="Número de puntos de muestreo")
 ):
     """

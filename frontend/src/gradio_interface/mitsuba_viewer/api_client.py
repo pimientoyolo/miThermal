@@ -488,38 +488,26 @@ class MitsubaAPIClient:
             return {"status": "error", "detail": str(e)}
 
     # ---------------------- Spectral Data Export ----------------------
-    def get_emissivity_spectrum(
+    def get_object_spectral_data(
         self, 
         object_id: str,
-        wavelength_min_nm: int = None,
-        wavelength_max_nm: int = None
+        wavelength_min_nm: float = None,
+        wavelength_max_nm: float = None
     ) -> Dict:
         try:
             params = {}
             if wavelength_min_nm is not None: params["wavelength_min_nm"] = wavelength_min_nm
             if wavelength_max_nm is not None: params["wavelength_max_nm"] = wavelength_max_nm
-            r = self.session.get(f"{self.base_url}/spectral/emissivity/{object_id}", params=params)
+            
+            # Codificar object_id para la URL (manejar slashes como parte de la ruta)
+            import urllib.parse
+            safe_id = urllib.parse.quote(object_id, safe='')
+            
+            r = self.session.get(f"{self.base_url}/spectral/object/{safe_id}", params=params)
             r.raise_for_status()
             return {"status": "success", "data": r.json()}
         except Exception as e:
-            logger.error(f"Get emissivity spectrum error: {e}")
-            return {"status": "error", "detail": str(e)}
-
-    def get_reflectance_spectrum(
-        self, 
-        object_id: str,
-        wavelength_min_nm: int = None,
-        wavelength_max_nm: int = None
-    ) -> Dict:
-        try:
-            params = {}
-            if wavelength_min_nm is not None: params["wavelength_min_nm"] = wavelength_min_nm
-            if wavelength_max_nm is not None: params["wavelength_max_nm"] = wavelength_max_nm
-            r = self.session.get(f"{self.base_url}/spectral/reflectance/{object_id}", params=params)
-            r.raise_for_status()
-            return {"status": "success", "data": r.json()}
-        except Exception as e:
-            logger.error(f"Get reflectance spectrum error: {e}")
+            logger.error(f"Get object spectral data error: {e}")
             return {"status": "error", "detail": str(e)}
 
     def get_atmospheric_spectrum(
@@ -662,7 +650,9 @@ class MitsubaAPIClient:
         lock_azimuth_to_end: bool = False,
         theta_expr: str | None = None,
         azimuth_expr: str | None = None,
-        radius_expr: str | None = None
+        radius_expr: str | None = None,
+        auto_fov: bool = False,
+        initial_fov: float | None = None
     ) -> Dict:
         """POST /scene/camera/interpolation/spherical"""
         try:
@@ -673,7 +663,8 @@ class MitsubaAPIClient:
                 "end_azimuth": end_azimuth,
                 "tracked_point": tracked_point,
                 "num_steps": num_steps,
-                "lock_azimuth_to_end": lock_azimuth_to_end
+                "lock_azimuth_to_end": lock_azimuth_to_end,
+                "auto_fov": auto_fov
             }
             if radius is not None: payload["radius"] = radius
             if start_radius is not None: payload["start_radius"] = start_radius
@@ -681,6 +672,7 @@ class MitsubaAPIClient:
             if theta_expr is not None: payload["theta_expr"] = theta_expr
             if azimuth_expr is not None: payload["azimuth_expr"] = azimuth_expr
             if radius_expr is not None: payload["radius_expr"] = radius_expr
+            if initial_fov is not None: payload["initial_fov"] = initial_fov
             
             r = self.session.post(f"{self.base_url}/scene/camera/interpolation/spherical", json=payload)
             r.raise_for_status()
@@ -704,6 +696,8 @@ class MitsubaAPIClient:
         theta_expr: str | None = None,
         azimuth_expr: str | None = None,
         radius_expr: str | None = None,
+        auto_fov: bool = False,
+        initial_fov: float | None = None,
         spp: int | None = None,
         width: int | None = None,
         height: int | None = None,
@@ -718,7 +712,8 @@ class MitsubaAPIClient:
                 "end_azimuth": end_azimuth,
                 "tracked_point": tracked_point,
                 "num_steps": num_steps,
-                "lock_azimuth_to_end": lock_azimuth_to_end
+                "lock_azimuth_to_end": lock_azimuth_to_end,
+                "auto_fov": auto_fov
             }
             if radius is not None: payload["radius"] = radius
             if start_radius is not None: payload["start_radius"] = start_radius
@@ -726,6 +721,7 @@ class MitsubaAPIClient:
             if theta_expr is not None: payload["theta_expr"] = theta_expr
             if azimuth_expr is not None: payload["azimuth_expr"] = azimuth_expr
             if radius_expr is not None: payload["radius_expr"] = radius_expr
+            if initial_fov is not None: payload["initial_fov"] = initial_fov
             
             if spp is not None: payload["spp"] = int(spp)
             if width is not None: payload["width"] = int(width)
@@ -753,7 +749,9 @@ class MitsubaAPIClient:
         lock_azimuth_to_end: bool = False,
         theta_expr: str | None = None,
         azimuth_expr: str | None = None,
-        radius_expr: str | None = None
+        radius_expr: str | None = None,
+        auto_fov: bool = False,
+        initial_fov: float | None = None
     ) -> Dict:
         """POST /scene/camera/animation/preview/spherical"""
         try:
@@ -764,7 +762,8 @@ class MitsubaAPIClient:
                 "end_azimuth": end_azimuth,
                 "tracked_point": tracked_point,
                 "num_steps": num_steps,
-                "lock_azimuth_to_end": lock_azimuth_to_end
+                "lock_azimuth_to_end": lock_azimuth_to_end,
+                "auto_fov": auto_fov
             }
             if radius is not None: payload["radius"] = radius
             if start_radius is not None: payload["start_radius"] = start_radius
@@ -772,6 +771,7 @@ class MitsubaAPIClient:
             if theta_expr is not None: payload["theta_expr"] = theta_expr
             if azimuth_expr is not None: payload["azimuth_expr"] = azimuth_expr
             if radius_expr is not None: payload["radius_expr"] = radius_expr
+            if initial_fov is not None: payload["initial_fov"] = initial_fov
             
             r = self.session.post(f"{self.base_url}/scene/camera/animation/preview/spherical", json=payload)
             r.raise_for_status()

@@ -13,6 +13,15 @@ class SpectralDataResponse(BaseModel):
     unit: str                  # "Emisividad (0-1)", "Transmitancia (%)", etc.
     label: str                 # Descripción del dato
     title: Optional[str] = None  # Título del gráfico
+
+class ObjectSpectralDataResponse(BaseModel):
+    """Respuesta unificada con emisividad y reflectancia de un objeto."""
+    wavelengths: List[float]
+    emissivity: List[float]
+    reflectance: List[float]
+    object_id: str
+    label: str
+    title: str
     
     class Config:
         json_schema_extra = {

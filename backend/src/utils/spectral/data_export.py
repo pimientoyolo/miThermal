@@ -8,15 +8,50 @@ from pathlib import Path
 from typing import Tuple, Optional
 from fastapi import HTTPException
 
-from src.atmosphere import get_attenuation
+from src.atmosphere import get_gas_manager
 
 logger = logging.getLogger(__name__)
 
 
+def load_spd_file(file_path: str) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Lee un archivo de espectro (.txt, .spd, .tbs) y devuelve wavelengths y values.
+    Soporta formatos de 2 columnas (λ, v) o una sola fila si data.ndim == 1.
+    """
+    path = Path(file_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Archivo no encontrado: {file_path}")
+    
+    # Intentar cargar con numpy
+    try:
+        data = np.loadtxt(path)
+    except Exception as e:
+        # Algunos archivos pueden tener encabezados o formatos raros, intentar saltar líneas
+        try:
+            data = np.loadtxt(path, skiprows=1)
+        except:
+            raise ValueError(f"No se pudo parsear el archivo espectral: {e}")
+
+    if data.ndim == 1:
+        if len(data) < 2:
+            raise ValueError("El archivo debe tener al menos dos valores")
+        # Asumir que son pares [w1, v1, w2, v2...] o [w, v]
+        data = data.reshape(-1, 2)
+    
+    wavelengths = data[:, 0]
+    values = data[:, 1]
+
+    # Convertir µm a nm si es necesario (típicamente vienen en µm si los valores son < 100)
+    if np.any(wavelengths < 100):
+        wavelengths = wavelengths * 1000.0
+    
+    return wavelengths, values
+
+
 def load_emissivity_spectrum(
     emissivity_file: str,
-    wavelength_min_nm: Optional[int] = None,
-    wavelength_max_nm: Optional[int] = None
+    wavelength_min_nm: Optional[float] = None,
+    wavelength_max_nm: Optional[float] = None
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Carga espectro de emisividad desde archivo.
@@ -30,21 +65,7 @@ def load_emissivity_spectrum(
         (wavelengths_nm, emissivity_values)
     """
     try:
-        if not Path(emissivity_file).exists():
-            raise FileNotFoundError(f"Archivo no encontrado: {emissivity_file}")
-        
-        data = np.loadtxt(emissivity_file)
-        
-        if data.ndim == 1:
-            wavelengths = data[0]
-            emissivity = data[1]
-        else:
-            wavelengths = data[:, 0]
-            emissivity = data[:, 1]
-        
-        # Convertir µm a nm si es necesario (típicamente vienen en µm)
-        if wavelengths[0] < 100:  # Asumimos µm si son valores pequeños
-            wavelengths = wavelengths * 1000.0
+        wavelengths, emissivity = load_spd_file(emissivity_file)
         
         # Filtrar por rango de longitud de onda si se especifica
         if wavelength_min_nm is not None or wavelength_max_nm is not None:
@@ -62,14 +83,14 @@ def load_emissivity_spectrum(
         return wavelengths, emissivity
         
     except Exception as e:
-        logger.error(f"Error cargando emisividad: {e}")
+        logger.error(f"Error cargando emisividad desde {emissivity_file}: {e}")
         raise HTTPException(status_code=400, detail=f"Error cargando emisividad: {e}")
 
 
 def load_reflectance_spectrum(
     reflectance_file: str,
-    wavelength_min_nm: Optional[int] = None,
-    wavelength_max_nm: Optional[int] = None
+    wavelength_min_nm: Optional[float] = None,
+    wavelength_max_nm: Optional[float] = None
 ) -> Tuple[np.ndarray, np.ndarray]:
     """
     Carga espectro de reflectancia desde archivo.
@@ -83,21 +104,7 @@ def load_reflectance_spectrum(
         (wavelengths_nm, reflectance_values)
     """
     try:
-        if not Path(reflectance_file).exists():
-            raise FileNotFoundError(f"Archivo no encontrado: {reflectance_file}")
-        
-        data = np.loadtxt(reflectance_file)
-        
-        if data.ndim == 1:
-            wavelengths = data[0]
-            reflectance = data[1]
-        else:
-            wavelengths = data[:, 0]
-            reflectance = data[:, 1]
-        
-        # Convertir µm a nm si es necesario
-        if wavelengths[0] < 100:
-            wavelengths = wavelengths * 1000.0
+        wavelengths, reflectance = load_spd_file(reflectance_file)
         
         # Filtrar por rango de longitud de onda si se especifica
         if wavelength_min_nm is not None or wavelength_max_nm is not None:
@@ -115,7 +122,7 @@ def load_reflectance_spectrum(
         return wavelengths, reflectance
         
     except Exception as e:
-        logger.error(f"Error cargando reflectancia: {e}")
+        logger.error(f"Error cargando reflectancia desde {reflectance_file}: {e}")
         raise HTTPException(status_code=400, detail=f"Error cargando reflectancia: {e}")
 
 
@@ -136,11 +143,8 @@ def get_atmospheric_spectrum(
         (wavelengths_nm, attenuation, transmittance_optional)
     """
     try:
-        # Construir nombre de archivo del gas
-        gas_file = f"{gas}.txt"
-        
-        # Cargar datos del gas específico USANDO EL PARÁMETRO
-        wavelengths_nm, sigma_t = get_attenuation(gas_file)
+        # Cargar datos del gas específico
+        wavelengths_nm, sigma_t = get_gas_manager().load_gas(gas)
         attenuation = sigma_t  # Ya está en unidades adecuadas (neper)
         
         # Calcular transmitancia como exp(-sigma_t)
@@ -168,8 +172,8 @@ def get_atmospheric_spectrum(
         raise HTTPException(status_code=400, detail=f"Error cargando datos atmosféricos: {e}")
 
 
-def load_blackbody_spectrum(temperature_k: int, wavelength_min_nm: int = 8000, 
-                           wavelength_max_nm: int = 12000, num_points: int = 100) -> Tuple[np.ndarray, np.ndarray]:
+def load_blackbody_spectrum(temperature_k: float, wavelength_min_nm: float = 8000.0, 
+                           wavelength_max_nm: float = 12000.0, num_points: int = 100) -> Tuple[np.ndarray, np.ndarray]:
     """
     Calcula radiancia de Planck (cuerpo negro) para una temperatura.
     

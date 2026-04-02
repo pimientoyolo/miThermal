@@ -14,7 +14,7 @@ from src.utils.scene.parser import SceneParser
 from src.utils.sensors.sensors import create_specfilm_bands
 from src.utils.decorators import log_execution, handle_file_errors
 from src.utils.helpers import rotation_matrix_x, rotation_matrix_y, rotation_matrix_z, clamp_value
-from src.atmosphere import read_air_attenuation_file, create_homogeneous_medium, get_attenuation
+from src.atmosphere import create_homogeneous_medium, get_gas_manager
 import numpy as np
 from src.config import (
     PathManager, 
@@ -23,7 +23,6 @@ from src.config import (
     OUTPUT_SPD_DIR,
     OUTPUT_DIR,
     ASSETS_DIR,
-    DEFAULT_SCENES_DIR,
     get_config_scene_dict,
     save_config_scene_dict
 )
@@ -168,7 +167,7 @@ class SceneService(BaseService):
         wavelengths = np.linspace(10000, 12000, 10, endpoint=True, dtype=int)
 
         # Obtener longitudes de onda y atenuación desde archivo de referencia
-        get_attenuation()
+        get_gas_manager().load_gas("air")
         num_bands = len(wavelengths)
 
         config_scene["air"] = {
@@ -416,7 +415,7 @@ class SceneService(BaseService):
             # Crear valores de sigma_t para el medium (coeficiente de extinción)
             # Valores típicos para niebla en infrarrojo lejano
             t_air = config_scene["air"]["temperature"]
-            wavelengths_air, sigma_t_values = read_air_attenuation_file()
+            wavelengths_air, sigma_t_values = get_gas_manager().load_gas("air")
 
             # La radiancia del aire se sumará analíticamente usando el mapa de profundidad
             # para evitar artefactos de aliasing y doble conteo en volpathmis.
@@ -500,7 +499,7 @@ class SceneService(BaseService):
         config_scene = get_config_scene_dict()
 
         t_air = config_scene["air"]["temperature"]
-        wavelengths_air, _ = read_air_attenuation_file()
+        wavelengths_air, _ = get_gas_manager().load_gas("air")
 
         emission_air = object_utils.blackbody_radiance_nm(wavelengths_air, t_air)
 
@@ -555,10 +554,9 @@ class SceneService(BaseService):
             sensor = scene_dict["scene"]["sensor"]
             if "film" in sensor:
                 sensor["film"]["@type"] = "specfilm"
-                # Una sola banda de 1nm de ancho centrada en w_center
+                # Usar regular con el formato de float tags
                 sensor["film"]["spectrum"] = {
                     "@type": "regular",
-                    "@name": "band_tmap",
                     "string": {"@name": "values", "@value": "1.0, 1.0"},
                     "float": [
                         {"@name": "wavelength_min", "@value": f"{w_center - 0.5:.4f}"},
@@ -569,31 +567,36 @@ class SceneService(BaseService):
         if scene_dict and "scene" in scene_dict and "shape" in scene_dict["scene"]:
                 shapes = scene_dict["scene"]["shape"]
 
-                # Agregar emisor diferente a cada shape
+                # Agregar emisor de temperatura a cada objeto
                 if isinstance(shapes, list):
                     for i, shape in enumerate(shapes):
                         id = shape["string"]["@value"]
-                        temperature = config_scene["objects"][id]["temperature"]
-                        emission = [float(temperature) for _ in wavelengths]
+                        temperature = float(config_scene["objects"][id]["temperature"])
                         
-                        # Usar identificador específico para mapa de temperatura
-                        dict_emission, emi_sha = object_utils.create_spectral_emitter(
-                            np.array(wavelengths), np.array(emission), f"tmap_{id}"
-                        )
-                        shape["emitter"] = dict_emission
+                        # Emitimos directamente el valor de la temperatura como radiancia constante
+                        # Es CRITICO que el espectro tenga el nombre "radiance" para el plugin area
+                        shape["emitter"] = {
+                            "@type": "area",
+                            "spectrum": {
+                                "@name": "radiance",
+                                "@type": "uniform",
+                                "float": {"@name": "value", "@value": str(temperature)}
+                            }
+                        }
                         if "bsdf" in shape: del shape["bsdf"]
-                        
+
                 elif isinstance(shapes, dict):
-                    # Para un solo shape
                     id = shapes["string"]["@value"]
-                    temperature = config_scene["objects"][id]["temperature"]
-                    emission = [float(temperature) for _ in wavelengths]
-                    
-                    dict_emission, emi_sha = object_utils.create_spectral_emitter(
-                        np.array(wavelengths), np.array(emission), f"tmap_{id}"
-                    )
-                    shapes["emitter"] = dict_emission
-                    if "bsdf" in shapes: del shapes['bsdf']
+                    temperature = float(config_scene["objects"][id]["temperature"])
+                    shapes["emitter"] = {
+                        "@type": "area",
+                        "spectrum": {
+                            "@name": "radiance",
+                            "@type": "uniform",
+                            "float": {"@name": "value", "@value": str(temperature)}
+                        }
+                    }
+                    if "bsdf" in shapes: del shapes["bsdf"]
 
         # Cambiar el integrador a path para reducir ruido
         if scene_dict and "scene" in scene_dict:
@@ -840,7 +843,7 @@ class SceneService(BaseService):
 
         # Datos de aire
         t_air = config_scene["air"]["temperature"]
-        wavelengths, sigma_t_values = read_air_attenuation_file()
+        wavelengths, sigma_t_values = get_gas_manager().load_gas("air")
 
         # Recalcular emisión del aire
         emission_air = object_utils.blackbody_radiance_nm(wavelengths, t_air)
@@ -990,6 +993,11 @@ class SceneService(BaseService):
         target_y = float(cam_cfg.get("target_y", 0.0))
         target_z = float(cam_cfg.get("target_z", 0.0))
         is_spherical = cam_cfg.get("is_spherical", False)
+        
+        # Obtener vector UP explícito si existe
+        ux_cfg = cam_cfg.get("up_x")
+        uy_cfg = cam_cfg.get("up_y")
+        uz_cfg = cam_cfg.get("up_z")
 
         # Limpiar transformaciones antiguas si existen
         for key in ["rotate", "translate", "matrix", "lookat"]:
@@ -1004,17 +1012,22 @@ class SceneService(BaseService):
             target_m = f"{target_x} {target_z} {-target_y}"
             
             # Determinar vector UP robusto
-            # Por defecto UP en Blender es (0,0,1)_B -> (0,1,0)_M
-            up_m = "0 1 0"
-            
-            # Si estamos mirando exactamente hacia arriba o abajo, cambiar UP para evitar singularidad
-            # Forward en Mitsuba
-            fx, fy, fz = target_x - tx, target_z - tz, -(target_y - ty)
-            fnorm = np.sqrt(fx*fx + fy*fy + fz*fz)
-            if fnorm > 1e-6:
-                if abs(fy / fnorm) > 0.999:
-                    # Si el eje de visión es paralelo al UP (0,1,0), usamos (0,0,1)
-                    up_m = "0 0 1"
+            if all(v is not None for v in [ux_cfg, uy_cfg, uz_cfg]):
+                # Si hay un UP explícito en la config, convertir a Mitsuba
+                # Blender (ux, uy, uz) -> Mitsuba (ux, uz, -uy)
+                up_m = f"{ux_cfg} {uz_cfg} {-uy_cfg}"
+            else:
+                # Por defecto UP en Blender es (0,0,1)_B -> (0,1,0)_M
+                up_m = "0 1 0"
+                
+                # Si estamos mirando exactamente hacia arriba o abajo, cambiar UP para evitar singularidad
+                # Forward en Mitsuba
+                fx, fy, fz = target_x - tx, target_z - tz, -(target_y - ty)
+                fnorm = np.sqrt(fx*fx + fy*fy + fz*fz)
+                if fnorm > 1e-6:
+                    if abs(fy / fnorm) > 0.999:
+                        # Si el eje de visión es paralelo al UP (0,1,0), usamos (0,0,1)
+                        up_m = "0 0 1"
             
             transform["lookat"] = {
                 "@origin": origin_m,
@@ -1121,7 +1134,7 @@ class SceneService(BaseService):
     
     def get_suggested_mi_thermal_scene(self) -> list[str]:
         
-        path = DEFAULT_SCENES_DIR
+        path = PathManager.get_default_scenes_dir()
 
         if not os.path.isdir(path):
             return []
@@ -1136,7 +1149,7 @@ class SceneService(BaseService):
         Copia una escena por defecto al directorio de salida.
         Simplificada con ZipHandler.
         """
-        default_scene_path = os.path.join(DEFAULT_SCENES_DIR, scene_name)
+        default_scene_path = os.path.join(PathManager.get_default_scenes_dir(), scene_name)
         if not os.path.isfile(default_scene_path):
             raise HTTPException(status_code=404, detail=f"No se encontró la escena por defecto: {scene_name}")
         
@@ -1191,6 +1204,8 @@ class SceneService(BaseService):
         theta_expr: str | None = None,
         azimuth_expr: str | None = None,
         radius_expr: str | None = None,
+        auto_fov: bool = False,
+        initial_fov: float | None = None,
     ) -> list[dict]:
         """Genera frames de cámara usando coordenadas esféricas alrededor de un objetivo."""
         try:
@@ -1208,6 +1223,8 @@ class SceneService(BaseService):
                 theta_expr=theta_expr,
                 azimuth_expr=azimuth_expr,
                 radius_expr=radius_expr,
+                auto_fov=auto_fov,
+                initial_fov=initial_fov,
             )
             self.logger.info(
                 "Generada interpolación esférica con %s frames",
@@ -1648,29 +1665,33 @@ def mitsuba_cam_to_blender_xyz(xm,ym,zm, assume_variant="plugin"):
 # =========================
 #   INTERPOLACIÓN DE CÁMARA
 # =========================
-def calculate_look_at_blender(cam_pos: np.ndarray, target_pos: np.ndarray):
+def calculate_look_at_blender(cam_pos: np.ndarray, target_pos: np.ndarray, up_global: np.ndarray = None):
     """
     Calcula los ángulos de Euler XYZ (en grados) para que una cámara en Blender
     (mirando hacia -Z local) apunte hacia target_pos.
-    
+
     Args:
         cam_pos: Posición de la cámara [x, y, z]
         target_pos: Posición del objetivo [x, y, z]
-        
+        up_global: Vector 'arriba' de referencia (opcional)
+
     Returns:
         Tuple de ángulos Euler (x, y, z) en grados
     """
-    # Eje Z global en Blender es 'Arriba'
-    up_global = np.array([0.0, 0.0, 1.0])
-    
+    if up_global is None:
+        # Eje Z global en Blender es 'Arriba' por defecto
+        up_global = np.array([0.0, 0.0, 1.0])
+
     # Vector hacia el objetivo
     forward = _norm(target_pos - cam_pos)
-    
-    # Manejar caso en el que estamos mirando directamente hacia arriba o abajo
+
+    # Manejar caso en el que estamos mirando directamente hacia arriba o abajo respecto al UP de referencia
     if abs(np.dot(forward, up_global)) > 0.999:
-        # Cambiar ligeramente el up global para evitar un producto cruz nulo
-        up_global = np.array([0.0, 1.0, 0.0])
-        
+        # Si el UP es Z, cambiar a Y. Si es otra cosa, intentar Z o X.
+        if abs(up_global[2]) > 0.9:
+            up_global = np.array([0.0, 1.0, 0.0])
+        else:
+            up_global = np.array([0.0, 0.0, 1.0])
     right = _norm(np.cross(forward, up_global))
     up = np.cross(right, forward)
     
@@ -1744,6 +1765,8 @@ def generate_camera_interpolation_spherical(
     theta_expr=None,
     azimuth_expr=None,
     radius_expr=None,
+    auto_fov=False,
+    initial_fov=None,
 ):
     """Genera interpolación de cámara en coordenadas esféricas sobre un hemisferio con soporte opcional para funciones personalizadas."""
     if num_steps <= 0:
@@ -1755,6 +1778,15 @@ def generate_camera_interpolation_spherical(
     
     if s_rad is None or e_rad is None:
         raise ValueError("Se debe proporcionar radius o (start_radius y end_radius)")
+
+    # Preparar Auto-FOV si es necesario
+    ref_size = None
+    if auto_fov:
+        # Si no se provee initial_fov, usar 45 por defecto
+        base_fov = float(initial_fov) if initial_fov is not None else 45.0
+        # Calcular tamaño aparente de referencia basado en el radio inicial
+        # S = 2 * R * tan(FOV/2)
+        ref_size = 2.0 * s_rad * np.tan(np.deg2rad(base_fov / 2.0))
 
     target_np = np.array(tracked_point, dtype=float)
     camera_frames = []
@@ -1794,23 +1826,47 @@ def generate_camera_interpolation_spherical(
         )
 
         current_pos = target_np + offset
-        rot_x, rot_y, rot_z = calculate_look_at_blender(current_pos, target_np)
+        # Por defecto usamos world Z [0,0,1]
+        up_stable = np.array([0.0, 0.0, 1.0])
+        
+        # Si la cámara mira directamente hacia arriba/abajo (eje Z),
+        # usamos world Y [0,1,0] para evitar la singularidad de look-at.
+        forward = target_np - current_pos
+        norm_f = np.linalg.norm(forward)
+        if norm_f > 1e-6:
+            forward = forward / norm_f
+            if abs(np.dot(forward, up_stable)) > 0.99:
+                up_stable = np.array([0.0, 1.0, 0.0])
+
+        rot_x, rot_y, rot_z = calculate_look_at_blender(current_pos, target_np, up_global=up_stable)
 
         frame_config = {
             "translate_x": float(current_pos[0]),
             "translate_y": float(current_pos[1]),
             "translate_z": float(current_pos[2]),
-            "rotate_x": rot_x,
-            "rotate_y": rot_y,
-            "rotate_z": rot_z,
+            "rotate_x": float(rot_x),
+            "rotate_y": float(rot_y),
+            "rotate_z": float(rot_z),
             "target_x": float(target_np[0]),
             "target_y": float(target_np[1]),
             "target_z": float(target_np[2]),
+            "up_x": float(up_stable[0]),
+            "up_y": float(up_stable[1]),
+            "up_z": float(up_stable[2]),
             "is_spherical": True,
             "theta": theta_deg,
             "azimuth": azimuth_deg,
             "radius": current_radius,
         }
+
+        # Aplicar Auto-FOV
+        if auto_fov and ref_size is not None:
+            # FOV = 2 * arctan(S / (2 * R))
+            # Usar arctan2 o asegurar que current_radius > 0
+            safe_rad = max(1e-6, current_radius)
+            new_fov_rad = 2.0 * np.arctan(ref_size / (2.0 * safe_rad))
+            frame_config["fov"] = float(np.rad2deg(new_fov_rad))
+
         camera_frames.append(frame_config)
 
     return camera_frames

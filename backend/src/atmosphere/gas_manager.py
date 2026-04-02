@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Optional
 from fastapi import HTTPException
 
-from src.config import DEFAULT_ATTENNUATION_DIR
+from src.config import PathManager
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ class AtmosphericGasManager:
         Args:
             data_dir: Directorio con archivos de referencia de gases (*.txt)
         """
-        self.data_dir = Path(data_dir or DEFAULT_ATTENNUATION_DIR)
+        self.data_dir = Path(data_dir or PathManager.get_attenuation_dir())
         self._cache: dict[str, tuple[np.ndarray, np.ndarray]] = {}
         
         if not self.data_dir.exists():

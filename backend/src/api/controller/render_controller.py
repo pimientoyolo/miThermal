@@ -67,6 +67,15 @@ async def render_scene_thermal() -> StreamingResponse:
         "thermal.npy"
     )
 
+@render_router.get("/thermal/raw")
+async def render_scene_thermal_raw() -> StreamingResponse:
+    """Retorna la radiancia de superficie (L_surface) sin contribución de aire"""
+    return await _render_and_stream_npy(
+        render_service.render_thermal_image,
+        "thermal_raw",
+        "thermal_raw.npy"
+    )
+
 @render_router.get("/air/blackbody")
 async def render_scene_blackbody_air() -> StreamingResponse:
     return await _render_and_stream_npy(

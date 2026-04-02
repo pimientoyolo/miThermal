@@ -9,20 +9,12 @@ from src.api.dto.suggestDTO import SuggestDTO
 from scipy import constants as const
 import shutil
 from src.config import (
-    DEFAULT_EMISSIVITY_FILE,
+    PathManager,
     OUTPUT_STATIC_DIR,
     OUTPUT_SPD_DIR,
     get_config_scene_dict
 )
 
-# Importar funciones de atmósfera desde su módulo dedicado
-from src.atmosphere import (
-    get_attenuation as _get_attenuation,
-    read_air_attenuation_file as _read_air_attenuation_file,
-    create_homogeneous_medium as _create_homogeneous_medium,
-)
-
-# open3d es opcional; importarlo de forma segura
 try:
     import open3d
 except Exception:
@@ -280,9 +272,10 @@ class ObjectUtils:
         c2 = (const.h * const.c) / const.k
         
         exponent = c2 / (wavelengths_m * temperature)
-        radiance = c1 / (wavelengths_m**5 * (np.exp(exponent) - 1))
-
-        return radiance
+        # B_lambda en W/(m^2 * sr * m)
+        radiance_m = c1 / (wavelengths_m**5 * (np.exp(exponent) - 1))
+        
+        return radiance_m
     
     def _save_spectrum_spd(self, wavelengths_nm: np.ndarray, values: np.ndarray, filename: str, spectrum_type: str = "spectral distribution") -> tuple[str, str]:
         """
@@ -407,32 +400,10 @@ class ObjectUtils:
             self.logger.error(f"Error creando emisor espectral: {e}")
             raise HTTPException(status_code=500, detail=f"Error al crear emisor espectral: {e}")
 
-    def create_homogeneous_medium(self, wavelengths: np.ndarray, sigma_t: np.ndarray, 
-                                  medium_id: str = "niebla", g_value: float = 0.95) -> dict:
-        """
-        Crea un diccionario para un medium homogéneo con coeficiente de extinción espectral.
-        
-        DEPRECATED: Use src.atmosphere.create_homogeneous_medium directly.
-        This method is kept for backwards compatibility.
-        
-        Args:
-            wavelengths (np.ndarray): Array con las longitudes de onda en nanómetros
-            sigma_t (np.ndarray): Array con los valores de coeficiente de extinción sigma_t
-            medium_id (str): Identificador del medium (por defecto "niebla")
-            g_value (float): Parámetro g de la fase Henyey-Greenstein (0.9-0.95 para IR lejano)
-            
-        Returns:
-            dict: Diccionario del medium listo para Mitsuba/XML
-            
-        Raises:
-            HTTPException: Si las longitudes de los arrays no coinciden
-        """
-        return _create_homogeneous_medium(wavelengths, sigma_t, medium_id, g_value)
-    
     def save_new_emissivity(self, object_id: str, wavelengths_nm: np.ndarray, emissivity: np.ndarray) -> None:
         """
         Guarda un nuevo archivo de emisividad para un objeto específico.
-        El archivo se guarda en OUTPUT_STATIC_DIR con la misma estructura que DEFAULT_EMISSIVITY_FILE.
+        El archivo se guarda en OUTPUT_STATIC_DIR con la misma estructura que PathManager.get_default_emissivity_path().
 
         Args:
             object_id (str): Identificador del objeto (ruta relativa como en la escena)
@@ -465,7 +436,7 @@ class ObjectUtils:
     
     def save_default_emissivity(self, object_id: str) -> None:
         
-        path_default = DEFAULT_EMISSIVITY_FILE
+        path_default = PathManager.get_default_emissivity_path()
         self.valid_exist_file(path_default)
         path_static = OUTPUT_STATIC_DIR
 
@@ -490,13 +461,9 @@ class ObjectUtils:
 
     def read_reflectance_file_as_emissivity(self, file_path: str) -> tuple[np.ndarray, np.ndarray]:
         """
-        Lee un archivo de dos columnas [wavelength_um, reflectance_%] y retorna:
+        Lee un archivo de dos columnas [wavelength, reflectance] y retorna:
         - wavelengths_nm: longitudes de onda en nanómetros (nm)
         - emissivity: emisividad (1 - reflectancia), en rango [0, 1]
-
-        Reglas de conversión:
-        - λ [µm] -> λ [nm] = λ * 1000
-        - reflectancia en % -> fracción [0,1] y luego emisividad = 1 - reflectancia
         """
         # Validar que el archivo exista
         self.valid_exist_file(file_path)
@@ -504,44 +471,33 @@ class ObjectUtils:
         try:
             data = np.loadtxt(file_path)
 
-            # Asegurar que tenga al menos dos columnas
             if data.ndim == 1:
-                if data.size < 2:
-                    raise HTTPException(status_code=400, detail="El archivo no contiene dos columnas necesarias")
-                # Si es una sola fila, convertir a (1, N)
-                data = data.reshape(1, -1)
+                data = data.reshape(-1, 2)
 
-            if data.shape[1] < 2:
-                raise HTTPException(status_code=400, detail="El archivo debe tener al menos dos columnas: wavelength_um y reflectance_%")
+            wavelengths = data[:, 0].astype(float)
+            reflectance_vals = data[:, 1].astype(float)
 
-            wavelengths_um = data[:, 0].astype(float)
-            reflectance_pct = data[:, 1].astype(float)
-
-            # Ordenar de menor a mayor por longitud de onda
-            order = np.argsort(wavelengths_um)
-            wavelengths_um = wavelengths_um[order]
-            reflectance_pct = reflectance_pct[order]
-
-            # Conversión de unidades
-            wavelengths_nm = wavelengths_um * 1000.0
-
-            # De porcentaje a fracción
-            reflectance = reflectance_pct / 100.0
-            emissivity = 1.0 - reflectance
-
-            # Limitar a [0, 1] por robustez numérica
+            # 1. Manejo de unidades de longitud de onda
+            # Si el máximo es < 100, asumimos µm y convertimos a nm
+            if np.max(wavelengths) < 100:
+                wavelengths = wavelengths * 1000.0
+            
+            # 2. Manejo de unidades de reflectancia
+            # Si el máximo es > 1.0, asumimos que está en porcentaje (0-100) y normalizamos a (0-1)
+            if np.max(reflectance_vals) > 1.0:
+                reflectance_vals = reflectance_vals / 100.0
+            
+            # 3. Convertir a Emisividad (Kirchhoff's Law: E = 1 - R para cuerpos opacos)
+            emissivity = 1.0 - reflectance_vals
             emissivity = np.clip(emissivity, 0.0, 1.0)
 
-            self.logger.info(
-                f"Leído archivo espectral '{file_path}': {len(wavelengths_nm)} muestras (um->nm, %->emisividad)"
-            )
+            # Ordenar por longitud de onda
+            order = np.argsort(wavelengths)
+            return wavelengths[order], emissivity[order]
 
-            return wavelengths_nm, emissivity
-        except HTTPException:
-            raise
         except Exception as e:
-            self.logger.error(f"Error leyendo archivo de reflectancia '{file_path}': {e}")
-            raise HTTPException(status_code=500, detail=f"Error al leer archivo de reflectancia: {e}")
+            self.logger.error(f"Error procesando archivo espectral '{file_path}': {e}")
+            raise HTTPException(status_code=500, detail=f"Error al procesar archivo espectral: {e}")
 
     def read_object_emissivity_file(self, object_id: str) -> tuple[np.ndarray, np.ndarray]:
         """

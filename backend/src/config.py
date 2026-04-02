@@ -120,37 +120,25 @@ class PathManager:
         return str(ASSETS_DIR / "materials" / "default.txt")
     
     @staticmethod
+    def get_attenuation_dir() -> str:
+        """Obtiene el directorio de archivos de atenuación de referencia"""
+        return str(ASSETS_DIR / "reference_data")
+
+    @staticmethod
+    def get_default_scenes_dir() -> str:
+        """Obtiene el directorio de escenas por defecto"""
+        return str(ASSETS_DIR / "mitsuba_scenes")
+
+    @staticmethod
+    def get_signatures_dir() -> str:
+        """Obtiene el directorio de firmas espectrales (emisividad)"""
+        return str(ASSETS_DIR / "signatures")
+    
+    @staticmethod
     def get_mithermal_scene_path() -> str:
         """Obtiene la ruta del archivo miThermal.zip"""
         return str(OUTPUT_DIR / "miThermal.zip")
 
-
-# Retrocompatibilidad: mantener estas variables para código legacy
-SCENE_DIR = PathManager.get_scene_path("rgb")
-SCENE_THERMAL_DIR = PathManager.get_scene_path("thermal")
-SCENE_DEPTH_DIR = PathManager.get_scene_path("depth")
-SCENE_BLACKBODY_AIR = PathManager.get_scene_path("blackbody_air")
-SCENE_TRANSMITTANCE_BLACKBODY_AIR = PathManager.get_scene_path("transmittance_blackbody_air")
-SCENE_TEMPERATURE_MAP = PathManager.get_scene_path("temperature_map")
-
-IMAGE_DIR = PathManager.get_result_path("rgb")
-DEPTH_DIR = PathManager.get_result_path("depth")
-THERMAL_DIR = PathManager.get_result_path("thermal")
-BLACKBODY_AIR_DIR = PathManager.get_result_path("blackbody_air")
-TRANSMITTANCE_BLACKBODY_AIR_DIR = PathManager.get_result_path("transmittance_blackbody_air")
-CONTRIBUTION_BLACKBODY_AIR_DIR = PathManager.get_result_path("contribution_blackbody_air")
-TEMPERATURE_MAP_DIR = PathManager.get_result_path("temperature_map")
-
-CONFIG_SCENE = PathManager.get_config_scene_path()
-AIR_ATTENUATION_FILE = PathManager.get_air_attenuation_path()
-SCENE_ZIP = PathManager.get_scene_zip_path()
-DEFAULT_EMISSIVITY_FILE = PathManager.get_default_emissivity_path()
-MITHERMAL_SCENE_FILE = PathManager.get_mithermal_scene_path()
-
-# Para strings
-DEFAULT_SCENES_DIR = str(DEFAULT_SCENES_DIR)
-DEFAULT_EMISIVITY_DIR = str(DEFAULT_EMISIVITY_DIR)
-DEFAULT_ATTENNUATION_DIR = str(DEFAULT_ATTENNUATION_DIR)
 
 # Configuración de Mitsuba
 MITSUBA_CONFIG = {
@@ -247,17 +235,17 @@ def get_output_path(subfolder: str = "") -> Path:
     return path
 
 def get_config_scene_dict() -> dict:
-    cfg_path = Path(CONFIG_SCENE)
+    cfg_path = Path(PathManager.get_config_scene_path())
     if not cfg_path.exists():
         # crear estructura mínima por defecto
         minimal = {
             "objects": {},
-            "air": {"temperature": 280},
+            "air": {"temperature": 280.0},
             "camera": {
                 "spp": 256, "width": 256, "height": 256,
+                "fov": 45.0,
                 "rotate_x": 0.0, "rotate_y": 0.0, "rotate_z": 0.0,
-                "translate_x": 0.0, "translate_y": 0.0, "translate_z": 0.0,
-                "fov": 45.0
+                "translate_x": 0.0, "translate_y": 0.0, "translate_z": 0.0
             },
             "num_bands": 0,
             "wavelengths": []
@@ -270,5 +258,6 @@ def get_config_scene_dict() -> dict:
         return json.load(f)
 
 def save_config_scene_dict(config_scene: dict) -> None:
-    with open(CONFIG_SCENE, 'w') as f:
+    with open(PathManager.get_config_scene_path(), 'w') as f:
         json.dump(config_scene, f, indent=4)
+

@@ -89,55 +89,49 @@ class RenderThermal:
 
         # 1. Normalización Espectral: Mitsuba integra sobre el ancho de banda
         # Necesitamos dividir por el ancho de banda (delta) y ajustar por el factor pi
-        # para obtener Radiancia Espectral (W/m²/sr/m)
         from src.config import get_config_scene_dict
         config_scene = get_config_scene_dict()
         wavelengths = config_scene.get("wavelengths", [])
+        
+        # Radiancia de superficie (Mitsuba output)
+        L_surface = image_array
+        
         if len(wavelengths) > 1:
             delta = float(wavelengths[1] - wavelengths[0])
-            # Normalizar: (Valor / delta) * pi
-            # El factor pi es necesario para convertir la proyección Lambertiana a Radiancia
-            #image_array = (image_array * np.pi) / delta
-            image_array = (image_array) / delta
+            # Radiancia espectral (L_lambda) = Integral / delta_nm
+            # Esto da W/m^2/sr/m si el SPD estaba en esa unidad, ya que:
+            # [W/m^2/sr/m * nm] / [nm] = [W/m^2/sr/m]
+            L_surface = L_surface / delta
 
         # 2. Recortar bandas de seguridad (primera y última)
-        if image_array.ndim == 3 and image_array.shape[-1] > 2:
-            image_array = image_array[:, :, 1:-1]
-
-        # Crear carpeta si no existe
-        os.makedirs(OUTPUT_STATIC_RESULT_DIR, exist_ok=True)
+        if L_surface.ndim == 3 and L_surface.shape[-1] > 2:
+            L_surface = L_surface[:, :, 1:-1]
 
         # GUARDAR CUBE TÉRMICO PURO (antes de sumar aire) para diagnóstico
         result_raw_path = self.path_manager.get_result_path("thermal_raw")
-        np.save(result_raw_path, image_array)
+        np.save(result_raw_path, L_surface)
 
+        # 3. Sumar contribución del aire (L_path)
+        # L_total = L_surface * transmittance + L_path
+        # Nota: L_surface ya viene atenuada por el medio en Mitsuba (si hay medio)
+        # Así que solo sumamos la radiancia de camino (path radiance)
         contribution_path = self.path_manager.get_result_path("contribution_blackbody_air")
-        contribution_blackbody_air = np.load(contribution_path)
-
-        # Verificar compatibilidad de formas para evitar errores de broadcasting
-        if image_array.shape != contribution_blackbody_air.shape:
-            # Caso común: image_array es (H, W, 3) y contribución es (H, W, Bands)
-            if image_array.shape[-1] == 3 and contribution_blackbody_air.shape[-1] != 3:
-                # Si Mitsuba devolvió RGB pero tenemos bandas, colapsamos bandas de contribución a promedio
-                # para que el usuario al menos vea un resultado coherente en intensidad
-                avg_contrib = np.mean(contribution_blackbody_air, axis=-1, keepdims=True)
-                # Opcional: repetir 3 veces para sumar a RGB
-                avg_contrib_rgb = np.repeat(avg_contrib, 3, axis=-1)
-                image_array = image_array + avg_contrib_rgb
+        if os.path.exists(contribution_path):
+            L_path = np.load(contribution_path)
+            
+            if L_surface.shape == L_path.shape:
+                L_total = L_surface + L_path
             else:
-                # Otros casos: intentar sumar directamente (fallará si no son compatibles)
-                try:
-                    image_array = image_array + contribution_blackbody_air
-                except ValueError as e:
-                    logging.error(f"Error de broadcasting: image={image_array.shape}, contrib={contribution_blackbody_air.shape}")
-                    # Mantener solo el render de Mitsuba si falla
-                    pass
+                # Fallback simple si hay discrepancia de bandas
+                self.logger.warning(f"Discrepancia de formas: surface={L_surface.shape}, path={L_path.shape}. Sumando promedio.")
+                avg_path = np.mean(L_path, axis=-1, keepdims=True)
+                L_total = L_surface + avg_path
         else:
-            image_array = image_array + contribution_blackbody_air
+            L_total = L_surface
 
-        # Guardar toda la información (todos los canales)
+        # Guardar resultado final
         result_path = self.path_manager.get_result_path("thermal")
-        np.save(result_path, image_array)
+        np.save(result_path, L_total)
 
     def render_blackbody_air(self):
         scene_path = self.path_manager.get_scene_path("blackbody_air")

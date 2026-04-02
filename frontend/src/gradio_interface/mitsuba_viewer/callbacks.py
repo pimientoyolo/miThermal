@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
@@ -320,64 +321,102 @@ def create_mitsuba_viewer_interface():
             """
         )
         with gr.Tabs():
-            # ==================== TAB 1: 🏠 ESCENA ====================
-            with gr.Tab("🏠 Escena"):
-                gr.Markdown("### Carga y Simulación de Escenas")
-                
-                # Sección de carga
+            # ==================== TAB 1: 🏠 SIMULACIÓN ====================
+            with gr.Tab("🏠 Simulación"):
                 with gr.Row():
                     with gr.Column(scale=1):
+                        gr.Markdown("### 📦 Escena")
                         load_type = gr.Radio(label="Tipo de carga", choices=["Escena", "miTransfer"], value="Escena")
                         zip_file = gr.File(label="Archivo (.zip)", file_types=[".zip"])
                         with gr.Row():
-                            upload_btn = gr.Button("📤 Cargar Escena", variant="primary", size="lg")
+                            upload_btn = gr.Button("📤 Cargar Escena", variant="primary")
                         with gr.Row():
                             default_suggest = gr.Dropdown(label="Escenas predeterminadas", choices=[], interactive=True)
                         with gr.Row():
-                            reload_default_btn = gr.Button("🔄 Recargar", variant="secondary", scale=1)
-                            select_default_btn = gr.Button("✅ Seleccionar", variant="secondary", scale=1)
-                        scene_info = gr.Textbox(label="Estado de la Escena", lines=8, interactive=False)
+                            reload_default_btn = gr.Button("🔄", variant="secondary", min_width=40)
+                            select_default_btn = gr.Button("✅ Seleccionar", variant="secondary")
+                        scene_info = gr.Textbox(label="Estado de la Escena", lines=4, interactive=False)
                     
                     with gr.Column(scale=2):
-                        render_image = gr.Image(label="Preview RGB", type="pil", height=400)
-                
-                gr.Markdown("---")
-                gr.Markdown("### Simulación Completa")
-                
+                        render_image = gr.Image(label="Preview RGB", type="pil", height=350)
+
                 with gr.Row():
-                    run_sim_btn = gr.Button("▶️ Ejecutar Simulación Completa", variant="primary", size="lg")
+                    with gr.Column(scale=1):
+                        with gr.Accordion("📷 Configuración de Cámara y Render", open=False):
+                            with gr.Row():
+                                camera_spp = gr.Slider(label="SPP (2^k)", minimum=1, maximum=13, step=1, value=4)
+                                fov = gr.Number(label="FOV (deg)", precision=3, value=45)
+                            with gr.Row():
+                                camera_width = gr.Number(label="Ancho (px)", precision=0, value=640)
+                                camera_height = gr.Number(label="Alto (px)", precision=0, value=480)
+                            
+                            with gr.Tabs():
+                                with gr.Tab("Coordenadas Esféricas"):
+                                    with gr.Row():
+                                        theta = gr.Number(label="Zenital (theta)", precision=3)
+                                        phi = gr.Number(label="Azimutal (phi)", precision=3)
+                                        radius = gr.Number(label="Radio", precision=3)
+                                    with gr.Row():
+                                        target_x = gr.Number(label="Target X", precision=3, value=0.0)
+                                        target_y = gr.Number(label="Target Y", precision=3, value=0.0)
+                                        target_z = gr.Number(label="Target Z", precision=3, value=0.0)
+                                
+                                with gr.Tab("Transformaciones"):
+                                    with gr.Row():
+                                        rotate_x = gr.Number(label="Rotar X (°)", precision=3, value=0)
+                                        rotate_y = gr.Number(label="Rotar Y (°)", precision=3, value=0)
+                                        rotate_z = gr.Number(label="Rotar Z (°)", precision=3, value=0)
+                                    with gr.Row():
+                                        translate_x = gr.Number(label="Trasladar X", precision=6, value=0)
+                                        translate_y = gr.Number(label="Trasladar Y", precision=6, value=0)
+                                        translate_z = gr.Number(label="Trasladar Z", precision=6, value=0)
+                            
+                            apply_cam_btn = gr.Button("✅ Aplicar Cámara", variant="secondary")
+                            cam_status = gr.Textbox(label="Estado Cámara", lines=1, interactive=False)
+
+                    with gr.Column(scale=1):
+                        with gr.Accordion("🌍 Entorno Espectral y Atmósfera", open=False):
+                            with gr.Row():
+                                wl_min = gr.Number(label="λ mín (μm)", value=8.0)
+                                wl_max = gr.Number(label="λ máx (μm)", value=12.0)
+                                bands = gr.Number(label="Bandas", precision=0, value=50)
+                            spectrum_apply_btn = gr.Button("✅ Aplicar Espectro", variant="secondary")
+                            spectrum_status = gr.Textbox(label="Estado Espectro", lines=1, interactive=False)
+                            
+                            gr.Markdown("---")
+                            with gr.Row():
+                                air_temperature = gr.Number(label="Temp. Aire (K)", precision=2, value=300)
+                                air_suggest_list = gr.Dropdown(label="Gas/Atmósfera", choices=[], interactive=True)
+                            with gr.Row():
+                                air_file = gr.File(label="Archivo personalizado", file_types=[".txt"], scale=1)
+                                air_apply_suggest_btn = gr.Button("✅ Aplicar Atmósfera", variant="secondary")
+                            atm_status = gr.Textbox(label="Estado Atmósfera", lines=1, interactive=False)
+
+                gr.Markdown("---")
+                with gr.Row():
+                    run_sim_btn = gr.Button("▶️ EJECUTAR SIMULACIÓN COMPLETA", variant="primary", size="lg")
                 
                 with gr.Row():
                     with gr.Column(scale=2, elem_id="viz_gallery_wrap"):
-                        gallery = gr.Gallery(label="Resultados de la Simulación", show_label=True, columns=2, rows=3)
+                        gallery = gr.Gallery(label="Resultados", show_label=True, columns=2, rows=3)
                 
                 with gr.Row():
-                    download_zip = gr.File(label="💾 Descargar Todos los Resultados (.zip)")
+                    download_zip = gr.File(label="💾 Descargar Resultados (.zip)")
                 
-                # Referencias section combinadas
+                # Definición de diccionarios para callbacks
                 upload_section = {
-                    "load_type": load_type,
-                    "zip_file": zip_file,
-                    "upload_btn": upload_btn,
-                    "default_suggest": default_suggest,
-                    "reload_default_btn": reload_default_btn,
-                    "select_default_btn": select_default_btn,
-                    "scene_info": scene_info,
-                    "render_image": render_image,
-                    "scene_json": gr.JSON(visible=False),
-                    "server_path": None,
-                    "load_btn": None,
+                    "load_type": load_type, "zip_file": zip_file, "upload_btn": upload_btn,
+                    "default_suggest": default_suggest, "reload_default_btn": reload_default_btn,
+                    "select_default_btn": select_default_btn, "scene_info": scene_info,
+                    "render_image": render_image, "scene_json": gr.JSON(visible=False),
+                    "server_path": None, "load_btn": None,
                 }
-                
                 visualization_section = {
-                    "run_sim_btn": run_sim_btn,
-                    "gallery": gallery,
-                    "download_zip": download_zip,
+                    "run_sim_btn": run_sim_btn, "gallery": gallery, "download_zip": download_zip,
                 }
-            
+
             # ==================== TAB 2: 🎯 OBJETOS ====================
             with gr.Tab("🎯 Objetos"):
-                # Subtab: Explorador
                 with gr.Row():
                     with gr.Column(scale=1):
                         mode_radio = gr.Radio(label="Modo", choices=["Objeto", "Instancia", "Familia"], value="Objeto")
@@ -389,145 +428,47 @@ def create_mitsuba_viewer_interface():
                             label="Tipo de Datos",
                             choices=["Emisividad", "Reflectancia"],
                             value="Emisividad",
-                            info="Selecciona si el archivo subido es Emisividad o Reflectancia (1-E)"
+                            info="¿El archivo subido es Emisividad o Reflectancia (1-E)?"
                         )
                         emissivity_file = gr.File(label="Archivo Espectral", file_types=[".txt", ".tbs"], interactive=True)
                         apply_update_btn = gr.Button("✅ Aplicar Cambios", variant="primary")
-                        info_text = gr.Textbox(label="Información del Objeto", lines=10, interactive=False)
+                        info_text = gr.Textbox(label="Información", lines=6, interactive=False)
                     
                     with gr.Column(scale=2):
-                        model_viewer = gr.Model3D(label="Vista 3D", height=400)
-                        emissivity_plot = gr.Plot(label="📊 Espectro de Emisividad")
+                        model_viewer = gr.Model3D(label="Vista 3D", height=300)
+                        emissivity_plot = gr.Plot(label="📊 Espectro")
                 
                 og_section = {
-                    "mode_radio": mode_radio,
-                    "selector": selector,
-                    "members": members,
-                    "temp_input": temp_input,
-                    "spectrum_type": spectrum_type,
-                    "emissivity_file": emissivity_file,
-                    "apply_update_btn": apply_update_btn,
-                    "info_text": info_text,
-                    "model_viewer": model_viewer,
-                    "emissivity_plot": emissivity_plot,
+                    "mode_radio": mode_radio, "selector": selector, "members": members,
+                    "temp_input": temp_input, "spectrum_type": spectrum_type,
+                    "emissivity_file": emissivity_file, "apply_update_btn": apply_update_btn,
+                    "info_text": info_text, "model_viewer": model_viewer, "emissivity_plot": emissivity_plot,
                 }
 
-            # ==================== TAB 3: 📷 CÁMARA ====================
-            with gr.Tab("📷 Cámara"):
-                gr.Markdown("### Parámetros de Renderizado y Posicionamiento")
-                with gr.Row():
-                    with gr.Column(scale=1):
-                        gr.Markdown("#### Calidad y Resolución")
-                        camera_spp = gr.Slider(label="SPP (2^k)", minimum=1, maximum=13, step=1, value=4)
-                        camera_width = gr.Number(label="Ancho (px)", precision=0, value=640)
-                        camera_height = gr.Number(label="Alto (px)", precision=0, value=480)
-                        fov = gr.Number(label="FOV (deg)", precision=3, value=45)
-                    
-                    with gr.Column(scale=1):
-                        with gr.Tabs():
-                            with gr.Tab("Cartesiano"):
-                                gr.Markdown("#### Transformaciones")
-                                with gr.Row():
-                                    rotate_x = gr.Number(label="Rotar X (°)", precision=3, value=0)
-                                    rotate_y = gr.Number(label="Rotar Y (°)", precision=3, value=0)
-                                    rotate_z = gr.Number(label="Rotar Z (°)", precision=3, value=0)
-                                with gr.Row():
-                                    translate_x = gr.Number(label="Trasladar X", precision=6, value=0)
-                                    translate_y = gr.Number(label="Trasladar Y", precision=6, value=0)
-                                    translate_z = gr.Number(label="Trasladar Z", precision=6, value=0)
-                            
-                            with gr.Tab("Esférico (Ángulos)"):
-                                gr.Markdown("#### Coordenadas Esféricas")
-                                with gr.Row():
-                                    theta = gr.Number(label="Zenital (theta) [0-180]", precision=3)
-                                    phi = gr.Number(label="Azimutal (phi) [0-360]", precision=3)
-                                    radius = gr.Number(label="Radio", precision=3)
-                                gr.Markdown("#### Punto Objetivo (Target)")
-                                with gr.Row():
-                                    target_x = gr.Number(label="Target X", precision=3, value=0.0)
-                                    target_y = gr.Number(label="Target Y", precision=3, value=0.0)
-                                    target_z = gr.Number(label="Target Z", precision=3, value=0.0)
-                
-                with gr.Row():
-                    apply_cam_btn = gr.Button("✅ Aplicar Configuración de Cámara", variant="primary")
-                
-                with gr.Row():
-                    cam_status = gr.Textbox(label="Estado de Cámara", lines=2, interactive=False)
-
-            # ==================== TAB 4: 🎥 ANIMACIÓN ====================
+            # ==================== TAB 3: 🎥 ANIMACIÓN ====================
             with gr.Tab("🎥 Animación"):
                 camera_interp_section = build_camera_interpolation_section()
 
-            # ==================== TAB 5: 📊 ANÁLISIS ====================
-            with gr.Tab("📊 Análisis"):
-                with gr.Tabs(elem_classes=["secondary-tabs"]):
-                    # Subtab: Espectros
-                    with gr.Tab("📈 Espectros"):
+            # ==================== TAB 4: 📊 ANÁLISIS Y SISTEMA ====================
+            with gr.Tab("📊 Análisis y Sistema"):
+                with gr.Tabs():
+                    with gr.Tab("📈 Análisis Espectral"):
                         spectral_section = build_spectral_plot_section()
-            
-            # ==================== TAB 6: ⚙️ CONFIGURACIÓN ====================
-            with gr.Tab("⚙️ Configuración"):
-                with gr.Tabs(elem_classes=["secondary-tabs"]):
-                    # Subtab: Espectro
-                    with gr.Tab("🌈 Espectro"):
-                        gr.Markdown("### Configuración Espectral")
-                        with gr.Row():
-                            with gr.Column(scale=1):
-                                wl_min = gr.Number(label="λ mínima (μm)", value=8.0)
-                                wl_max = gr.Number(label="λ máxima (μm)", value=12.0)
-                                bands = gr.Number(label="Número de bandas", precision=0, value=50)
-                                spectrum_apply_btn = gr.Button("✅ Aplicar Configuración Espectral", variant="primary")
-                            
-                            with gr.Column(scale=2):
-                                gr.Markdown("#### Información")
-                                gr.Markdown("""
-                                - **Rango espectral**: Define el intervalo de longitudes de onda para la simulación
-                                - **Bandas**: Mayor número = mayor precisión pero más tiempo de cómputo
-                                - **Rango típico IR térmico**: 8000-14000 nm
-                                """)
-                                spectrum_status = gr.Textbox(label="Estado", lines=3, interactive=False)
                     
-                    # Subtab: Atmósfera
-                    with gr.Tab("🌫️ Atmósfera"):
-                        gr.Markdown("### Atenuación Atmosférica")
+                    with gr.Tab("⚙️ Sistema"):
                         with gr.Row():
-                            air_plot = gr.Plot(label="Diagrama de Atenuación del Aire")
-                        
-                        with gr.Row():
-                            with gr.Column(scale=1):
-                                air_temperature = gr.Number(label="Temperatura del aire (K)", precision=2, value=300)
-                                air_file = gr.File(label="Archivo de Atenuación (.txt)", file_types=[".txt", ".dat", ".csv"], interactive=True)
-                                with gr.Row():
-                                    air_suggest_list = gr.Dropdown(label="Archivos sugeridos", choices=[], interactive=True)
-                                    air_apply_suggest_btn = gr.Button("✅ Aplicar", variant="primary")
+                            with gr.Column():
+                                gr.Markdown("### Configuración Avanzada")
+                                load_config_btn = gr.Button("📥 Cargar Config Actual", variant="secondary")
+                                apply_all_btn = gr.Button("✅ Sincronizar Todo con Backend", variant="primary")
+                                config_status = gr.Textbox(label="Estado", lines=2, interactive=False)
+                                config_info = gr.JSON(label="Configuración (JSON)")
                             
-                            with gr.Column(scale=1):
-                                gr.Markdown("#### Gases disponibles")
-                                gr.Markdown("""
-                                - **air.txt**: Atmósfera estándar
-                                - **H2O.txt**: Vapor de agua
-                                - **CO2.txt**: Dióxido de carbono
-                                - **O3.txt**: Ozono
-                                - **CH4.txt**: Metano
-                                """)
-                                atm_status = gr.Textbox(label="Estado", lines=4, interactive=False)
-                    
-                    # Subtab: Avanzado
-                    with gr.Tab("🔧 Avanzado"):
-                        gr.Markdown("### Aplicar Toda la Configuración")
-                        with gr.Row():
-                            load_config_btn = gr.Button("📥 Cargar Config Actual", variant="secondary")
-                            apply_all_btn = gr.Button("✅ Aplicar Toda la Config", variant="primary", size="lg")
+                            with gr.Column():
+                                cache_section = build_cache_management_section()
                         
-                        with gr.Row():
-                            config_status = gr.Textbox(label="Estado de Configuración", lines=4, interactive=False)
-                        
-                        with gr.Row():
-                            config_info = gr.JSON(label="Configuración Completa (JSON)")
-                        
-                        gr.Markdown("---")
-                        gr.Markdown("### Gestión de Cache")
-                        cache_section = build_cache_management_section()
+                        # Componentes ocultos o extras necesarios para la lógica
+                        air_plot = gr.Plot(visible=False) # Mantenido por compatibilidad de callbacks
                 
         # Callback para aplicar solo configuración de cámara
         def apply_camera_config_cb(spp_k, width, height, fov, rx, ry, rz, tx, ty, tz, theta, phi, radius, tgx, tgy, tgz):
@@ -572,96 +513,103 @@ def create_mitsuba_viewer_interface():
             outputs=[cam_status]
         )
 
-        # Unified config section para compatibilidad con callbacks
-        config_section = {
-            "camera_spp": camera_spp,
-            "camera_width": camera_width,
-            "camera_height": camera_height,
-            "rotate_x": rotate_x,
-            "rotate_y": rotate_y,
-            "rotate_z": rotate_z,
-            "translate_x": translate_x,
-            "translate_y": translate_y,
-            "translate_z": translate_z,
-            "theta": theta,
-            "phi": phi,
-            "radius": radius,
-            "target_x": target_x,
-            "target_y": target_y,
-            "target_z": target_z,
-            "fov": fov,
-            "wl_min": wl_min,
-            "wl_max": wl_max,
-            "bands": bands,
-            "spectrum_apply_btn": spectrum_apply_btn,
-            "spectrum_status": spectrum_status,
-            "air_temperature": air_temperature,
-            "air_file": air_file,
-            "air_suggest_list": air_suggest_list,
-            "air_apply_suggest_btn": air_apply_suggest_btn,
-            "air_plot": air_plot,
-            "atm_status": atm_status,
-            "load_config_btn": load_config_btn,
-            "apply_all_btn": apply_all_btn,
-            "config_status": config_status,
+        # Callbacks para Espectro y Atmósfera (antes eran parte de apply_all o vivían en Tab Config)
+        def apply_spectrum_config_cb(wl_min, wl_max, bands):
+            try:
+                res = get_client().update_wavelengths(wl_min * 1000.0, wl_max * 1000.0, bands)
+                if res.get("status") == "success":
+                    return "✅ Espectro actualizado"
+                return f"❌ Error: {res.get('detail')}"
+            except Exception as e:
+                return f"❌ Error: {e}"
 
-            "config_info": config_info,
+        spectrum_apply_btn.click(
+            fn=apply_spectrum_config_cb,
+            inputs=[wl_min, wl_max, bands],
+            outputs=[spectrum_status]
+        )
+
+        def apply_atmosphere_cb(temp, filename):
+            try:
+                client = get_client()
+                client.set_air_temperature(temp)
+                if filename:
+                    client.set_air_attenuation_by_filename(filename)
+                return "✅ Atmósfera actualizada", air_plot_cb()
+            except Exception as e:
+                return f"❌ Error: {e}", None
+
+        air_apply_suggest_btn.click(
+            fn=apply_atmosphere_cb,
+            inputs=[air_temperature, air_suggest_list],
+            outputs=[atm_status, air_plot]
+        )
+
+        # Unified config section para compatibilidad con callbacks existentes
+        config_section = {
+            "camera_spp": camera_spp, "camera_width": camera_width, "camera_height": camera_height,
+            "rotate_x": rotate_x, "rotate_y": rotate_y, "rotate_z": rotate_z,
+            "translate_x": translate_x, "translate_y": translate_y, "translate_z": translate_z,
+            "theta": theta, "phi": phi, "radius": radius,
+            "target_x": target_x, "target_y": target_y, "target_z": target_z,
+            "fov": fov, "wl_min": wl_min, "wl_max": wl_max, "bands": bands,
+            "spectrum_apply_btn": spectrum_apply_btn, "spectrum_status": spectrum_status,
+            "air_temperature": air_temperature, "air_file": air_file,
+            "air_suggest_list": air_suggest_list, "air_apply_suggest_btn": air_apply_suggest_btn,
+            "air_plot": air_plot, "atm_status": atm_status,
+            "load_config_btn": load_config_btn, "apply_all_btn": apply_all_btn,
+            "config_status": config_status, "config_info": config_info,
         }
 
         # Visualización: ejecutar todos los renders y mostrarlos en galería
         def run_simulation_cb():
-            """Renderiza todos los mapas necesarios y crea un ZIP en memoria con los .npy.
-            - Evita archivos temporales intermedios para cada .npy
-            - Verifica integridad cargando los arrays desde bytes antes de empaquetar
-            - Devuelve una ruta a un único ZIP temporal por compatibilidad con gr.File
-            """
+            """Renderiza todos los mapas necesarios y crea un ZIP con los .npy."""
             import io
             import zipfile
+            import tempfile
 
             client = get_client()
             items = []  # (image, caption)
             npy_data = []  # [(filename, numpy_array)]
 
-            # Helper para consumir bytes .npy -> array (validación) -> item galería y colecta para ZIP
             def _consume_npy(bytes_buf: bytes, title: str, expect_first_band: bool = False, explicit_name: str | None = None):
                 nonlocal items, npy_data
-                if not bytes_buf:
-                    return
+                if not bytes_buf: return
                 try:
                     arr = np.load(io.BytesIO(bytes_buf))
-                except Exception:
-                    return
-                # Generar imagen para galería
-                try:
+                    # Visualización en galería
                     if expect_first_band and arr.ndim == 3:
                         arr2d = arr[:, :, 0]
                     else:
                         arr2d = arr if arr.ndim == 2 else (arr[:, :, 0] if arr.ndim == 3 else arr)
                     items.append((normalize_to_uint8(arr2d), title))
-                except Exception:
-                    # Si falla visualización, igual empaquetamos el array crudo
-                    pass
-                # Guardar array para ZIP con un nombre seguro
-                safe = (explicit_name or title).lower().replace(" ", "_") + ".npy"
-                npy_data.append((safe, arr))
+                    
+                    # Guardar para el ZIP
+                    safe_fname = (explicit_name or title).lower().replace(" ", "_") + ".npy"
+                    npy_data.append((safe_fname, arr))
+                except Exception as e:
+                    logger.error(f"Error procesando {title}: {e}")
 
-            # 1) Thermal
+            # 1) Thermal & Raw
             try:
                 r = client.render_thermal()
                 if r.get("status") == "ok":
                     _consume_npy(r.get("npy_bytes"), "Thermal", expect_first_band=True, explicit_name="thermal")
-            except Exception:
-                pass
+                
+                # Intentar obtener el Raw (L_surface)
+                raw_res = client.session.get(f"{client.base_url}/render/thermal/raw")
+                if raw_res.status_code == 200:
+                    _consume_npy(raw_res.content, "Thermal Raw", expect_first_band=True, explicit_name="thermal_raw")
+            except Exception as e: logger.error(f"Thermal steps fail: {e}")
 
             # 2) Depth
             try:
                 r = client.render_depth()
                 if r.get("status") == "ok":
-                    _consume_npy(r.get("npy_bytes"), "Depth", expect_first_band=False, explicit_name="depth")
-            except Exception:
-                pass
+                    _consume_npy(r.get("npy_bytes"), "Depth", explicit_name="depth")
+            except Exception as e: logger.error(f"Depth fail: {e}")
 
-            # 3) Air renders & temperature map
+            # 3) Otros (Air & TMap)
             for endpoint, title, first_band in [
                 ("/render/air/blackbody", "Blackbody Air", True),
                 ("/render/air/transmittance", "Transmittance Air", True),
@@ -669,34 +617,29 @@ def create_mitsuba_viewer_interface():
                 ("/render/temperature/map", "Temperature Map", False),
             ]:
                 try:
-                    r = client.session.get(f"{client.base_url}{endpoint}")
-                    r.raise_for_status()
-                    _consume_npy(r.content, title, expect_first_band=first_band)
-                except Exception:
-                    continue
+                    res = client.session.get(f"{client.base_url}{endpoint}")
+                    if res.status_code == 200:
+                        _consume_npy(res.content, title, expect_first_band=first_band)
+                except Exception as e: logger.error(f"Render {title} fail: {e}")
 
-            # Empaquetar ZIP completamente en memoria y luego volcar a un único archivo temporal
-            zip_path = None
+            # Empaquetar el ZIP
+            if not npy_data:
+                return items, None
+
             try:
-                mem_zip = io.BytesIO()
-                with zipfile.ZipFile(mem_zip, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-                    for fname, arr in npy_data:
-                        try:
+                # Crear un archivo temporal único para esta ejecución
+                fd, path = tempfile.mkstemp(suffix=".zip")
+                with os.fdopen(fd, 'wb') as tmp:
+                    with zipfile.ZipFile(tmp, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                        for fname, arr in npy_data:
                             buf = io.BytesIO()
                             np.save(buf, arr)
                             zf.writestr(fname, buf.getvalue())
-                        except Exception:
-                            continue
-                mem_zip.seek(0)
-
-                # Compatibilidad: gr.File espera normalmente una ruta a archivo
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tf:
-                    tf.write(mem_zip.getvalue())
-                    zip_path = tf.name
-            except Exception:
-                zip_path = None
-
-            return items, zip_path
+                logger.info(f"ZIP de resultados creado en {path} con {len(npy_data)} archivos")
+                return items, path
+            except Exception as e:
+                logger.error(f"Error creando ZIP final: {e}")
+                return items, None
 
         visualization_section["run_sim_btn"].click(
             fn=run_simulation_cb,
@@ -859,6 +802,13 @@ def create_mitsuba_viewer_interface():
             except Exception:
                 air_fig = None
 
+            # Valores para la sección de análisis
+            analysis_wl_min = updates[16].get("value") if len(updates) > 16 else None
+            analysis_wl_max = updates[17].get("value") if len(updates) > 17 else None
+            # Convertir de um a nm si es necesario (el Analysis section usa nm según las etiquetas)
+            if analysis_wl_min: analysis_wl_min *= 1000.0
+            if analysis_wl_max: analysis_wl_max *= 1000.0
+
             return (
                 img_pil,
                 info_text,
@@ -868,6 +818,8 @@ def create_mitsuba_viewer_interface():
                 air_suggest_update,
                 *updates,
                 air_fig,
+                gr.update(value=analysis_wl_min),
+                gr.update(value=analysis_wl_max),
             )
 
         upload_section["upload_btn"].click(
@@ -878,7 +830,7 @@ def create_mitsuba_viewer_interface():
                 upload_section["scene_info"],
                 og_section["selector"],
                 upload_section["scene_json"],
-                og_section["selector"],
+                spectral_section["object_select"],
                 # Sugerencias de atenuación (precargadas)
                 config_section["air_suggest_list"],
                 # Prefill de Config (20 total)
@@ -905,6 +857,8 @@ def create_mitsuba_viewer_interface():
                 config_section["config_info"],
                 # Plot de atenuación actual
                 config_section["air_plot"],
+                spectral_section["wl_min"],
+                spectral_section["wl_max"],
             ],
         )
 
@@ -982,6 +936,14 @@ def create_mitsuba_viewer_interface():
                 air_fig = air_plot_cb()
             except Exception:
                 air_fig = None
+
+            # Valores para la sección de análisis
+            analysis_wl_min = updates[16].get("value") if len(updates) > 16 else None
+            analysis_wl_max = updates[17].get("value") if len(updates) > 17 else None
+            # Convertir de um a nm
+            if analysis_wl_min: analysis_wl_min *= 1000.0
+            if analysis_wl_max: analysis_wl_max *= 1000.0
+
             return (
                 img_pil,
                 info_text,
@@ -991,18 +953,9 @@ def create_mitsuba_viewer_interface():
                 air_suggest_update,
                 *updates,
                 air_fig,
+                gr.update(value=analysis_wl_min),
+                gr.update(value=analysis_wl_max),
             )
-
-        # Auto-sugerir al cargar la interfaz (además de atenuación de aire)
-        def bootstrap_default_suggest():
-            return default_suggest_cb()
-
-        # Asignar el valor del dropdown automáticamente al cargar
-        interface.load(
-            fn=bootstrap_default_suggest,
-            inputs=[],
-            outputs=[upload_section["default_suggest"]],
-        )
 
         # Botón Recargar por defecto: repoblar dropdown de escenas predeterminadas
         if "reload_default_btn" in upload_section:
@@ -1020,7 +973,7 @@ def create_mitsuba_viewer_interface():
                 upload_section["scene_info"],
                 og_section["selector"],
                 upload_section["scene_json"],
-                og_section["selector"],
+                spectral_section["object_select"],
                 # Sugerencias de atenuación (precargadas)
                 config_section["air_suggest_list"],
                 # Prefill de Config (20 total)
@@ -1047,6 +1000,8 @@ def create_mitsuba_viewer_interface():
                 config_section["config_info"],
                 # Plot de atenuación actual
                 config_section["air_plot"],
+                spectral_section["wl_min"],
+                spectral_section["wl_max"],
             ],
         )
 
@@ -1733,28 +1688,69 @@ def create_mitsuba_viewer_interface():
                 return None
             return None
 
-        # Precargar sugerencias y plot de atenuación al cargar la interfaz
-        def air_bootstrap_cb():
-            dd = air_suggest_cb()
-            fig = air_plot_cb()
-            # temperatura del aire
+        # Precargar sugerencias, plot de atenuación y objetos al cargar la interfaz
+        def master_bootstrap_cb():
+            # 1. Escenas default
+            dd_choices = []
+            try:
+                client = get_client()
+                data = client.suggest_default_scenes()
+                if not (isinstance(data, dict) and data.get("status") == "error"):
+                    dd_choices = sorted([str(x) for x in data])
+            except Exception:
+                pass
+            dd_update = gr.update(choices=dd_choices, value=dd_choices[0] if dd_choices else None)
+
+            # 2. Atenuación aire
+            air_dd = air_suggest_cb()
+            air_fig = air_plot_cb()
             try:
                 air_temp = get_client().get_air_temperature()
             except Exception:
                 air_temp = None
-            return dd, fig, gr.update(value=air_temp)
+            
+            # 3. Objetos (si ya hay una escena cargada en el servidor)
+            obj_labels = []
+            try:
+                _, _, obj_labels = _summarize_scene_and_update_state()
+            except Exception:
+                pass
+            obj_update = gr.update(choices=obj_labels, value=None)
+
+            # 4. UI de Análisis (forzar visibilidad inicial según plot_type por defecto)
+            # El default es "Radiancia Térmica"
+            analysis_ui = update_spectral_ui("Radiancia Térmica")
+
+            return (
+                dd_update, 
+                air_dd, air_fig, gr.update(value=air_temp),
+                obj_update, obj_update,
+                *analysis_ui
+            )
 
         interface.load(
-            fn=air_bootstrap_cb,
+            fn=master_bootstrap_cb,
             inputs=[],
-            outputs=[config_section["air_suggest_list"], config_section["air_plot"], config_section["air_temperature"]],
+            outputs=[
+                upload_section["default_suggest"],
+                config_section["air_suggest_list"], 
+                config_section["air_plot"], 
+                config_section["air_temperature"],
+                og_section["selector"],
+                spectral_section["object_select"],
+                spectral_section["object_select"], # para update_spectral_ui (show_object)
+                spectral_section["temp_k"],
+                spectral_section["gas_type"],
+                spectral_section["wl_min"],
+                spectral_section["wl_max"],
+            ],
         )
 
         # --------------------------------------------------------------------------------------
         # Callback para interpolación de cámara
         # --------------------------------------------------------------------------------------
         def camera_interpolation_cb(
-            mode, ox, oy, oz, ex, ey, ez, st, sa, sr, et, ea, er, lock_a, tx, ty, tz, steps, *args
+            mode, ox, oy, oz, ex, ey, ez, st, sa, sr, et, ea, er, lock_a, auto_fov, initial_fov, tx, ty, tz, steps, *args
         ):
             client = get_client()
             try:
@@ -1767,6 +1763,7 @@ def create_mitsuba_viewer_interface():
                     res = client.generate_spherical_interpolation(
                         start_theta=st, end_theta=et, start_azimuth=sa, end_azimuth=ea,
                         start_radius=sr, end_radius=er, lock_azimuth_to_end=lock_a,
+                        auto_fov=auto_fov, initial_fov=initial_fov,
                         tracked_point=[tx, ty, tz], num_steps=int(steps)
                     )
                     if isinstance(res, dict) and res.get("status") == "success":
@@ -1781,7 +1778,7 @@ def create_mitsuba_viewer_interface():
             except Exception as e:
                 return f"❌ Error: {str(e)}", []
 
-        def render_camera_animation_cb(mode, ox, oy, oz, ex, ey, ez, st, sa, sr, et, ea, er, lock_a, tx, ty, tz, steps, anim_spp, anim_bands, anim_width, anim_height):
+        def render_camera_animation_cb(mode, ox, oy, oz, ex, ey, ez, st, sa, sr, et, ea, er, lock_a, auto_fov, initial_fov, tx, ty, tz, steps, anim_spp, anim_bands, anim_width, anim_height):
             client = get_client()
             try:
                 if mode == "Lineal":
@@ -1800,6 +1797,7 @@ def create_mitsuba_viewer_interface():
                     payload = {
                         "start_theta": st, "end_theta": et, "start_azimuth": sa, "end_azimuth": ea,
                         "start_radius": sr, "end_radius": er, "lock_azimuth_to_end": lock_a,
+                        "auto_fov": auto_fov, "initial_fov": initial_fov,
                         "tracked_point": [tx, ty, tz], "num_steps": int(steps),
                         "spp": int(2**anim_spp),
                         "num_bands": int(anim_bands),
@@ -1816,7 +1814,7 @@ def create_mitsuba_viewer_interface():
             except Exception as e:
                 return f"❌ Error: {str(e)}", None
 
-        def preview_camera_path_cb(mode, ox, oy, oz, ex, ey, ez, st, sa, sr, et, ea, er, lock_a, tx, ty, tz, steps, *args):
+        def preview_camera_path_cb(mode, ox, oy, oz, ex, ey, ez, st, sa, sr, et, ea, er, lock_a, auto_fov, initial_fov, tx, ty, tz, steps, *args):
             client = get_client()
             try:
                 if mode == "Lineal":
@@ -1826,6 +1824,7 @@ def create_mitsuba_viewer_interface():
                     payload = {
                         "start_theta": st, "end_theta": et, "start_azimuth": sa, "end_azimuth": ea,
                         "start_radius": sr, "end_radius": er, "lock_azimuth_to_end": lock_a,
+                        "auto_fov": auto_fov, "initial_fov": initial_fov,
                         "tracked_point": [tx, ty, tz], "num_steps": int(steps)
                     }
                     url = f"{client.base_url}/scene/camera/animation/preview/spherical"
@@ -1838,7 +1837,7 @@ def create_mitsuba_viewer_interface():
             except Exception as e:
                 return f"❌ Error: {str(e)}", None
 
-        def export_anim_cb(mode, ox, oy, oz, ex, ey, ez, st, sa, sr, et, ea, er, lock_a, tx, ty, tz, steps, anim_spp, anim_bands, anim_width, anim_height):
+        def export_anim_cb(mode, ox, oy, oz, ex, ey, ez, st, sa, sr, et, ea, er, lock_a, auto_fov, initial_fov, tx, ty, tz, steps, anim_spp, anim_bands, anim_width, anim_height):
             import json
             client = get_client()
             if mode == "Lineal":
@@ -1856,6 +1855,7 @@ def create_mitsuba_viewer_interface():
                 data = {
                     "start_theta": st, "end_theta": et, "start_azimuth": sa, "end_azimuth": ea,
                     "start_radius": sr, "end_radius": er, "lock_azimuth_to_end": lock_a,
+                    "auto_fov": auto_fov, "initial_fov": initial_fov,
                     "tracked_point": [tx, ty, tz], "num_steps": int(steps),
                     "spp": int(anim_spp),
                     "num_bands": int(anim_bands),
@@ -1876,6 +1876,8 @@ def create_mitsuba_viewer_interface():
             camera_interp_section["start_theta"], camera_interp_section["start_azimuth"], camera_interp_section["start_radius"],
             camera_interp_section["end_theta"], camera_interp_section["end_azimuth"], camera_interp_section["end_radius"],
             camera_interp_section["lock_azimuth"],
+            camera_interp_section["auto_fov"],
+            camera_interp_section["initial_fov"],
             camera_interp_section["target_x"], camera_interp_section["target_y"], camera_interp_section["target_z"],
             camera_interp_section["num_steps"],
             camera_interp_section["anim_spp"],
@@ -2001,10 +2003,18 @@ def create_mitsuba_viewer_interface():
         )
         
         # Callback para generar gráfico
-        def generate_spectral_plot_cb(plot_type, object_id, temp_k, gas_type, wl_min, wl_max):
+        def generate_spectral_plot_cb(plot_type, object_label, temp_k, gas_type, wl_min_um, wl_max_um):
             """Genera gráfico espectral según parámetros seleccionados."""
             try:
                 client = get_client()
+                
+                # Resolver ID real del objeto (ej: meshes/Cube.ply) a partir de la etiqueta (ej: Cube)
+                object_id = viewer_state.object_id_mapping.get(object_label, object_label)
+                
+                # Convertir µm (del UI) a nm (que espera el backend)
+                wl_min = int(wl_min_um * 1000.0) if wl_min_um else None
+                wl_max = int(wl_max_um * 1000.0) if wl_max_um else None
+
                 fig = go.Figure()
                 plot_info = ""
                 title_text = "Datos Espectrales"
@@ -2021,69 +2031,50 @@ def create_mitsuba_viewer_interface():
                         clean_y.append(float(y_val))
                     return clean_x, clean_y
                 
-                if plot_type == "Emisividad":
+                if plot_type in ["Emisividad", "Reflectancia"]:
                     if not object_id:
                         return None, "❌ Por favor selecciona un objeto"
-                    result = client.get_emissivity_spectrum(
+                    result = client.get_object_spectral_data(
                         object_id,
-                        wavelength_min_nm=int(wl_min) if wl_min else None,
-                        wavelength_max_nm=int(wl_max) if wl_max else None
+                        wavelength_min_nm=wl_min,
+                        wavelength_max_nm=wl_max
                     )
                     if result.get("status") != "success":
                         return None, f"❌ Error: {result.get('detail', 'Error desconocido')}"
                     
                     data = result.get("data", {})
                     wavelengths = data.get("wavelengths", [])
-                    values = data.get("values", [])
+                    
+                    if plot_type == "Emisividad":
+                        values = data.get("emissivity", [])
+                        color = 'red'
+                        label_name = 'Emisividad'
+                    else:
+                        values = data.get("reflectance", [])
+                        color = 'blue'
+                        label_name = 'Reflectancia'
+
                     wavelengths, values = clean_xy(wavelengths, values)
                     if not values:
-                        return None, "❌ No hay datos válidos de emisividad"
+                        return None, f"❌ No hay datos válidos de {label_name.lower()}"
                     
                     fig.add_trace(go.Scatter(
                         x=wavelengths, y=values,
                         mode='lines+markers',
-                        name='Emisividad',
-                        line=dict(color='red', width=2),
-                        hovertemplate='<b>Longitud de onda:</b> %{x:.1f} nm<br><b>Emisividad:</b> %{y:.4f}<extra></extra>'
+                        name=label_name,
+                        line=dict(color=color, width=2),
+                        hovertemplate=f'<b>Longitud de onda:</b> %{{x:.1f}} nm<br><b>{label_name}:</b> %{{y:.4f}}<extra></extra>'
                     ))
-                    plot_info = f"✅ Emisividad de {object_id}\nRango: {min(values):.3f} - {max(values):.3f}"
-                    title_text = f"Emisividad - {object_id}"
-                    ylabel_text = "Emisividad (0-1)"
-                    
-                elif plot_type == "Reflectancia":
-                    if not object_id:
-                        return None, "❌ Por favor selecciona un objeto"
-                    result = client.get_reflectance_spectrum(
-                        object_id,
-                        wavelength_min_nm=int(wl_min) if wl_min else None,
-                        wavelength_max_nm=int(wl_max) if wl_max else None
-                    )
-                    if result.get("status") != "success":
-                        return None, f"❌ Error: {result.get('detail', 'Error desconocido')}"
-                    
-                    data = result.get("data", {})
-                    wavelengths = data.get("wavelengths", [])
-                    values = data.get("values", [])
-                    wavelengths, values = clean_xy(wavelengths, values)
-                    if not values:
-                        return None, "❌ No hay datos válidos de reflectancia"
-                    
-                    fig.add_trace(go.Scatter(
-                        x=wavelengths, y=values,
-                        mode='lines+markers',
-                        name='Reflectancia',
-                        line=dict(color='blue', width=2),
-                        hovertemplate='<b>Longitud de onda:</b> %{x:.1f} nm<br><b>Reflectancia:</b> %{y:.4f}<extra></extra>'
-                    ))
-                    plot_info = f"✅ Reflectancia de {object_id}\nRango: {min(values):.3f} - {max(values):.3f}"
-                    title_text = f"Reflectancia - {object_id}"
-                    ylabel_text = "Reflectancia (0-1)"
+                    plot_info = f"✅ {label_name} de {object_label}\nRango: {min(values):.3f} - {max(values):.3f}"
+                    title_text = f"{label_name} - {object_label}"
+                    ylabel_text = f"{label_name} (0-1)"
                     
                 elif plot_type == "Radiancia Térmica":
+                    # Usar 8000-14000 nm por defecto si no se especifican rangos
                     result = client.get_blackbody_spectrum(
                         temperature_k=temp_k,
-                        wavelength_min_nm=wl_min,
-                        wavelength_max_nm=wl_max,
+                        wavelength_min_nm=wl_min or 8000,
+                        wavelength_max_nm=wl_max or 14000,
                         num_points=100
                     )
                     if result.get("status") != "success":
@@ -2111,8 +2102,8 @@ def create_mitsuba_viewer_interface():
                 elif plot_type == "Atenuación Atmosférica":
                     result = client.get_atmospheric_spectrum(
                         gas=gas_type,
-                        wavelength_min_nm=int(wl_min) if wl_min else None,
-                        wavelength_max_nm=int(wl_max) if wl_max else None
+                        wavelength_min_nm=wl_min,
+                        wavelength_max_nm=wl_max
                     )
                     if result.get("status") != "success":
                         return None, f"❌ Error: {result.get('detail', 'Error desconocido')}"
@@ -2138,19 +2129,14 @@ def create_mitsuba_viewer_interface():
                     fig.add_trace(go.Scatter(
                         x=wavelengths_t, y=transmittance,
                         mode='lines',
-                        name='Transmitancia',
-                        line=dict(color='green', width=2),
-                        hovertemplate='<b>Longitud de onda:</b> %{x:.1f} nm<br><b>Transmitancia:</b> %{y:.4f}<extra></extra>'
+                        name='Transmitancia (%)',
+                        line=dict(color='green', width=2, dash='dash'),
+                        hovertemplate='<b>Longitud de onda:</b> %{x:.1f} nm<br><b>Transmitancia:</b> %{y:.2f}%<extra></extra>'
                     ))
-                    
-                    attenuation_mean = np.mean(attenuation) if attenuation else 0.0
-                    plot_info = (
-                        f"✅ Atmósfera: {gas_type}\n"
-                        f"Promedio Atenuación: {attenuation_mean:.3f}"
-                    )
-                    title_text = f"Atenuación Atmosférica - {gas_type}"
-                    ylabel_text = "Atenuación / Transmitancia (escala log)"
-                    yaxis_type = "log"  # Escala logarítmica para atenuación atmosférica
+                    plot_info = f"✅ Datos atmosféricos para {gas_type}"
+                    title_text = f"Atenuación y Transmitancia - {gas_type}"
+                    ylabel_text = "Atenuación / Transmitancia"
+                    yaxis_type = "log"
                 
                 # Configurar diseño del gráfico
                 fig.update_layout(
@@ -2171,6 +2157,67 @@ def create_mitsuba_viewer_interface():
                 logger.error(error_msg, exc_info=True)
                 return None, error_msg
         
+        def export_spectral_data_cb(plot_type, object_label, temp_k, gas_type, wl_min, wl_max):
+            """Exporta los datos del último gráfico generado a CSV."""
+            try:
+                import pandas as pd
+                client = get_client()
+                
+                # Obtener los datos según el tipo
+                wavelengths = []
+                values = []
+                filename = "spectral_data.csv"
+
+                if plot_type in ["Emisividad", "Reflectancia"]:
+                    # Resolver ID
+                    object_id = viewer_state.object_id_mapping.get(object_label, object_label)
+                    res = client.get_object_spectral_data(object_id, wl_min, wl_max)
+                    if res.get("status") == "success":
+                        wavelengths = res["data"].get("wavelengths", [])
+                        if plot_type == "Emisividad":
+                            values = res["data"].get("emissivity", [])
+                            filename = f"emissivity_{object_label}.csv"
+                        else:
+                            values = res["data"].get("reflectance", [])
+                            filename = f"reflectance_{object_label}.csv"
+                elif plot_type == "Radiancia Térmica":
+                    res = client.get_blackbody_spectrum(temp_k, wl_min, wl_max)
+                    if res.get("status") == "success":
+                        wavelengths = res["data"].get("wavelengths", [])
+                        values = res["data"].get("radiance", [])
+                        filename = f"blackbody_{temp_k}K.csv"
+                elif plot_type == "Atenuación Atmosférica":
+                    res = client.get_atmospheric_spectrum(gas_type, wl_min, wl_max)
+                    if res.get("status") == "success":
+                        wavelengths = res["data"].get("wavelengths", [])
+                        values = res["data"].get("attenuation", [])
+                        filename = f"atmosphere_{gas_type}.csv"
+
+                if not wavelengths:
+                    return "❌ No hay datos para exportar", None, gr.update(visible=False)
+
+                # Crear CSV temporal
+                df = pd.DataFrame({"wavelength_nm": wavelengths, "value": values})
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tf:
+                    df.to_csv(tf.name, index=False)
+                    return f"✅ Datos exportados a {filename}", tf.name, gr.update(visible=True)
+            except Exception as e:
+                return f"❌ Error exportando datos: {str(e)}", None, gr.update(visible=False)
+
+        def export_spectral_plot_cb(plot_fig):
+            """Exporta el gráfico Plotly actual a PNG."""
+            try:
+                if plot_fig is None:
+                    return "❌ No hay gráfico para exportar", None, gr.update(visible=False)
+                
+                # Plotly figure a PNG usando kaleido (si está disponible) o el método incorporado
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tf:
+                    plot_fig.write_image(tf.name)
+                    return "✅ Gráfico exportado a PNG", tf.name, gr.update(visible=True)
+            except Exception as e:
+                logger.error(f"Error exportando plot: {e}")
+                return f"❌ Error exportando gráfico (requiere 'kaleido'): {str(e)}", None, gr.update(visible=False)
+
         spectral_section["generate_plot_btn"].click(
             fn=generate_spectral_plot_cb,
             inputs=[
@@ -2184,6 +2231,33 @@ def create_mitsuba_viewer_interface():
             outputs=[
                 spectral_section["spectral_plot"],
                 spectral_section["plot_info"],
+            ],
+        )
+
+        spectral_section["export_data_btn"].click(
+            fn=export_spectral_data_cb,
+            inputs=[
+                spectral_section["plot_type"],
+                spectral_section["object_select"],
+                spectral_section["temp_k"],
+                spectral_section["gas_type"],
+                spectral_section["wl_min"],
+                spectral_section["wl_max"],
+            ],
+            outputs=[
+                spectral_section["export_status"],
+                spectral_section["download_csv"],
+                spectral_section["download_csv"],
+            ],
+        )
+
+        spectral_section["export_plot_btn"].click(
+            fn=export_spectral_plot_cb,
+            inputs=[spectral_section["spectral_plot"]],
+            outputs=[
+                spectral_section["export_status"],
+                spectral_section["download_png"],
+                spectral_section["download_png"],
             ],
         )
 

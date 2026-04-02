@@ -10,7 +10,6 @@ from src.config import (
     PathManager, 
     OUTPUT_STATIC_DIR, 
     OUTPUT_ASSETS_DIR,
-    DEFAULT_EMISIVITY_DIR, 
     get_config_scene_dict, 
     save_config_scene_dict
 )
@@ -342,7 +341,7 @@ class ObjService:
     @log_execution()
     @handle_file_errors()
     def get_suggested_object_emissivity(self) -> list[str]:
-        path = os.fspath(DEFAULT_EMISIVITY_DIR)
+        path = os.fspath(PathManager.get_signatures_dir())
         return [f for f in os.listdir(path) if f.lower().endswith(".txt")]
 
 
@@ -364,7 +363,7 @@ class ObjService:
     
     @log_execution()
     def update_default_emissivity(self, file_name: str, object_id: str) -> None:
-        path = os.fspath(DEFAULT_EMISIVITY_DIR)
+        path = os.fspath(PathManager.get_signatures_dir())
         default_file_path = os.path.join(path, file_name)
         
         # Validar que el archivo de emisividad existe

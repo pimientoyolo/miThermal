@@ -385,6 +385,8 @@ def build_camera_interpolation_section() -> Dict[str, gr.components.Component]:
 			
 			with gr.Row():
 				lock_azimuth = gr.Checkbox(label="Bloquear Azimuth al valor final", value=False)
+				auto_fov = gr.Checkbox(label="Auto-FOV basado en Radio", value=False)
+				initial_fov = gr.Number(label="FOV Referencia (45 default)", value=45.0, precision=2)
 			
 			with gr.Row():
 				gr.Markdown("### Funciones Personalizadas (Opcional)")
@@ -471,6 +473,8 @@ def build_camera_interpolation_section() -> Dict[str, gr.components.Component]:
 		"end_azimuth": end_azimuth,
 		"end_radius": end_radius,
 		"lock_azimuth": lock_azimuth,
+		"auto_fov": auto_fov,
+		"initial_fov": initial_fov,
 		"theta_expr": theta_expr,
 		"azimuth_expr": azimuth_expr,
 		"radius_expr": radius_expr,
