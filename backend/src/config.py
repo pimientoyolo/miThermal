@@ -72,6 +72,7 @@ class PathManager:
             "blackbody_air": "scene_blackbody_air.xml",
             "transmittance_blackbody_air": "scene_transmittance_blackbody_air.xml",
             "temperature_map": "scene_temperature_map.xml",
+            "emissivity_map": "scene_emissivity_map.xml",
         }
         return str(OUTPUT_STATIC_DIR / scene_files.get(scene_type, "scene.xml"))
     
@@ -82,7 +83,7 @@ class PathManager:
         
         Args:
             result_type: Tipo de resultado (rgb, depth, thermal, blackbody_air, 
-                        transmittance_blackbody_air, contribution_blackbody_air, temperature_map)
+                        transmittance_blackbody_air, contribution_blackbody_air, temperature_map, emissivity_map)
         
         Returns:
             Ruta del archivo de resultado
@@ -96,6 +97,7 @@ class PathManager:
             "transmittance_blackbody_air": "transmittance_blackbody_air.npy",
             "contribution_blackbody_air": "contribution_blackbody_air.npy",
             "temperature_map": "temperature_map.npy",
+            "emissivity_map": "emissivity_map.npy",
         }
         return str(OUTPUT_STATIC_RESULT_DIR / result_files[result_type])
     

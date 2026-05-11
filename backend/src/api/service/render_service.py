@@ -134,3 +134,11 @@ class RenderService(RenderServiceBase):
             SceneType.TEMPERATURE_MAP.value,
             self.render_thermal.render_temperature_map
         )
+
+    def render_emissivity_map(self):
+        """Renderiza mapa de emisividad integrada."""
+        self._validate_scene_file(SceneType.EMISSIVITY_MAP.value)
+        self._render_with_validation(
+            SceneType.EMISSIVITY_MAP.value,
+            self.render_thermal.render_emissivity_map
+        )

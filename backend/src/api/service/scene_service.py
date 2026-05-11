@@ -622,6 +622,101 @@ class SceneService(BaseService):
         if scene_dict:
             self.scene_parser.save_dict_as_xml(scene_dict, temperature_map_xml)
 
+    def prepare_emissivity_map_scene(self):
+        """
+        Prepara la escena para renderizar el mapa de emisividad integrada de los objetos.
+        Sumamos la emisividad de todas las bandas para cada objeto.
+        """
+        thermal_path = path_manager.get_scene_path("thermal")
+        # Verificar si existe la escena térmica, si no, crearla
+        if not os.path.exists(thermal_path):
+            self.prepare_thermal_scene()
+            # Re-verificar después de intentar crearla
+            if not os.path.exists(thermal_path):
+                raise HTTPException(
+                    status_code=500,
+                    detail=f"No se pudo crear o encontrar la escena térmica requerida: {thermal_path}"
+                )
+
+        # Crear la escena de mapa de emisividad copiando la escena térmica
+        emissivity_map_xml = path_manager.get_scene_path("emissivity_map")
+        shutil.copyfile(thermal_path, emissivity_map_xml)
+        scene_dict = self.get_dict_scene(emissivity_map_xml)
+
+        config_scene = get_config_scene_dict()
+        wavelengths = config_scene["wavelengths"]
+        
+        # Para mapa de emisividad, usamos una sola banda monocromática (el centro del rango)
+        w_center = float(np.mean(wavelengths)) if wavelengths else 10000.0
+        
+        # Configurar sensor monocromático
+        if scene_dict and "scene" in scene_dict and "sensor" in scene_dict["scene"]:
+            sensor = scene_dict["scene"]["sensor"]
+            if "film" in sensor:
+                sensor["film"]["@type"] = "specfilm"
+                sensor["film"]["spectrum"] = {
+                    "@type": "regular",
+                    "string": {"@name": "values", "@value": "1.0, 1.0"},
+                    "float": [
+                        {"@name": "wavelength_min", "@value": f"{w_center - 0.5:.4f}"},
+                        {"@name": "wavelength_max", "@value": f"{w_center + 0.5:.4f}"},
+                    ]
+                }
+
+        if scene_dict and "scene" in scene_dict and "shape" in scene_dict["scene"]:
+                shapes = scene_dict["scene"]["shape"]
+
+                # Agregar emisor de emisividad a cada objeto
+                def _add_emissivity_emitter(shape):
+                    id = shape["string"]["@value"]
+                    # Obtener emisividad espectral del objeto
+                    _, emiss_vals = object_utils.read_object_emissivity_file(id)
+                    # Sumar emisividad de todas las bandas
+                    total_emissivity = float(np.sum(emiss_vals))
+                    
+                    # Emitimos directamente la suma de emisividad como radiancia constante
+                    shape["emitter"] = {
+                        "@type": "area",
+                        "spectrum": {
+                            "@name": "radiance",
+                            "@type": "uniform",
+                            "float": {"@name": "value", "@value": str(total_emissivity)}
+                        }
+                    }
+                    if "bsdf" in shape: del shape["bsdf"]
+
+                if isinstance(shapes, list):
+                    for shape in shapes:
+                        _add_emissivity_emitter(shape)
+                elif isinstance(shapes, dict):
+                    _add_emissivity_emitter(shapes)
+
+        # Cambiar el integrador a path para obtener el valor crudo sin sombras ni iluminación indirecta
+        # Al eliminar BSDFs y usar emitters de área, obtenemos el valor del emisor
+        if scene_dict and "scene" in scene_dict:
+            scene_dict["scene"]["integrator"] = {
+                "@type": "path",
+                "integer": {
+                    "@name": "max_depth",
+                    "@value": "1"
+                }
+            }
+
+        # Eliminar el medio atenuante para que no haya absorción
+        if scene_dict and "scene" in scene_dict and "medium" in scene_dict["scene"]:
+            del scene_dict["scene"]["medium"]
+
+        if scene_dict and "scene" in scene_dict and "sensor" in scene_dict["scene"]:
+            if "ref" in scene_dict["scene"]["sensor"]:
+                del scene_dict["scene"]["sensor"]["ref"]
+
+        # eliminar emisor de aire global si existe
+        if scene_dict and "scene" in scene_dict and "emitter" in scene_dict["scene"]:
+            del scene_dict["scene"]["emitter"]
+
+        if scene_dict:
+            self.scene_parser.save_dict_as_xml(scene_dict, emissivity_map_xml)
+
     def get_dict_scene(self, scene_xml_path: str):
         """
         Carga cualquier archivo de escena XML y lo retorna como dict.
@@ -1097,6 +1192,7 @@ class SceneService(BaseService):
             "blackbody_air",
             "transmittance_blackbody_air",
             "temperature_map",
+            "emissivity_map",
         ]
         for scene_type in scene_types:
             self._update_scene_camera_for_type(scene_type)

@@ -20,6 +20,7 @@ class SceneType(str, Enum):
     BLACKBODY_AIR = "blackbody_air"
     TRANSMITTANCE_BLACKBODY_AIR = "transmittance_blackbody_air"
     TEMPERATURE_MAP = "temperature_map"
+    EMISSIVITY_MAP = "emissivity_map"
     
     @property
     def description(self) -> str:
@@ -30,7 +31,8 @@ class SceneType(str, Enum):
             "thermal": "Imagen térmica",
             "blackbody_air": "Blackbody Air",
             "transmittance_blackbody_air": "Transmittance Blackbody Air",
-            "temperature_map": "Mapa de temperatura"
+            "temperature_map": "Mapa de temperatura",
+            "emissivity_map": "Mapa de emisividad integrada"
         }
         return descriptions.get(self.value, self.value)
 

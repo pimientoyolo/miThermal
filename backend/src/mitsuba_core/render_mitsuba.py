@@ -228,3 +228,27 @@ class RenderThermal:
         result_path = self.path_manager.get_result_path("temperature_map")
         np.save(result_path, image_array)
 
+    def render_emissivity_map(self):
+        """Renderiza el mapa de emisividad integrada."""
+        scene_path = self.path_manager.get_scene_path("emissivity_map")
+        scene = self.mi.load_file(scene_path)
+
+        image = self.mi.render(scene)
+
+        # Convertir la imagen a numpy array
+        image_array = np.array(image)
+
+        # Al ser monocromático (uniform spectrum) y un delta de 1.0 implícito en la preparación, 
+        # promediamos las bandas para obtener el valor escalar de la suma de emisividades.
+        if image_array.ndim == 3:
+            image_array = image_array.mean(axis=-1)
+        else:
+            image_array = image_array.squeeze()
+
+        # Crear carpeta si no existe
+        os.makedirs(OUTPUT_STATIC_RESULT_DIR, exist_ok=True)
+
+        # Guardar resultado
+        result_path = self.path_manager.get_result_path("emissivity_map")
+        np.save(result_path, image_array)
+

@@ -107,3 +107,12 @@ async def render_scene_temperature_map() -> StreamingResponse:
         "temperature_map",
         "temperature_map.npy"
     )
+
+@render_router.get("/emissivity/map")
+async def render_scene_emissivity_map() -> StreamingResponse:
+    """Retorna el mapa de emisividad integrada de los objetos"""
+    return await _render_and_stream_npy(
+        render_service.render_emissivity_map,
+        "emissivity_map",
+        "emissivity_map.npy"
+    )
