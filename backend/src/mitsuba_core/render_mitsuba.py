@@ -77,8 +77,13 @@ class RenderThermal:
         mi.set_variant('cuda_ad_spectral')
         self.mi = mi
         self.path_manager = PathManager
+        from src.utils.monitoring.nvidia_stats import PerformanceMonitor
+        self.perf_monitor = PerformanceMonitor()
 
     def render(self):
+        import time
+        start_time = time.time()
+        
         scene_path = self.path_manager.get_scene_path("thermal")
         scene = self.mi.load_file(scene_path)
 
@@ -91,6 +96,10 @@ class RenderThermal:
         # Necesitamos dividir por el ancho de banda (delta) y ajustar por el factor pi
         from src.config import get_config_scene_dict
         config_scene = get_config_scene_dict()
+        
+        # Registrar estadísticas de rendimiento
+        self.perf_monitor.record_render_event(start_time, config_scene)
+        
         wavelengths = config_scene.get("wavelengths", [])
         
         # Radiancia de superficie (Mitsuba output)
