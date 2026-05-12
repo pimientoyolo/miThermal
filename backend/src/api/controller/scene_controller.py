@@ -43,6 +43,7 @@ async def load_scene(file: UploadFile = File(...)) -> FileResponse:
         scene_service.prepare_blackbody_air_scene()
         scene_service.prepare_transmittance_blackbody_air_scene()
         scene_service.prepare_temperature_map()
+        scene_service.prepare_emissivity_map_scene()
         result_path = path_manager.get_result_path("rgb")
         logger.info("POST /scene/load completado request_id=%s", request_id)
         return FileResponse(
@@ -86,6 +87,12 @@ async def create_mi_thermal_scene(
 ) -> FileResponse:
     scene_service.upload_mi_thermal_scene(file)
     render_service.render_basic_scene()
+    scene_service.prepare_depth_scene()
+    scene_service.prepare_thermal_scene()
+    scene_service.prepare_blackbody_air_scene()
+    scene_service.prepare_transmittance_blackbody_air_scene()
+    scene_service.prepare_temperature_map()
+    scene_service.prepare_emissivity_map_scene()
     result_path = path_manager.get_result_path("rgb")
     return FileResponse(result_path, media_type="image/png", filename="rgb.png")
 
@@ -99,6 +106,12 @@ async def set_default_scene(
 ) -> FileResponse:
     scene_service.set_default_scene(file_name)
     render_service.render_basic_scene()
+    scene_service.prepare_depth_scene()
+    scene_service.prepare_thermal_scene()
+    scene_service.prepare_blackbody_air_scene()
+    scene_service.prepare_transmittance_blackbody_air_scene()
+    scene_service.prepare_temperature_map()
+    scene_service.prepare_emissivity_map_scene()
     result_path = path_manager.get_result_path("rgb")
     return FileResponse(result_path, media_type="image/png", filename="rgb.png")
 

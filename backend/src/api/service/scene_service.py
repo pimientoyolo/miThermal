@@ -996,10 +996,28 @@ class SceneService(BaseService):
         scene_path = path_manager.get_scene_path(scene_type)
 
         if not os.path.exists(scene_path):
-            self.logger.warning(
-                f"No existe escena '{scene_type}' en {scene_path}. Se omite actualización de cámara."
-            )
-            return
+            # Intentar preparar la escena si no existe (excepto para RGB que debe ser la base)
+            prep_methods = {
+                "depth": self.prepare_depth_scene,
+                "thermal": self.prepare_thermal_scene,
+                "blackbody_air": self.prepare_blackbody_air_scene,
+                "transmittance_blackbody_air": self.prepare_transmittance_blackbody_air_scene,
+                "temperature_map": self.prepare_temperature_map,
+                "emissivity_map": self.prepare_emissivity_map_scene,
+            }
+            
+            if scene_type in prep_methods:
+                self.logger.info(f"Escena '{scene_type}' no encontrada. Intentando preparar automáticamente...")
+                try:
+                    prep_methods[scene_type]()
+                    # Re-verificar
+                    if not os.path.exists(scene_path):
+                        return
+                except Exception as e:
+                    self.logger.error(f"Error al preparar automáticamente '{scene_type}': {e}")
+                    return
+            else:
+                return
 
         scene_dict = self.get_dict_scene(scene_path)
 
