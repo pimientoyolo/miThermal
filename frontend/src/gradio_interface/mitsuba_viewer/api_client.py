@@ -585,6 +585,15 @@ class MitsubaAPIClient:
             logger.error(f"Render depth error: {e}")
             return {"status": "error", "detail": str(e)}
 
+    def render_emissivity(self) -> Dict:
+        try:
+            r = self.session.get(f"{self.base_url}/render/emissivity/map")
+            r.raise_for_status()
+            return {"status": "ok", "npy_bytes": r.content}
+        except Exception as e:
+            logger.error(f"Render emissivity error: {e}")
+            return {"status": "error", "detail": str(e)}
+
     # ---------------------- Actualización de Objetos con Modo ----------------------
     def update_object_with_mode(
         self, 

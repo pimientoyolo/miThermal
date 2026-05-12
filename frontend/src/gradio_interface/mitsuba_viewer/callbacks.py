@@ -609,7 +609,14 @@ def create_mitsuba_viewer_interface():
                     _consume_npy(r.get("npy_bytes"), "Depth", explicit_name="depth")
             except Exception as e: logger.error(f"Depth fail: {e}")
 
-            # 3) Otros (Air & TMap)
+            # 3) Emissivity Map
+            try:
+                r = client.render_emissivity()
+                if r.get("status") == "ok":
+                    _consume_npy(r.get("npy_bytes"), "Emissivity Map", explicit_name="emissivity_map")
+            except Exception as e: logger.error(f"Emissivity fail: {e}")
+
+            # 4) Otros (Air & TMap)
             for endpoint, title, first_band in [
                 ("/render/air/blackbody", "Blackbody Air", True),
                 ("/render/air/transmittance", "Transmittance Air", True),
