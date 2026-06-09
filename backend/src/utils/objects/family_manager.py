@@ -8,6 +8,7 @@ propiedades a todos los miembros de una familia.
 
 import re
 import logging
+import os
 from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 
@@ -50,8 +51,8 @@ class FamilyManager:
     
     # Patrones de nomenclatura soportados (orden de prioridad)
     PATTERNS = [
-        r"^(.+)\.(\d{3})$",          # Blender: tree_leaf.001
-        r"^(.+)_(\d{3,})$",          # General: wall_north_001
+        r"^(.+)\.(\d+)$",            # Blender/General: tree_leaf.001, tree_leaf.1
+        r"^(.+)_(\d+)$",            # General: wall_north_001, wall_north_1
         r"^(.+)_copy_?(\d*)$",       # Copy: object_copy_1
         r"^(.+)_instance_?(\d+)$",   # Instance: object_instance_1
     ]
@@ -107,13 +108,14 @@ class FamilyManager:
         Returns:
             Nombre base sin sufijo (ej: "tree_leaf")
         """
+        name, ext = os.path.splitext(object_id)
         for pattern in self.PATTERNS:
-            match = re.match(pattern, object_id)
+            match = re.match(pattern, name)
             if match:
                 return match.group(1)  # Retorna grupo sin sufijo
         
         # Si no coincide con ningún patrón, es su propia familia
-        return object_id
+        return name
     
     def _find_shared_properties(self, members: List[str]) -> Dict[str, Any]:
         """
