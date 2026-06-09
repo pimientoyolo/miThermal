@@ -245,6 +245,14 @@ class RenderThermal:
         else:
             image_array = image_array.squeeze()
 
+        # Normalizar con min-max al rango [0, 1]
+        min_val = np.min(image_array)
+        max_val = np.max(image_array)
+        if max_val > min_val:
+            image_array = (image_array - min_val) / (max_val - min_val)
+        else:
+            image_array = np.clip(image_array, 0.0, 1.0)
+
         # Crear carpeta si no existe
         os.makedirs(OUTPUT_STATIC_RESULT_DIR, exist_ok=True)
 
