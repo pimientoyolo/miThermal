@@ -544,25 +544,6 @@ class SceneService(BaseService):
         scene_dict = self.get_dict_scene(temperature_map_xml)
 
         config_scene = get_config_scene_dict()
-        wavelengths = config_scene["wavelengths"]
-        
-        # Para mapa de temperatura, usamos una sola banda monocromática (el centro del rango)
-        w_center = float(np.mean(wavelengths)) if wavelengths else 10000.0
-        
-        # Configurar sensor monocromático para Tmap
-        if scene_dict and "scene" in scene_dict and "sensor" in scene_dict["scene"]:
-            sensor = scene_dict["scene"]["sensor"]
-            if "film" in sensor:
-                sensor["film"]["@type"] = "specfilm"
-                # Usar regular con el formato de float tags
-                sensor["film"]["spectrum"] = {
-                    "@type": "regular",
-                    "string": {"@name": "values", "@value": "1.0, 1.0"},
-                    "float": [
-                        {"@name": "wavelength_min", "@value": f"{w_center - 0.5:.4f}"},
-                        {"@name": "wavelength_max", "@value": f"{w_center + 0.5:.4f}"},
-                    ]
-                }
 
         if scene_dict and "scene" in scene_dict and "shape" in scene_dict["scene"]:
                 shapes = scene_dict["scene"]["shape"]
@@ -644,24 +625,6 @@ class SceneService(BaseService):
         scene_dict = self.get_dict_scene(emissivity_map_xml)
 
         config_scene = get_config_scene_dict()
-        wavelengths = config_scene["wavelengths"]
-        
-        # Para mapa de emisividad, usamos una sola banda monocromática (el centro del rango)
-        w_center = float(np.mean(wavelengths)) if wavelengths else 10000.0
-        
-        # Configurar sensor monocromático
-        if scene_dict and "scene" in scene_dict and "sensor" in scene_dict["scene"]:
-            sensor = scene_dict["scene"]["sensor"]
-            if "film" in sensor:
-                sensor["film"]["@type"] = "specfilm"
-                sensor["film"]["spectrum"] = {
-                    "@type": "regular",
-                    "string": {"@name": "values", "@value": "1.0, 1.0"},
-                    "float": [
-                        {"@name": "wavelength_min", "@value": f"{w_center - 0.5:.4f}"},
-                        {"@name": "wavelength_max", "@value": f"{w_center + 0.5:.4f}"},
-                    ]
-                }
 
         if scene_dict and "scene" in scene_dict and "shape" in scene_dict["scene"]:
                 shapes = scene_dict["scene"]["shape"]
@@ -671,8 +634,8 @@ class SceneService(BaseService):
                     id = shape["string"]["@value"]
                     # Obtener emisividad espectral del objeto
                     _, emiss_vals = object_utils.read_object_emissivity_file(id)
-                    # Sumar emisividad de todas las bandas
-                    total_emissivity = float(np.sum(emiss_vals))
+                    # Promedio de emisividad de todas las bandas
+                    total_emissivity = float(np.mean(emiss_vals))
                     
                     # Emitimos directamente la suma de emisividad como radiancia constante
                     shape["emitter"] = {
