@@ -68,6 +68,22 @@ class FamilyManager:
         self.families: Dict[str, ObjectFamily] = {}
         self._build_families()
     
+    def _are_names_related(self, name1: str, name2: str) -> bool:
+        """
+        Verifica si dos nombres base están relacionados (uno es sufijo del otro).
+        """
+        n1 = name1.replace("meshes/", "")
+        n2 = name2.replace("meshes/", "")
+        if n1 == n2:
+            return True
+            
+        if n1.endswith(n2) and (len(n1) == len(n2) or n1[-(len(n2)+1)] == '_'):
+            return True
+        if n2.endswith(n1) and (len(n2) == len(n1) or n2[-(len(n1)+1)] == '_'):
+            return True
+            
+        return False
+
     def _build_families(self):
         """Construye el índice de familias desde config_scene."""
         objects = self.config.get("objects", {})
@@ -76,17 +92,46 @@ class FamilyManager:
             logger.warning("No hay objetos en config_scene")
             return
         
-        # Agrupar objetos por base_name
-        groups: Dict[str, List[str]] = {}
-        
+        # 1. Agrupar inicialmente por base_name extraído
+        initial_groups: Dict[str, List[str]] = {}
         for obj_id in objects.keys():
             base_name = self._extract_base_name(obj_id)
-            if base_name not in groups:
-                groups[base_name] = []
-            groups[base_name].append(obj_id)
+            if base_name not in initial_groups:
+                initial_groups[base_name] = []
+            initial_groups[base_name].append(obj_id)
+            
+        # 2. Fusionar grupos cuyos base_names estén relacionados
+        base_names = list(initial_groups.keys())
+        repr_map: Dict[str, str] = {b: b for b in base_names}
+        
+        for i in range(len(base_names)):
+            for j in range(i + 1, len(base_names)):
+                b1 = base_names[i]
+                b2 = base_names[j]
+                
+                r1 = repr_map[b1]
+                r2 = repr_map[b2]
+                if r1 == r2:
+                    continue
+                    
+                if self._are_names_related(r1, r2):
+                    new_repr = r1 if len(r1) < len(r2) else r2
+                    old_repr = r2 if new_repr == r1 else r1
+                    
+                    for k in repr_map:
+                        if repr_map[k] == old_repr:
+                            repr_map[k] = new_repr
+                            
+        # 3. Agrupar los miembros usando el representante
+        merged_groups: Dict[str, List[str]] = {}
+        for b, members in initial_groups.items():
+            r = repr_map[b]
+            if r not in merged_groups:
+                merged_groups[r] = []
+            merged_groups[r].extend(members)
         
         # Crear familias solo si hay >1 miembro
-        for base_name, members in groups.items():
+        for base_name, members in merged_groups.items():
             if len(members) > 1:
                 self.families[base_name] = ObjectFamily(
                     base_name=base_name,
@@ -168,7 +213,23 @@ class FamilyManager:
             ObjectFamily si pertenece a una familia, None si es único
         """
         base_name = self._extract_base_name(object_id)
-        return self.families.get(base_name)
+        
+        # Buscar una familia que tenga un base_name relacionado con base_name
+        for family in self.families.values():
+            if self._are_names_related(family.base_name, base_name):
+                return family
+                
+        # Si no se encontró ninguna familia, crear una de 1 miembro dinámicamente
+        objects = self.config.get("objects", {})
+        if object_id in objects:
+            self.families[base_name] = ObjectFamily(
+                base_name=base_name,
+                members=[object_id],
+                shared_properties=dict(objects[object_id])
+            )
+            return self.families[base_name]
+            
+        return None
     
     def list_all_families(self) -> List[ObjectFamily]:
         """
