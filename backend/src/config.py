@@ -3,6 +3,7 @@ Configuración global del proyecto - Simplificada
 """
 
 import json
+import os
 import shutil
 from pathlib import Path
 from typing import Dict, Any
@@ -144,7 +145,7 @@ class PathManager:
 
 # Configuración de Mitsuba
 MITSUBA_CONFIG = {
-    "variant": "cuda_ad_spectral",
+    "variant": os.getenv("MITSUBA_VARIANT", "cuda_ad_spectral"),
     "spp": 1024,
     "max_depth": 8,
     "film_width": 512,
@@ -222,9 +223,49 @@ def get_config() -> Dict[str, Any]:
         "logging": LOGGING_CONFIG,
     }
 
+_cached_variant = None
+
 def get_mitsuba_variant() -> str:
-    """Obtiene la variante de Mitsuba a usar"""
-    return MITSUBA_CONFIG["variant"]
+    """Obtiene la variante de Mitsuba a usar con auto-detección y fallback si falla"""
+    global _cached_variant
+    if _cached_variant is not None:
+        return _cached_variant
+        
+    requested_variant = MITSUBA_CONFIG["variant"]
+    if requested_variant != "cuda_ad_spectral":
+        _cached_variant = requested_variant
+        return _cached_variant
+        
+    import subprocess
+    import sys
+    
+    test_scene = (
+        '<scene version="3.0.0">'
+        '<integrator type="path"/>'
+        '<sensor type="perspective">'
+        '<film type="hdrfilm">'
+        '<integer name="width" value="1"/>'
+        '<integer name="height" value="1"/>'
+        '</film>'
+        '</sensor>'
+        '</scene>'
+    )
+    
+    try:
+        cmd = [
+            sys.executable,
+            "-c",
+            f"import mitsuba as mi; mi.set_variant('cuda_ad_spectral'); s = mi.load_string('''{test_scene}'''); mi.render(s)"
+        ]
+        res = subprocess.run(cmd, capture_output=True, timeout=5.0)
+        if res.returncode == 0:
+            _cached_variant = "cuda_ad_spectral"
+        else:
+            _cached_variant = "llvm_ad_spectral"
+    except Exception:
+        _cached_variant = "llvm_ad_spectral"
+        
+    return _cached_variant
 
 def get_spectral_range() -> tuple:
     """Obtiene el rango espectral configurado"""

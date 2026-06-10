@@ -3,14 +3,16 @@ import os
 import json
 import numpy as np
 from src.utils.scene.parser import SceneParser
-from src.config import PathManager, OUTPUT_STATIC_RESULT_DIR
+from src.config import PathManager, OUTPUT_STATIC_RESULT_DIR, get_mitsuba_variant
 from PIL import Image
 
 
 class RenderRGB:
     def __init__(self):
         import mitsuba as mi
-        mi.set_variant('cuda_ad_rgb')
+        variant = get_mitsuba_variant()
+        rgb_variant = 'llvm_ad_rgb' if 'llvm' in variant else 'cuda_ad_rgb'
+        mi.set_variant(rgb_variant)
         self.mi = mi
         self.scene_parser = SceneParser()
         self.path_manager = PathManager
@@ -42,7 +44,9 @@ class RenderRGB:
 class RenderDepth:
     def __init__(self):
         import mitsuba as mi
-        mi.set_variant('cuda_ad_rgb')
+        variant = get_mitsuba_variant()
+        rgb_variant = 'llvm_ad_rgb' if 'llvm' in variant else 'cuda_ad_rgb'
+        mi.set_variant(rgb_variant)
         self.mi = mi
         self.path_manager = PathManager
 
@@ -74,7 +78,8 @@ class RenderDepth:
 class RenderThermal:
     def __init__(self):
         import mitsuba as mi
-        mi.set_variant('cuda_ad_spectral')
+        variant = get_mitsuba_variant()
+        mi.set_variant(variant)
         self.mi = mi
         self.path_manager = PathManager
         from src.utils.monitoring.nvidia_stats import PerformanceMonitor
