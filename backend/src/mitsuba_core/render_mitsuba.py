@@ -229,7 +229,7 @@ class RenderThermal:
         np.save(result_path, image_array)
 
     def render_emissivity_map(self):
-        """Renderiza el mapa de emisividad integrada."""
+        """Renderiza el mapa de emisividad espectral pixel a pixel."""
         scene_path = self.path_manager.get_scene_path("emissivity_map")
         scene = self.mi.load_file(scene_path)
 
@@ -238,23 +238,27 @@ class RenderThermal:
         # Convertir la imagen a numpy array
         image_array = np.array(image)
 
-        # Al ser monocromático (uniform spectrum) y un delta de 1.0 implícito en la preparación, 
-        # promediamos las bandas para obtener el valor escalar de la suma de emisividades.
-        if image_array.ndim == 3:
-            image_array = image_array.mean(axis=-1)
+        # Normalización Espectral: Mitsuba integra sobre el ancho de banda.
+        # Necesitamos dividir por el ancho de banda (delta) para recuperar el valor real de emisividad.
+        from src.config import get_config_scene_dict
+        config_scene = get_config_scene_dict()
+        wavelengths = config_scene.get("wavelengths", [])
+
+        if len(wavelengths) > 1:
+            delta = float(wavelengths[1] - wavelengths[0])
+            image_array = image_array / delta
+
+        # Recortar bandas de seguridad (primera y última) para que coincida con la imagen térmica
+        if image_array.ndim == 3 and image_array.shape[-1] > 2:
+            image_array = image_array[:, :, 1:-1]
+        elif image_array.ndim == 3:
+            # Si tiene 3 dimensiones pero no tiene suficientes canales para recortar
+            pass
         else:
             image_array = image_array.squeeze()
 
-        # Normalizar con min-max al rango [0, 1] únicamente para los píxeles de los objetos (evitando el fondo negro)
-        mask = image_array > 1e-5
-        if np.any(mask):
-            obj_vals = image_array[mask]
-            min_val = np.min(obj_vals)
-            max_val = np.max(obj_vals)
-            if max_val > min_val:
-                image_array[mask] = (image_array[mask] - min_val) / (max_val - min_val)
-            else:
-                image_array[mask] = 1.0
+        # Asegurar que los valores de emisividad estén estrictamente en el rango [0, 1]
+        image_array = np.clip(image_array, 0.0, 1.0)
 
         # Crear carpeta si no existe
         os.makedirs(OUTPUT_STATIC_RESULT_DIR, exist_ok=True)

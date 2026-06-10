@@ -270,6 +270,7 @@ class ConfigService:
         scene_service.prepare_depth_scene()
         scene_service.prepare_transmittance_blackbody_air_scene()
         scene_service.prepare_temperature_map()
+        scene_service.prepare_emissivity_map_scene()
 
         return self.get_camera_config()
     

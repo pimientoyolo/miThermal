@@ -605,8 +605,9 @@ class SceneService(BaseService):
 
     def prepare_emissivity_map_scene(self):
         """
-        Prepara la escena para renderizar el mapa de emisividad integrada de los objetos.
-        Sumamos la emisividad de todas las bandas para cada objeto.
+        Prepara la escena para renderizar el mapa de emisividad de los objetos pixel a pixel.
+        Asigna el espectro de emisividad resampleado a las longitudes de onda de la escena
+        como un emisor espectral.
         """
         thermal_path = path_manager.get_scene_path("thermal")
         # Verificar si existe la escena térmica, si no, crearla
@@ -625,6 +626,7 @@ class SceneService(BaseService):
         scene_dict = self.get_dict_scene(emissivity_map_xml)
 
         config_scene = get_config_scene_dict()
+        wavelengths = config_scene.get("wavelengths", [])
 
         if scene_dict and "scene" in scene_dict and "shape" in scene_dict["scene"]:
                 shapes = scene_dict["scene"]["shape"]
@@ -633,19 +635,25 @@ class SceneService(BaseService):
                 def _add_emissivity_emitter(shape):
                     id = shape["string"]["@value"]
                     # Obtener emisividad espectral del objeto
-                    _, emiss_vals = object_utils.read_object_emissivity_file(id)
-                    # Promedio de emisividad de todas las bandas
-                    total_emissivity = float(np.mean(emiss_vals))
+                    wavelengths_obj, emiss_vals = object_utils.read_object_emissivity_file(id)
                     
-                    # Emitimos directamente la suma de emisividad como radiancia constante
-                    shape["emitter"] = {
-                        "@type": "area",
-                        "spectrum": {
-                            "@name": "radiance",
-                            "@type": "uniform",
-                            "float": {"@name": "value", "@value": str(total_emissivity)}
-                        }
-                    }
+                    # Interpolar a las longitudes de onda del sensor (incluyendo bandas de seguridad)
+                    from src.utils.spectral.data_export import interpolate_spectral_data
+                    wavelengths_scene = np.array(wavelengths)
+                    emiss_resampled = interpolate_spectral_data(
+                        np.array(wavelengths_obj),
+                        np.array(emiss_vals),
+                        wavelengths_scene
+                    )
+                    
+                    # Generar emisor con el espectro de emisividad resampleado
+                    dict_emission, emi_sha = object_utils.create_spectral_emitter(
+                        wavelengths_scene,
+                        emiss_resampled,
+                        f"emissivity_{id}"
+                    )
+                    
+                    shape["emitter"] = dict_emission
                     if "bsdf" in shape: del shape["bsdf"]
 
                 if isinstance(shapes, list):
