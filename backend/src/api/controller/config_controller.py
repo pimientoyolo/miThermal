@@ -29,6 +29,12 @@ async def get_config() -> CameraDTO:
 
     return camera_dto
 
+@config_router.get("/download")
+async def download_config_scene() -> FileResponse:
+    """Descarga el archivo completo config_scene.json"""
+    config_scene_path = path_manager.get_config_scene_path()
+    return FileResponse(config_scene_path, media_type="application/json", filename="config_scene.json")
+
 @config_router.put("/camera")
 async def update_config(camera_update: UpdateCameraDTO) -> CameraDTO:
 

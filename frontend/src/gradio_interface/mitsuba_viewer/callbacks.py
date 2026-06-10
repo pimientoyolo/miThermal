@@ -459,7 +459,10 @@ def create_mitsuba_viewer_interface():
                         with gr.Row():
                             with gr.Column():
                                 gr.Markdown("### Configuración Avanzada")
-                                load_config_btn = gr.Button("📥 Cargar Config Actual", variant="secondary")
+                                with gr.Row():
+                                    load_config_btn = gr.Button("📥 Cargar Config Actual", variant="secondary")
+                                    download_config_btn = gr.Button("📤 Descargar Config (JSON)", variant="secondary")
+                                download_config_file = gr.File(label="Archivo de Configuración", visible=False)
                                 apply_all_btn = gr.Button("✅ Sincronizar Todo con Backend", variant="primary")
                                 config_status = gr.Textbox(label="Estado", lines=2, interactive=False)
                                 config_info = gr.JSON(label="Configuración (JSON)")
@@ -513,21 +516,7 @@ def create_mitsuba_viewer_interface():
             outputs=[cam_status]
         )
 
-        # Callbacks para Espectro y Atmósfera (antes eran parte de apply_all o vivían en Tab Config)
-        def apply_spectrum_config_cb(wl_min, wl_max, bands):
-            try:
-                res = get_client().update_wavelengths(wl_min * 1000.0, wl_max * 1000.0, bands)
-                if res.get("status") == "success":
-                    return "✅ Espectro actualizado"
-                return f"❌ Error: {res.get('detail')}"
-            except Exception as e:
-                return f"❌ Error: {e}"
 
-        spectrum_apply_btn.click(
-            fn=apply_spectrum_config_cb,
-            inputs=[wl_min, wl_max, bands],
-            outputs=[spectrum_status]
-        )
 
         def apply_atmosphere_cb(temp, filename):
             try:
@@ -559,6 +548,7 @@ def create_mitsuba_viewer_interface():
             "air_plot": air_plot, "atm_status": atm_status,
             "load_config_btn": load_config_btn, "apply_all_btn": apply_all_btn,
             "config_status": config_status, "config_info": config_info,
+            "download_config_btn": download_config_btn, "download_config_file": download_config_file,
         }
 
         # Visualización: ejecutar todos los renders y mostrarlos en galería
@@ -1570,6 +1560,28 @@ def create_mitsuba_viewer_interface():
                 config_section["air_temperature"],
                 config_section["config_info"],
             ],
+        )
+
+        # Nuevo: descargar config_scene.json
+        def download_config_cb():
+            try:
+                res = get_client().download_config()
+                if res.get("status") == "ok":
+                    temp_dir = tempfile.mkdtemp()
+                    temp_path = os.path.join(temp_dir, "config_scene.json")
+                    with open(temp_path, "wb") as f:
+                        f.write(res.get("json_bytes"))
+                    return gr.update(value=temp_path, visible=True)
+                else:
+                    return gr.update(value=None, visible=False)
+            except Exception as e:
+                logger.error(f"Error al descargar configuración: {e}")
+                return gr.update(value=None, visible=False)
+
+        config_section["download_config_btn"].click(
+            fn=download_config_cb,
+            inputs=[],
+            outputs=[config_section["download_config_file"]],
         )
 
         # Cambiar etiqueta del slider dinámicamente cuando el usuario ajusta k

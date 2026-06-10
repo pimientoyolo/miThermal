@@ -198,6 +198,15 @@ class MitsubaAPIClient:
             logger.error(f"Get camera config error: {e}")
             return {"status": "error", "detail": str(e)}
 
+    def download_config(self) -> Dict:
+        try:
+            r = self.session.get(f"{self.base_url}/config/download")
+            r.raise_for_status()
+            return {"status": "ok", "json_bytes": r.content}
+        except Exception as e:
+            logger.error(f"Download config error: {e}")
+            return {"status": "error", "detail": str(e)}
+
     def update_camera_config(
         self,
         spp: int | None = None,

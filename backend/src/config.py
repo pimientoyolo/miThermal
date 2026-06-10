@@ -251,6 +251,7 @@ def get_mitsuba_variant() -> str:
         '</scene>'
     )
     
+    print("🔍 Testing if Mitsuba CUDA variant ('cuda_ad_spectral') is working on this machine...")
     try:
         cmd = [
             sys.executable,
@@ -259,10 +260,15 @@ def get_mitsuba_variant() -> str:
         ]
         res = subprocess.run(cmd, capture_output=True, timeout=5.0)
         if res.returncode == 0:
+            print("✅ Mitsuba CUDA spectral renderer works successfully. Using 'cuda_ad_spectral' (GPU).")
             _cached_variant = "cuda_ad_spectral"
         else:
+            print(f"⚠️ Mitsuba CUDA spectral renderer failed (exit code {res.returncode}).")
+            print("🔄 Falling back to CPU spectral renderer 'llvm_ad_spectral'.")
             _cached_variant = "llvm_ad_spectral"
-    except Exception:
+    except Exception as e:
+        print(f"⚠️ Error testing Mitsuba CUDA variant: {e}")
+        print("🔄 Falling back to CPU spectral renderer 'llvm_ad_spectral'.")
         _cached_variant = "llvm_ad_spectral"
         
     return _cached_variant
