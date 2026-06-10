@@ -201,6 +201,7 @@ class RenderThermal:
         np.save(result_path, image_array)
 
     def render_temperature_map(self):
+        """Renderiza el mapa de temperatura de los objetos por pixel."""
         scene_path = self.path_manager.get_scene_path("temperature_map")
         scene = self.mi.load_file(scene_path)
 
@@ -209,10 +210,14 @@ class RenderThermal:
         # Convertir la imagen a numpy array
         image_array = np.array(image)
 
-        # Para el mapa de temperatura, la banda es de 1nm, por lo que dividimos entre 1.0 (delta)
-        # No recortamos bandas de seguridad porque es una escena monocromática custom.
-        # No multiplicamos por pi porque queremos el valor crudo de temperatura.
-        image_array = image_array / 1.0
+        # Normalización Espectral: Dividir por el ancho de banda (delta) para recuperar la temperatura en Kelvin
+        from src.config import get_config_scene_dict
+        config_scene = get_config_scene_dict()
+        wavelengths = config_scene.get("wavelengths", [])
+
+        if len(wavelengths) > 1:
+            delta = float(wavelengths[1] - wavelengths[0])
+            image_array = image_array / delta
 
         # Colapsar bandas: promedio a lo largo del último eje -> [y, x]
         # Al ser un mapa de temperatura, todas las bandas deberían tener el mismo valor
@@ -224,7 +229,7 @@ class RenderThermal:
         # Crear carpeta si no existe
         os.makedirs(OUTPUT_STATIC_RESULT_DIR, exist_ok=True)
 
-        # Guardar toda la información (todos los canales)
+        # Guardar resultado
         result_path = self.path_manager.get_result_path("temperature_map")
         np.save(result_path, image_array)
 
