@@ -562,6 +562,10 @@ class SceneService(BaseService):
                                 "@name": "radiance",
                                 "@type": "uniform",
                                 "float": {"@name": "value", "@value": str(temperature)}
+                            },
+                            "boolean": {
+                                "@name": "double_sided",
+                                "@value": "true"
                             }
                         }
                         if "bsdf" in shape: del shape["bsdf"]
@@ -575,6 +579,10 @@ class SceneService(BaseService):
                             "@name": "radiance",
                             "@type": "uniform",
                             "float": {"@name": "value", "@value": str(temperature)}
+                        },
+                        "boolean": {
+                            "@name": "double_sided",
+                            "@value": "true"
                         }
                     }
                     if "bsdf" in shapes: del shapes["bsdf"]
