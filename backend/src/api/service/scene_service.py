@@ -351,16 +351,45 @@ class SceneService(BaseService):
             # Eliminar el emisor emitter
             if scene_dict and "scene" in scene_dict and "emitter" in scene_dict["scene"]:
                 del scene_dict["scene"]["emitter"]
-            # Eliminar referencias 'ref' en cada shape
+            # Eliminar referencias 'ref' en cada shape y forzar face_normals = true
             if scene_dict and "scene" in scene_dict and "shape" in scene_dict["scene"]:
                 shapes = scene_dict["scene"]["shape"]
+                
+                def _force_face_normals(shape):
+                    if "boolean" not in shape:
+                        shape["boolean"] = {
+                            "@name": "face_normals",
+                            "@value": "true"
+                        }
+                    else:
+                        bools = shape["boolean"]
+                        if isinstance(bools, dict):
+                            if bools.get("@name") == "face_normals":
+                                bools["@value"] = "true"
+                            else:
+                                shape["boolean"] = [
+                                    bools,
+                                    {"@name": "face_normals", "@value": "true"}
+                                ]
+                        elif isinstance(bools, list):
+                            has_fn = False
+                            for b in bools:
+                                if b.get("@name") == "face_normals":
+                                    b["@value"] = "true"
+                                    has_fn = True
+                                    break
+                            if not has_fn:
+                                bools.append({"@name": "face_normals", "@value": "true"})
+
                 if isinstance(shapes, list):
                     for shape in shapes:
                         if "ref" in shape:
                             del shape["ref"]
+                        _force_face_normals(shape)
                 elif isinstance(shapes, dict):
                     if "ref" in shapes:
                         del shapes["ref"]
+                    _force_face_normals(shapes)
 
                 # Agregar emisor diferente a cada shape
                 if isinstance(shapes, list):
@@ -562,10 +591,6 @@ class SceneService(BaseService):
                                 "@name": "radiance",
                                 "@type": "uniform",
                                 "float": {"@name": "value", "@value": str(temperature)}
-                            },
-                            "boolean": {
-                                "@name": "double_sided",
-                                "@value": "true"
                             }
                         }
                         if "bsdf" in shape: del shape["bsdf"]
@@ -579,10 +604,6 @@ class SceneService(BaseService):
                             "@name": "radiance",
                             "@type": "uniform",
                             "float": {"@name": "value", "@value": str(temperature)}
-                        },
-                        "boolean": {
-                            "@name": "double_sided",
-                            "@value": "true"
                         }
                     }
                     if "bsdf" in shapes: del shapes["bsdf"]

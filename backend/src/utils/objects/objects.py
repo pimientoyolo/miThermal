@@ -391,11 +391,6 @@ class ObjectUtils:
                     "@filename": relative_spd_path
                 }
             }
-            if type == "area":
-                emitter_dict["boolean"] = {
-                    "@name": "double_sided",
-                    "@value": "true"
-                }
             
             return emitter_dict, shasum
             
