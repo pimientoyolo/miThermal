@@ -1338,16 +1338,33 @@ def create_mitsuba_viewer_interface():
                 
                 data = result.get("data", {})
                 count = data.get("count", 0)
-                mode_text = data.get("mode", "")
+                mode_text = (data.get("mode") or "").lower()
                 
-                if mode_text == "family":
+                if mode_text in ["family", "familia"]:
                     family_name = data.get("family_name", "")
-                    msg = (
-                        f"✅ Familia '{family_name}' actualizada\n"
-                        f"📦 {count} objetos modificados"
-                    )
+                    if family_name:
+                        msg = f"✅ Familia '{family_name}' actualizada ({count} objetos modificados):\n\n"
+                    else:
+                        msg = f"✅ Objeto único actualizado (no pertenece a familia):\n\n"
+                    
+                    details = data.get("updated_details", {})
+                    for obj, props in details.items():
+                        temp = props.get("temperature")
+                        base_obj = os.path.basename(obj)
+                        if temp is not None:
+                            try:
+                                msg += f"• **{base_obj}**: {float(temp):.2f} K\n"
+                            except (ValueError, TypeError):
+                                msg += f"• **{base_obj}**: {temp} K\n"
+                        else:
+                            msg += f"• **{base_obj}**\n"
                 else:
                     msg = f"✅ Objeto '{oid}' actualizado"
+                    details = data.get("updated_details", {})
+                    if oid in details:
+                        temp = details[oid].get("temperature")
+                        if temp is not None:
+                            msg += f" ({temp:.2f} K)"
                 
                 props_updated = data.get("properties_updated", [])
                 if props_updated:
@@ -1355,7 +1372,7 @@ def create_mitsuba_viewer_interface():
                         if "temperature" in props_updated:
                             props_updated.remove("temperature")
                         props_updated.append(f"temperature (rango aleatorio [{t_min}, {t_max}] K)")
-                    msg += f"\n🔧 Propiedades: {', '.join(props_updated)}"
+                    msg += f"\n\n🔧 Propiedades: {', '.join(props_updated)}"
                 
                 return gr.update(value=msg)
                 

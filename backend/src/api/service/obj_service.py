@@ -594,10 +594,20 @@ class ObjService:
         scene_service.prepare_transmittance_blackbody_air_scene()
         scene_service.prepare_temperature_map()
         
+        # Recopilar detalles actualizados
+        updated_details = {}
+        for obj_id in updated_objects:
+            if obj_id in config.get("objects", {}):
+                updated_details[obj_id] = {
+                    "temperature": config["objects"][obj_id].get("temperature"),
+                    "emissivity_file": config["objects"][obj_id].get("emissivity_file")
+                }
+
         return {
             "objects_updated": updated_objects,
             "count": len(updated_objects),
             "mode": mode.lower(),
             "family_name": family_name,
-            "properties_updated": properties_updated
+            "properties_updated": properties_updated,
+            "updated_details": updated_details
         }
