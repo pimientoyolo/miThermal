@@ -610,12 +610,16 @@ class MitsubaAPIClient:
         mode: str, 
         temperature: float = None, 
         emissivity_file_path: str = None,
-        is_reflectance: bool = False
+        is_reflectance: bool = False,
+        temp_min: float = None,
+        temp_max: float = None
     ) -> Dict:
         """PUT /object/update-with-mode"""
         try:
             params = {"object_id": object_id, "mode": mode, "is_reflectance": is_reflectance}
             if temperature is not None: params["temperature"] = temperature
+            if temp_min is not None: params["temp_min"] = temp_min
+            if temp_max is not None: params["temp_max"] = temp_max
                 
             files = None
             f = None

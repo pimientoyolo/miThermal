@@ -50,9 +50,10 @@ class SceneService(BaseService):
             raise HTTPException(status_code=400, detail="El archivo debe ser un archivo ZIP")
 
         # Guardar ZIP temporal
+        file.file.seek(0)
         scene_zip_path = path_manager.get_scene_zip_path()
         with open(scene_zip_path, "wb") as buffer:
-            buffer.write(file.file.read())
+            shutil.copyfileobj(file.file, buffer)
 
         # Limpiar y extraer con ZipHandler (reemplaza 20+ líneas)
         self.zip_handler.clear_and_extract(scene_zip_path, OUTPUT_STATIC_DIR)
@@ -1344,6 +1345,7 @@ class SceneService(BaseService):
         zip_path = path_manager.get_mithermal_scene_path()
 
         # Guardar ZIP temporalmente
+        file.file.seek(0)
         with open(zip_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         

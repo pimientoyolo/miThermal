@@ -157,7 +157,10 @@ def build_object_group_section() -> Dict[str, gr.components.Component]:
 			selector = gr.Dropdown(label="Selecciona", choices=[], interactive=True)
 			members = gr.Dropdown(label="Miembros", choices=[], multiselect=True, interactive=False)
 			# Controles de propiedades
+			temp_mode = gr.Radio(label="Modo Temperatura", choices=["Fija", "Rango Aleatorio"], value="Fija", visible=False)
 			temp_input = gr.Number(label="Temperatura (K)", value=None, precision=2)
+			temp_min = gr.Number(label="Temp Mínima (K)", value=None, precision=2, visible=False)
+			temp_max = gr.Number(label="Temp Máxima (K)", value=None, precision=2, visible=False)
 			emissivity_file = gr.File(label="Archivo Emisividad", file_types=[".txt", ".tbs"], interactive=True)
 			apply_update_btn = gr.Button("Actualizar Objeto(s)", variant="secondary")
 			# Batch update objetos + atenuación
@@ -170,7 +173,10 @@ def build_object_group_section() -> Dict[str, gr.components.Component]:
 		"mode_radio": mode_radio,
 		"selector": selector,
 		"members": members,
+		"temp_mode": temp_mode,
 		"temp_input": temp_input,
+		"temp_min": temp_min,
+		"temp_max": temp_max,
 		"emissivity_file": emissivity_file,
 		"apply_update_btn": apply_update_btn,
 		# Campos eliminados: batch_attenuation_file, batch_update_btn

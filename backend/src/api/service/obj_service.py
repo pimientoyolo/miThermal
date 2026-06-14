@@ -444,7 +444,9 @@ class ObjService:
         mode: str,
         temperature: float = None,
         emissivity_file: UploadFile = None,
-        is_reflectance: bool = False
+        is_reflectance: bool = False,
+        temp_min: float = None,
+        temp_max: float = None
     ) -> Dict[str, Any]:
         """
         Actualiza objeto(s) según modo seleccionado.
@@ -455,6 +457,8 @@ class ObjService:
             temperature: Nueva temperatura en Kelvin (opcional)
             emissivity_file: Nuevo archivo de emisividad (opcional)
             is_reflectance: Si el archivo subido es reflectancia (convertir 1-R)
+            temp_min: Temperatura mínima del rango aleatorio (opcional)
+            temp_max: Temperatura máxima del rango aleatorio (opcional)
             
         Returns:
             Dict con objects_updated, count, mode y family_name
@@ -514,22 +518,27 @@ class ObjService:
                 properties["emissivity_file"] = str(dst_path)
                 logger.info(f"Nuevo archivo de emisividad guardado en {dst_path}")
         
-        if not properties:
+        if not properties and temp_min is None and temp_max is None:
             raise HTTPException(
                 status_code=400,
-                detail="Debe proporcionar al menos una propiedad a actualizar"
+                detail="Debe proporcionar al menos una propiedad a actualizar o un rango de temperatura"
             )
         
         updated_objects = []
         family_name = None
         
+        properties_updated = list(properties.keys())
+        if temp_min is not None and temp_max is not None:
+            properties_updated.append("temperature")
+        
         if mode == "Objeto":
             # Actualizar solo el objeto individual
+            if temp_min is not None and temp_max is not None:
+                import random
+                properties["temperature"] = random.uniform(temp_min, temp_max)
             config["objects"][object_id].update(properties)
             updated_objects = [object_id]
             logger.info(f"Objeto '{object_id}' actualizado")
-            # GUARDAR CONFIGURACIÓN para que persista
-            save_config_scene_dict(config)
         
         elif mode == "Familia":
             # Actualizar toda la familia
@@ -542,15 +551,31 @@ class ObjService:
                     f"Objeto '{object_id}' no pertenece a familia, "
                     f"actualizando solo este objeto"
                 )
+                if temp_min is not None and temp_max is not None:
+                    import random
+                    properties["temperature"] = random.uniform(temp_min, temp_max)
                 config["objects"][object_id].update(properties)
                 updated_objects = [object_id]
             else:
                 # Actualizar todos los miembros de la familia
                 family_name = family.base_name
-                updated_objects = family_mgr.update_family(
-                    family.base_name,
-                    properties
-                )
+                
+                # Si se define rango de temperatura, asignar una temperatura aleatoria a cada miembro
+                if temp_min is not None and temp_max is not None:
+                    import random
+                    updated_objects = []
+                    for obj_id in family.members:
+                        if obj_id in config.get("objects", {}):
+                            member_props = dict(properties)
+                            member_props["temperature"] = random.uniform(temp_min, temp_max)
+                            config["objects"][obj_id].update(member_props)
+                            updated_objects.append(obj_id)
+                else:
+                    # Comportamiento normal (temperatura fija o solo emisividad)
+                    updated_objects = family_mgr.update_family(
+                        family.base_name,
+                        properties
+                    )
                 logger.info(
                     f"Familia '{family_name}' actualizada: "
                     f"{len(updated_objects)} objetos"
@@ -574,5 +599,5 @@ class ObjService:
             "count": len(updated_objects),
             "mode": mode.lower(),
             "family_name": family_name,
-            "properties_updated": list(properties.keys())
+            "properties_updated": properties_updated
         }

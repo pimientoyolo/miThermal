@@ -423,7 +423,10 @@ def create_mitsuba_viewer_interface():
                         selector = gr.Dropdown(label="Selecciona", choices=[], interactive=True)
                         members = gr.Dropdown(label="Miembros", choices=[], multiselect=True, interactive=False)
                         gr.Markdown("#### Propiedades")
+                        temp_mode = gr.Radio(label="Modo Temperatura", choices=["Fija", "Rango Aleatorio"], value="Fija", visible=False)
                         temp_input = gr.Number(label="Temperatura (K)", value=None, precision=2)
+                        temp_min = gr.Number(label="Temp Mínima (K)", value=None, precision=2, visible=False)
+                        temp_max = gr.Number(label="Temp Máxima (K)", value=None, precision=2, visible=False)
                         spectrum_type = gr.Radio(
                             label="Tipo de Datos",
                             choices=["Emisividad", "Reflectancia"],
@@ -440,7 +443,9 @@ def create_mitsuba_viewer_interface():
                 
                 og_section = {
                     "mode_radio": mode_radio, "selector": selector, "members": members,
-                    "temp_input": temp_input, "spectrum_type": spectrum_type,
+                    "temp_mode": temp_mode, "temp_input": temp_input,
+                    "temp_min": temp_min, "temp_max": temp_max,
+                    "spectrum_type": spectrum_type,
                     "emissivity_file": emissivity_file, "apply_update_btn": apply_update_btn,
                     "info_text": info_text, "model_viewer": model_viewer, "emissivity_plot": emissivity_plot,
                 }
@@ -1096,6 +1101,40 @@ def create_mitsuba_viewer_interface():
                 ],
         )
 
+        def og_update_temp_controls_visibility(mode: str, temp_mode_val: str):
+            mode_l = (mode or "").lower()
+            is_family = mode_l.startswith("fam")
+            is_range = temp_mode_val == "Rango Aleatorio"
+            
+            return (
+                gr.update(visible=is_family), # temp_mode
+                gr.update(visible=not (is_family and is_range)), # temp_input
+                gr.update(visible=is_family and is_range), # temp_min
+                gr.update(visible=is_family and is_range), # temp_max
+            )
+
+        og_section["mode_radio"].change(
+            fn=og_update_temp_controls_visibility,
+            inputs=[og_section["mode_radio"], og_section["temp_mode"]],
+            outputs=[
+                og_section["temp_mode"],
+                og_section["temp_input"],
+                og_section["temp_min"],
+                og_section["temp_max"]
+            ]
+        )
+
+        og_section["temp_mode"].change(
+            fn=og_update_temp_controls_visibility,
+            inputs=[og_section["mode_radio"], og_section["temp_mode"]],
+            outputs=[
+                og_section["temp_mode"],
+                og_section["temp_input"],
+                og_section["temp_min"],
+                og_section["temp_max"]
+            ]
+        )
+
         def og_selector_changed(mode: str, selection: str):
             mode_l = (mode or "").lower()
             if not selection:
@@ -1169,7 +1208,7 @@ def create_mitsuba_viewer_interface():
             ],
         )
 
-        def og_apply_update(mode: str, selection: str, temp_value, spec_type: str, emissivity_file):
+        def og_apply_update(mode: str, selection: str, temp_value, spec_type: str, emissivity_file, temp_mode_val, temp_min_val, temp_max_val):
             """
             Actualiza objeto(s) según el modo seleccionado.
             
@@ -1179,6 +1218,9 @@ def create_mitsuba_viewer_interface():
                 temp_value: Nueva temperatura (opcional)
                 spec_type: "Emisividad" o "Reflectancia"
                 emissivity_file: Archivo de emisividad (opcional)
+                temp_mode_val: Modo de temperatura ("Fija" o "Rango Aleatorio")
+                temp_min_val: Temperatura mínima del rango
+                temp_max_val: Temperatura máxima del rango
             """
             mode_l = (mode or '').lower()
             client = get_client()
@@ -1241,14 +1283,30 @@ def create_mitsuba_viewer_interface():
                 if not oid:
                     return gr.update(value='❌ Familia vacía')
             
-            # Preparar parámetros para el nuevo endpoint
-            params = {"mode": "Familia" if mode_l.startswith("fam") else "Objeto"}
-            
-            if temp_value not in (None, ''):
+            # Preparar parámetros para el endpoint de actualización con modo
+            is_family = mode_l.startswith("fam")
+            use_range = is_family and temp_mode_val == "Rango Aleatorio"
+
+            t_val = None
+            t_min = None
+            t_max = None
+
+            if use_range:
+                if temp_min_val in (None, '') or temp_max_val in (None, ''):
+                    return gr.update(value='❌ Debe especificar temperaturas mínima y máxima para el rango aleatorio')
                 try:
-                    params["temperature"] = float(temp_value)
+                    t_min = float(temp_min_val)
+                    t_max = float(temp_max_val)
                 except ValueError:
-                    return gr.update(value='❌ Temperatura inválida')
+                    return gr.update(value='❌ Temperaturas mínima o máxima inválidas')
+                if t_min > t_max:
+                    return gr.update(value='❌ La temperatura mínima no puede ser mayor que la máxima')
+            else:
+                if temp_value not in (None, ''):
+                    try:
+                        t_val = float(temp_value)
+                    except ValueError:
+                        return gr.update(value='❌ Temperatura inválida')
             
             # Manejar archivo de emisividad
             emissivity_file_path = None
@@ -1256,26 +1314,23 @@ def create_mitsuba_viewer_interface():
                 emissivity_file_path = emissivity_file
             else:
                 emissivity_file_path = getattr(emissivity_file, 'name', None)
-                
-            if emissivity_file_path:
-                # Por ahora, usar el nombre del archivo
-                # En una versión futura, se debería subir el archivo primero
-                params["emissivity_file"] = emissivity_file_path
             
             # Validar que hay al menos una propiedad para actualizar
-            if "temperature" not in params and "emissivity_file" not in params:
+            if t_val is None and t_min is None and emissivity_file_path is None:
                 return gr.update(
-                    value='❌ Debe especificar temperatura o archivo de emisividad'
+                    value='❌ Debe especificar temperatura, rango de temperatura o archivo de emisividad'
                 )
             
             try:
                 # Usar el método del cliente que ya maneja la subida de archivos
                 result = client.update_object_with_mode(
                     object_id=oid,
-                    mode="Familia" if mode_l.startswith("fam") else "Objeto",
-                    temperature=float(temp_value) if temp_value not in (None, '') else None,
+                    mode="Familia" if is_family else "Objeto",
+                    temperature=t_val,
                     emissivity_file_path=emissivity_file_path,
-                    is_reflectance=is_refl
+                    is_reflectance=is_refl,
+                    temp_min=t_min,
+                    temp_max=t_max
                 )
                 
                 if result.get("status") == "error":
@@ -1296,6 +1351,10 @@ def create_mitsuba_viewer_interface():
                 
                 props_updated = data.get("properties_updated", [])
                 if props_updated:
+                    if t_min is not None and t_max is not None:
+                        if "temperature" in props_updated:
+                            props_updated.remove("temperature")
+                        props_updated.append(f"temperature (rango aleatorio [{t_min}, {t_max}] K)")
                     msg += f"\n🔧 Propiedades: {', '.join(props_updated)}"
                 
                 return gr.update(value=msg)
@@ -1311,7 +1370,10 @@ def create_mitsuba_viewer_interface():
                 og_section['selector'], 
                 og_section['temp_input'], 
                 og_section['spectrum_type'],
-                og_section['emissivity_file']
+                og_section['emissivity_file'],
+                og_section['temp_mode'],
+                og_section['temp_min'],
+                og_section['temp_max']
             ],
             outputs=[og_section['info_text']],
         )

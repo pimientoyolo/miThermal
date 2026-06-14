@@ -224,6 +224,14 @@ async def update_object_with_mode(
     is_reflectance: bool = Query(
         False,
         description="Indica si el archivo es de reflectancia (se convertirá a emisividad: 1-R)"
+    ),
+    temp_min: float | None = Query(
+        None,
+        description="Temperatura mínima para rango aleatorio"
+    ),
+    temp_max: float | None = Query(
+        None,
+        description="Temperatura máxima para rango aleatorio"
     )
 ):
     """
@@ -231,10 +239,12 @@ async def update_object_with_mode(
     
     Args:
         object_id: ID del objeto seleccionado
-        mode: "Objeto" para actualizar solo este, "Familia" para toda la familia
+        mode: "Objeto para actualizar solo este, "Familia" para toda la familia
         temperature: Nueva temperatura (opcional)
         emissivity_file: Nueva emisividad (opcional)
         is_reflectance: Si el archivo es de reflectancia
+        temp_min: Temperatura mínima del rango aleatorio (opcional)
+        temp_max: Temperatura máxima del rango aleatorio (opcional)
         
     Returns:
         {
@@ -256,5 +266,7 @@ async def update_object_with_mode(
         mode=mode,
         temperature=temperature,
         emissivity_file=emissivity_file,
-        is_reflectance=is_reflectance
+        is_reflectance=is_reflectance,
+        temp_min=temp_min,
+        temp_max=temp_max
     )
