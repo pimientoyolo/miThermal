@@ -252,7 +252,22 @@ class RenderThermal:
         # Necesitamos dividir por el ancho de banda (delta) para recuperar el valor real de emisividad.
         from src.config import get_config_scene_dict
         config_scene = get_config_scene_dict()
-        wavelengths = config_scene.get("wavelengths", [])
+        
+        emiss_config = config_scene.get("emissivity_map_config", {})
+        if emiss_config.get("use_custom", False):
+            wl_min = emiss_config.get("wl_min", 8.0) * 1000.0
+            wl_max = emiss_config.get("wl_max", 14.0) * 1000.0
+            bands = int(emiss_config.get("bands", 10))
+            if bands > 1:
+                step = (wl_max - wl_min) / (bands - 1)
+            else:
+                step = 10.0
+            wl_padded_min = wl_min - step
+            wl_padded_max = wl_max + step
+            total_bands = bands + 2
+            wavelengths = np.linspace(wl_padded_min, wl_padded_max, total_bands, endpoint=True, dtype=float).tolist()
+        else:
+            wavelengths = config_scene.get("wavelengths", [])
 
         if len(wavelengths) > 1:
             delta = float(wavelengths[1] - wavelengths[0])

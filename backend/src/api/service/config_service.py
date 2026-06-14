@@ -1,11 +1,16 @@
 import logging
 import io
 import os
-from src.api.dto.cameraDTO import CameraDTO, UpdateCameraDTO
+import json
+import zipfile
+import shutil
+import tempfile
+from src.api.dto.cameraDTO import CameraDTO, UpdateCameraDTO, EmissivityMapConfigDTO
 from src.api.service.scene_service import SceneService
-from src.config import PathManager, get_config_scene_dict, save_config_scene_dict
+from src.config import PathManager, get_config_scene_dict, save_config_scene_dict, OUTPUT_DIR, OUTPUT_STATIC_DIR, OUTPUT_ASSETS_DIR
 import numpy as np
 
+from typing import Dict
 from fastapi import HTTPException, UploadFile
 
 from src.utils.objects.objects import ObjectUtils
@@ -460,6 +465,126 @@ class ConfigService:
         scene_service.prepare_depth_scene()
         scene_service.prepare_temperature_map()
 
-        
-        
+    @log_execution()
+    def get_emissivity_map_config(self) -> Dict:
+        scene_config = get_config_scene_dict()
+        emiss_config = scene_config.get("emissivity_map_config", {})
+        return {
+            "use_custom": emiss_config.get("use_custom", False),
+            "wl_min": emiss_config.get("wl_min", 8.0),
+            "wl_max": emiss_config.get("wl_max", 14.0),
+            "bands": emiss_config.get("bands", 10)
+        }
 
+    @log_execution()
+    def update_emissivity_map_config(self, use_custom: bool, wl_min: float, wl_max: float, bands: int) -> Dict:
+        if wl_max < wl_min:
+            raise HTTPException(status_code=400, detail="El maximo debe ser mayor que el minimo")
+        
+        scene_config = get_config_scene_dict()
+        scene_config["emissivity_map_config"] = {
+            "use_custom": use_custom,
+            "wl_min": wl_min,
+            "wl_max": wl_max,
+            "bands": bands
+        }
+        save_config_scene_dict(scene_config)
+        
+        scene_service.prepare_emissivity_map_scene()
+        return self.get_emissivity_map_config()
+
+    @log_execution()
+    def export_full_config(self) -> str:
+        """
+        Packs config_scene.json, air.txt, and custom emissivity files referenced
+        in config_scene.json into a single ZIP file.
+        Returns the path to the generated ZIP file.
+        """
+        config_path = path_manager.get_config_scene_path()
+        air_path = path_manager.get_air_attenuation_path()
+        
+        zip_path = os.path.join(OUTPUT_DIR, "scene_full_config.zip")
+        
+        with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            if os.path.exists(config_path):
+                zip_file.write(config_path, "config_scene.json")
+            
+            if os.path.exists(air_path):
+                zip_file.write(air_path, "air.txt")
+                
+            config = get_config_scene_dict()
+            objects = config.get("objects", {})
+            for obj_id, obj_props in objects.items():
+                emiss_file = obj_props.get("emissivity_file")
+                if emiss_file and os.path.exists(emiss_file):
+                    arcname = os.path.join("emissivities", os.path.basename(emiss_file))
+                    zip_file.write(emiss_file, arcname)
+                    
+        return zip_path
+
+    @log_execution()
+    def import_full_config(self, file: UploadFile) -> str:
+        """
+        Extracts config_scene.json, air.txt and custom emissivity files from the ZIP,
+        places them in the correct directories, updates absolute paths in config_scene.json
+        to match the current machine's directory, and rebuilds all derived scenes.
+        """
+        if not file.filename.endswith('.zip'):
+            raise HTTPException(status_code=400, detail="El archivo de configuración debe ser un ZIP")
+            
+        fd, temp_zip_path = tempfile.mkstemp(suffix=".zip")
+        try:
+            with os.fdopen(fd, 'wb') as tmp:
+                shutil.copyfileobj(file.file, tmp)
+                
+            with zipfile.ZipFile(temp_zip_path, 'r') as zip_file:
+                namelist = zip_file.namelist()
+                
+                if "config_scene.json" not in namelist:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="El ZIP no contiene config_scene.json"
+                    )
+                    
+                zip_file.extract("config_scene.json", OUTPUT_STATIC_DIR)
+                
+                if "air.txt" in namelist:
+                    zip_file.extract("air.txt", OUTPUT_STATIC_DIR)
+                    
+                for name in zip_file.namelist():
+                    if name.startswith("emissivities/"):
+                        filename = os.path.basename(name)
+                        if filename:
+                            member_data = zip_file.read(name)
+                            dst_file = os.path.join(OUTPUT_ASSETS_DIR, filename)
+                            os.makedirs(os.path.dirname(dst_file), exist_ok=True)
+                            with open(dst_file, "wb") as f:
+                                f.write(member_data)
+                                
+            config_path = path_manager.get_config_scene_path()
+            if os.path.exists(config_path):
+                with open(config_path, 'r') as f:
+                    config = json.load(f)
+                    
+                objects = config.get("objects", {})
+                for obj_id, obj_props in objects.items():
+                    emiss_file = obj_props.get("emissivity_file")
+                    if emiss_file:
+                        filename = os.path.basename(emiss_file)
+                        new_path = os.path.join(OUTPUT_ASSETS_DIR, filename)
+                        obj_props["emissivity_file"] = new_path
+                        
+                with open(config_path, 'w') as f:
+                    json.dump(config, f, indent=4)
+                    
+            scene_service.prepare_thermal_scene()
+            scene_service.prepare_blackbody_air_scene()
+            scene_service.prepare_depth_scene()
+            scene_service.prepare_transmittance_blackbody_air_scene()
+            scene_service.prepare_temperature_map()
+            scene_service.prepare_emissivity_map_scene()
+            
+            return "Configuración completa importada exitosamente"
+        finally:
+            if os.path.exists(temp_zip_path):
+                os.remove(temp_zip_path)

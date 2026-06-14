@@ -125,7 +125,9 @@ class ObjService:
             temperature=object_config.get("temperature"),
             emissivity=emissivity.tolist(),
             reflection=reflection.tolist(),
-            wavelengths=wavelengths.tolist()
+            wavelengths=wavelengths.tolist(),
+            material_type=object_config.get("material_type", "diffuse"),
+            roughness=object_config.get("roughness", 0.05)
         )
 
     def update_object_info(self, object_data: UpdateObjectDTO) -> ObjectDTO:
@@ -446,7 +448,9 @@ class ObjService:
         emissivity_file: UploadFile = None,
         is_reflectance: bool = False,
         temp_min: float = None,
-        temp_max: float = None
+        temp_max: float = None,
+        material_type: str = None,
+        roughness: float = None
     ) -> Dict[str, Any]:
         """
         Actualiza objeto(s) según modo seleccionado.
@@ -484,6 +488,22 @@ class ObjService:
         properties = {}
         if temperature is not None:
             properties["temperature"] = temperature
+            
+        if material_type is not None:
+            if material_type not in ["diffuse", "reflectante"]:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Tipo de material inválido: '{material_type}'. Debe ser 'diffuse' o 'reflectante'"
+                )
+            properties["material_type"] = material_type
+            
+        if roughness is not None:
+            if roughness < 0.0 or roughness > 1.0:
+                raise HTTPException(
+                    status_code=400,
+                    detail="La rugosidad (roughness) debe estar entre 0.0 y 1.0"
+                )
+            properties["roughness"] = roughness
         
         # Manejar archivo de emisividad si se proporciona
         if emissivity_file is not None and emissivity_file.filename:
@@ -600,7 +620,9 @@ class ObjService:
             if obj_id in config.get("objects", {}):
                 updated_details[obj_id] = {
                     "temperature": config["objects"][obj_id].get("temperature"),
-                    "emissivity_file": config["objects"][obj_id].get("emissivity_file")
+                    "emissivity_file": config["objects"][obj_id].get("emissivity_file"),
+                    "material_type": config["objects"][obj_id].get("material_type", "diffuse"),
+                    "roughness": config["objects"][obj_id].get("roughness", 0.05)
                 }
 
         return {

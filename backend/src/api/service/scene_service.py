@@ -514,8 +514,18 @@ class SceneService(BaseService):
                         emission = radiance * emissivity
                         reflectance = 1 - np.array(emissivity)
                         
+                        obj_cfg = config_scene["objects"].get(object_id, {})
+                        material_type = obj_cfg.get("material_type", "diffuse")
+                        roughness = obj_cfg.get("roughness", 0.05)
+                        
                         # Generar material y emisor con nombres significativos y obtener shasums
-                        dict_reflectance, refl_sha = object_utils.create_reflectance_material(wavelengths_obj, reflectance, object_id)
+                        dict_reflectance, refl_sha = object_utils.create_reflectance_material(
+                            wavelengths_obj, 
+                            reflectance, 
+                            object_id,
+                            material_type=material_type,
+                            roughness=roughness
+                        )
                         dict_emission, emi_sha = object_utils.create_spectral_emitter(wavelengths_obj, emission, object_id)
                         
                         # Guardar info en configuración (Ruta absoluta para persistencia)
@@ -536,7 +546,17 @@ class SceneService(BaseService):
                     emission = radiance * emissivity
                     reflectance = 1 - np.array(emissivity)
                     
-                    dict_reflectance, refl_sha = object_utils.create_reflectance_material(wavelengths_obj, reflectance, object_id)
+                    obj_cfg = config_scene["objects"].get(object_id, {})
+                    material_type = obj_cfg.get("material_type", "diffuse")
+                    roughness = obj_cfg.get("roughness", 0.05)
+                    
+                    dict_reflectance, refl_sha = object_utils.create_reflectance_material(
+                        wavelengths_obj, 
+                        reflectance, 
+                        object_id,
+                        material_type=material_type,
+                        roughness=roughness
+                    )
                     dict_emission, emi_sha = object_utils.create_spectral_emitter(wavelengths_obj, emission, object_id)
                     
                     # Guardar info en configuración (Ruta absoluta para persistencia)
@@ -767,7 +787,21 @@ class SceneService(BaseService):
         scene_dict = self.get_dict_scene(emissivity_map_xml)
 
         config_scene = get_config_scene_dict()
-        wavelengths = config_scene.get("wavelengths", [])
+        emiss_config = config_scene.get("emissivity_map_config", {})
+        if emiss_config.get("use_custom", False):
+            wl_min = emiss_config.get("wl_min", 8.0) * 1000.0
+            wl_max = emiss_config.get("wl_max", 14.0) * 1000.0
+            bands = int(emiss_config.get("bands", 10))
+            if bands > 1:
+                step = (wl_max - wl_min) / (bands - 1)
+            else:
+                step = 10.0
+            wl_padded_min = wl_min - step
+            wl_padded_max = wl_max + step
+            total_bands = bands + 2
+            wavelengths = np.linspace(wl_padded_min, wl_padded_max, total_bands, endpoint=True, dtype=float).tolist()
+        else:
+            wavelengths = config_scene.get("wavelengths", [])
 
         if scene_dict and "scene" in scene_dict and "shape" in scene_dict["scene"]:
                 shapes = scene_dict["scene"]["shape"]
@@ -825,6 +859,14 @@ class SceneService(BaseService):
         # eliminar emisor de aire global si existe
         if scene_dict and "scene" in scene_dict and "emitter" in scene_dict["scene"]:
             del scene_dict["scene"]["emitter"]
+
+        # Actualizar el film del sensor con las longitudes de onda correctas (ya sean térmicas o personalizadas)
+        if scene_dict and "scene" in scene_dict and "sensor" in scene_dict["scene"]:
+            sensor = scene_dict["scene"]["sensor"]
+            if "film" in sensor:
+                film = sensor["film"]
+                film["@type"] = "specfilm"
+                film["spectrum"] = create_specfilm_bands(wavelengths)
 
         if scene_dict:
             self.scene_parser.save_dict_as_xml(scene_dict, emissivity_map_xml)

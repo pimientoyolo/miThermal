@@ -289,10 +289,14 @@ def view_object_3d(choice_label: str):
         except Exception as plot_e:
             logger.warning(f"Fallo generando plot emisividad: {plot_e}")
 
-        return str(p), "\n".join(lines), str(p), gr.update(value=temp_val), emissivity_plot
+        mat_type = obj.get("material_type", "diffuse")
+        mat_type_ui = "Reflectante" if mat_type == "reflectante" else "Difuso"
+        roughness_val = obj.get("roughness", 0.05)
+
+        return str(p), "\n".join(lines), str(p), gr.update(value=temp_val), emissivity_plot, mat_type_ui, roughness_val
     except Exception as e:
         logger.error(f"view_object_3d error: {e}")
-        return None, f"❌ Error: {e}", None, gr.update(value=None), None
+        return None, f"❌ Error: {e}", None, gr.update(value=None), None, "Difuso", 0.05
 
 
 # --------------------------------------------------------------------------------------
@@ -427,13 +431,22 @@ def create_mitsuba_viewer_interface():
                         temp_input = gr.Number(label="Temperatura (K)", value=None, precision=2)
                         temp_min = gr.Number(label="Temp Mínima (K)", value=None, precision=2, visible=False)
                         temp_max = gr.Number(label="Temp Máxima (K)", value=None, precision=2, visible=False)
-                        spectrum_type = gr.Radio(
-                            label="Tipo de Datos",
-                            choices=["Emisividad", "Reflectancia"],
-                            value="Emisividad",
-                            info="¿El archivo subido es Emisividad o Reflectancia (1-E)?"
-                        )
                         emissivity_file = gr.File(label="Archivo Espectral", file_types=[".txt", ".tbs"], interactive=True)
+                        material_type = gr.Radio(
+                            label="Acabado del Material",
+                            choices=["Difuso", "Reflectante"],
+                            value="Difuso",
+                            info="Selecciona si el material tiene un acabado difuso (Lambertian) o reflectante (Conductor con rugosidad)."
+                        )
+                        roughness = gr.Slider(
+                            label="Rugosidad",
+                            minimum=0.0,
+                            maximum=1.0,
+                            value=0.05,
+                            step=0.01,
+                            visible=False,
+                            info="Rugosidad del material (roughness alpha). 0.0 es totalmente pulido (especular), 1.0 es muy rugoso."
+                        )
                         apply_update_btn = gr.Button("✅ Aplicar Cambios", variant="primary")
                         info_text = gr.Textbox(label="Información", lines=6, interactive=False)
                     
@@ -445,8 +458,10 @@ def create_mitsuba_viewer_interface():
                     "mode_radio": mode_radio, "selector": selector, "members": members,
                     "temp_mode": temp_mode, "temp_input": temp_input,
                     "temp_min": temp_min, "temp_max": temp_max,
-                    "spectrum_type": spectrum_type,
-                    "emissivity_file": emissivity_file, "apply_update_btn": apply_update_btn,
+                    "emissivity_file": emissivity_file,
+                    "material_type": material_type,
+                    "roughness": roughness,
+                    "apply_update_btn": apply_update_btn,
                     "info_text": info_text, "model_viewer": model_viewer, "emissivity_plot": emissivity_plot,
                 }
 
@@ -1135,6 +1150,16 @@ def create_mitsuba_viewer_interface():
             ]
         )
 
+        def og_update_material_visibility(mat_type: str):
+            is_refl = mat_type == "Reflectante"
+            return gr.update(visible=is_refl)
+
+        og_section["material_type"].change(
+            fn=og_update_material_visibility,
+            inputs=[og_section["material_type"]],
+            outputs=[og_section["roughness"]],
+        )
+
         def og_selector_changed(mode: str, selection: str):
             mode_l = (mode or "").lower()
             if not selection:
@@ -1143,9 +1168,12 @@ def create_mitsuba_viewer_interface():
                     gr.update(value="Seleccione una opción"),
                     None,
                     None,
+                    gr.update(value=None),
+                    gr.update(value="Difuso"),
+                    gr.update(value=0.05, visible=False),
                 )
             if mode_l.startswith("obj"):
-                mv, info, _of, _t, plot = view_object_3d(selection)
+                mv, info, _of, temp_upd, plot, mat_type_ui, roughness_val = view_object_3d(selection)
                 
                 # Agregar información de familia si pertenece a una
                 oid = viewer_state.object_id_mapping.get(selection)
@@ -1172,6 +1200,9 @@ def create_mitsuba_viewer_interface():
                     gr.update(value=info),
                     mv,
                     plot,
+                    temp_upd,
+                    gr.update(value=mat_type_ui),
+                    gr.update(value=roughness_val, visible=(mat_type_ui == "Reflectante")),
                 )
             elif mode_l.startswith("inst"):
                 oids = viewer_state.object_groups_instance.get(selection, [])
@@ -1183,18 +1214,24 @@ def create_mitsuba_viewer_interface():
             ]
             labels_sorted = sorted(labels)
             if labels_sorted:
-                mv, info, _of, _t, plot = view_object_3d(labels_sorted[0])
+                mv, info, _of, temp_upd, plot, mat_type_ui, roughness_val = view_object_3d(labels_sorted[0])
                 return (
                     gr.update(choices=labels_sorted, value=[]),
                     gr.update(value=info),
                     mv,
-                    plot
+                    plot,
+                    temp_upd,
+                    gr.update(value=mat_type_ui),
+                    gr.update(value=roughness_val, visible=(mat_type_ui == "Reflectante")),
                 )
             return (
                 gr.update(choices=[], value=[]),
                 gr.update(value=f"Sin miembros para {selection}"),
                 None,
-                None
+                None,
+                gr.update(value=None),
+                gr.update(value="Difuso"),
+                gr.update(value=0.05, visible=False),
             )
 
         og_section["selector"].change(
@@ -1205,10 +1242,13 @@ def create_mitsuba_viewer_interface():
                 og_section["info_text"],
                 og_section["model_viewer"],
                 og_section["emissivity_plot"],
+                og_section["temp_input"],
+                og_section["material_type"],
+                og_section["roughness"],
             ],
         )
 
-        def og_apply_update(mode: str, selection: str, temp_value, spec_type: str, emissivity_file, temp_mode_val, temp_min_val, temp_max_val):
+        def og_apply_update(mode: str, selection: str, temp_value, emissivity_file, temp_mode_val, temp_min_val, temp_max_val, material_type_val: str, roughness_val: float):
             """
             Actualiza objeto(s) según el modo seleccionado.
             
@@ -1216,15 +1256,18 @@ def create_mitsuba_viewer_interface():
                 mode: "Objeto", "Instancia", o "Familia"
                 selection: Objeto/grupo seleccionado
                 temp_value: Nueva temperatura (opcional)
-                spec_type: "Emisividad" o "Reflectancia"
                 emissivity_file: Archivo de emisividad (opcional)
                 temp_mode_val: Modo de temperatura ("Fija" o "Rango Aleatorio")
                 temp_min_val: Temperatura mínima del rango
                 temp_max_val: Temperatura máxima del rango
+                material_type_val: Tipo de material ("Difuso" o "Reflectante")
+                roughness_val: Valor de rugosidad
             """
             mode_l = (mode or '').lower()
             client = get_client()
-            is_refl = spec_type == "Reflectancia"
+            is_refl = False
+            mat_type = "reflectante" if material_type_val == "Reflectante" else "diffuse"
+            roughness_param = float(roughness_val) if roughness_val is not None else None
             
             # Validar que hay algo que actualizar
             if not selection:
@@ -1316,9 +1359,9 @@ def create_mitsuba_viewer_interface():
                 emissivity_file_path = getattr(emissivity_file, 'name', None)
             
             # Validar que hay al menos una propiedad para actualizar
-            if t_val is None and t_min is None and emissivity_file_path is None:
+            if t_val is None and t_min is None and emissivity_file_path is None and material_type_val is None and roughness_val is None:
                 return gr.update(
-                    value='❌ Debe especificar temperatura, rango de temperatura o archivo de emisividad'
+                    value='❌ Debe especificar temperatura, rango de temperatura, archivo de emisividad, acabado de material o rugosidad'
                 )
             
             try:
@@ -1330,7 +1373,9 @@ def create_mitsuba_viewer_interface():
                     emissivity_file_path=emissivity_file_path,
                     is_reflectance=is_refl,
                     temp_min=t_min,
-                    temp_max=t_max
+                    temp_max=t_max,
+                    material_type=mat_type,
+                    roughness=roughness_param
                 )
                 
                 if result.get("status") == "error":
@@ -1386,11 +1431,12 @@ def create_mitsuba_viewer_interface():
                 og_section['mode_radio'], 
                 og_section['selector'], 
                 og_section['temp_input'], 
-                og_section['spectrum_type'],
                 og_section['emissivity_file'],
                 og_section['temp_mode'],
                 og_section['temp_min'],
-                og_section['temp_max']
+                og_section['temp_max'],
+                og_section['material_type'],
+                og_section['roughness']
             ],
             outputs=[og_section['info_text']],
         )
@@ -1470,7 +1516,8 @@ def create_mitsuba_viewer_interface():
         def apply_all_config_cb(
             spp_k, width, height, wl_min, wl_max, bands, air_temperature, air_file,
             rx, ry, rz, tx, ty, tz, fov,
-            theta, phi, radius, target_x, target_y, target_z
+            theta, phi, radius, target_x, target_y, target_z,
+            emiss_use_custom, emiss_wl_min, emiss_wl_max, emiss_bands
         ):
             client = get_client()
             results: Dict[str, Dict] = {}
@@ -1522,6 +1569,18 @@ def create_mitsuba_viewer_interface():
             except Exception as e:
                 results["spectrum"] = {"status": "error", "detail": str(e)}
             
+            # Mapa de Emisividad Espectral
+            try:
+                if emiss_use_custom is not None:
+                    results["emissivity_map"] = client.update_emissivity_map_config(
+                        bool(emiss_use_custom),
+                        float(emiss_wl_min) if emiss_wl_min is not None else 8.0,
+                        float(emiss_wl_max) if emiss_wl_max is not None else 14.0,
+                        int(emiss_bands) if emiss_bands is not None else 10
+                    )
+            except Exception as e:
+                results["emissivity_map"] = {"status": "error", "detail": str(e)}
+            
             # Aire (resto igual...)
             air_plot = None
             try:
@@ -1563,6 +1622,10 @@ def create_mitsuba_viewer_interface():
                 config_section["fov"],
                 config_section["theta"], config_section["phi"], config_section["radius"],
                 config_section["target_x"], config_section["target_y"], config_section["target_z"],
+                config_section["emiss_use_custom"],
+                config_section["emiss_wl_min"],
+                config_section["emiss_wl_max"],
+                config_section["emiss_bands"],
             ],
             outputs=[
                 config_section["config_info"], config_section["config_status"], config_section["air_plot"],
@@ -1598,6 +1661,39 @@ def create_mitsuba_viewer_interface():
             return xs, ys
 
         # Nuevo: botón "Cargar Config" manual
+        # Reutilizable list of config outputs
+        load_config_outputs = [
+            config_section["camera_spp"],
+            config_section["camera_width"],
+            config_section["camera_height"],
+            config_section["rotate_x"],
+            config_section["rotate_y"],
+            config_section["rotate_z"],
+            config_section["translate_x"],
+            config_section["translate_y"],
+            config_section["translate_z"],
+            config_section["fov"],
+            config_section["theta"],
+            config_section["phi"],
+            config_section["radius"],
+            config_section["target_x"],
+            config_section["target_y"],
+            config_section["target_z"],
+            config_section["wl_min"],
+            config_section["wl_max"],
+            config_section["bands"],
+            config_section["air_temperature"],
+            config_section["config_info"],
+            config_section["emiss_use_custom"],
+            config_section["emiss_wl_min"],
+            config_section["emiss_wl_max"],
+            config_section["emiss_bands"],
+            config_section["full_config_file"],
+            config_section["import_full_file"],
+            config_section["import_status"],
+        ]
+
+        # Nuevo: botón "Cargar Config" manual
         def load_config_cb():
             cfg = None
             try:
@@ -1611,34 +1707,35 @@ def create_mitsuba_viewer_interface():
             except Exception:
                 air_temp = None
             updates.insert(-1, gr.update(value=air_temp))
+            
+            # Custom Emissivity Config
+            try:
+                emiss_cfg = get_client().get_emissivity_map_config().get("data", {})
+            except Exception:
+                emiss_cfg = {}
+                
+            use_custom = emiss_cfg.get("use_custom", False)
+            emiss_wl_min = emiss_cfg.get("wl_min", 8.0)
+            emiss_wl_max = emiss_cfg.get("wl_max", 14.0)
+            emiss_bands = emiss_cfg.get("bands", 10)
+            
+            # Append updates for emissivity map config
+            updates.append(gr.update(value=use_custom))
+            updates.append(gr.update(value=emiss_wl_min))
+            updates.append(gr.update(value=emiss_wl_max))
+            updates.append(gr.update(value=emiss_bands))
+            
+            # Clear zip and import status when loading
+            updates.append(gr.update(value=None))
+            updates.append(gr.update(value=None))
+            updates.append(gr.update(value=""))
+            
             return tuple(updates)
 
         config_section["load_config_btn"].click(
             fn=load_config_cb,
             inputs=[],
-            outputs=[
-                config_section["camera_spp"],
-                config_section["camera_width"],
-                config_section["camera_height"],
-                config_section["rotate_x"],
-                config_section["rotate_y"],
-                config_section["rotate_z"],
-                config_section["translate_x"],
-                config_section["translate_y"],
-                config_section["translate_z"],
-                config_section["fov"],
-                config_section["theta"],
-                config_section["phi"],
-                config_section["radius"],
-                config_section["target_x"],
-                config_section["target_y"],
-                config_section["target_z"],
-                config_section["wl_min"],
-                config_section["wl_max"],
-                config_section["bands"],
-                config_section["air_temperature"],
-                config_section["config_info"],
-            ],
+            outputs=load_config_outputs,
         )
 
         # Nuevo: descargar config_scene.json
@@ -1661,6 +1758,57 @@ def create_mitsuba_viewer_interface():
             fn=download_config_cb,
             inputs=[],
             outputs=[config_section["download_config_file"]],
+        )
+
+        # Nuevo: exportar configuración completa ZIP
+        def export_full_config_cb():
+            try:
+                zip_bytes = get_client().download_full_config()
+                temp_dir = tempfile.mkdtemp()
+                temp_path = os.path.join(temp_dir, "scene_full_config.zip")
+                with open(temp_path, "wb") as f:
+                    f.write(zip_bytes)
+                return gr.update(value=temp_path, visible=True)
+            except Exception as e:
+                logger.error(f"Error al exportar configuración completa: {e}")
+                return gr.update(value=None, visible=False)
+
+        config_section["export_full_btn"].click(
+            fn=export_full_config_cb,
+            inputs=[],
+            outputs=[config_section["full_config_file"]],
+        )
+
+        # Nuevo: importar configuración completa ZIP
+        def import_full_config_cb(zip_file):
+            if zip_file is None:
+                return (gr.update(),) * 28
+            path = getattr(zip_file, "name", None)
+            if not path:
+                updates = [gr.update()] * 28
+                updates[-1] = gr.update(value="❌ Archivo inválido")
+                return tuple(updates)
+            try:
+                res = get_client().upload_full_config(path)
+                if res.get("status") == "success":
+                    status = f"✅ {res.get('data', {}).get('message', 'Importado con éxito')}"
+                    config_updates = list(load_config_cb())
+                    config_updates[-1] = gr.update(value=status)
+                    return tuple(config_updates)
+                else:
+                    updates = [gr.update()] * 28
+                    updates[-1] = gr.update(value=f"❌ Error: {res.get('detail')}")
+                    return tuple(updates)
+            except Exception as e:
+                logger.error(f"Error importando configuración completa: {e}")
+                updates = [gr.update()] * 28
+                updates[-1] = gr.update(value=f"❌ Error: {str(e)}")
+                return tuple(updates)
+
+        config_section["import_full_file"].upload(
+            fn=import_full_config_cb,
+            inputs=[config_section["import_full_file"]],
+            outputs=load_config_outputs,
         )
 
         # Cambiar etiqueta del slider dinámicamente cuando el usuario ajusta k

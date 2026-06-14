@@ -110,3 +110,12 @@ class CameraAnimationConfigDTO(BaseModel):
     mode: str # "linear" o "spherical"
     linear_data: CameraInterpolationDTO | None = None
     spherical_data: SphericalCameraInterpolationDTO | None = None
+
+
+class EmissivityMapConfigDTO(BaseModel):
+    """DTO para la configuración personalizada del mapa de emisividad"""
+    use_custom: bool
+    wl_min: float  # en μm
+    wl_max: float  # en μm
+    bands: int
+

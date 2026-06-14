@@ -266,6 +266,19 @@ def build_unified_config_section() -> Dict[str, gr.components.Component]:
 				# air_suggest_btn = gr.Button("Sugerir atenuación", variant="secondary")
 				air_suggest_list = gr.Dropdown(label="Archivo sugerido", choices=[], interactive=True)
 				air_apply_suggest_btn = gr.Button("Aplicar sugerido", variant="secondary")
+			
+			with gr.Accordion("Mapa de Emisividad (Personalizado)", open=False):
+				emiss_use_custom = gr.Checkbox(label="Usar rango personalizado para el mapa de emisividad", value=False)
+				emiss_wl_min = gr.Number(label="λ min (μm)", value=8.0, precision=0)
+				emiss_wl_max = gr.Number(label="λ max (μm)", value=14.0, precision=0)
+				emiss_bands = gr.Number(label="Número de bandas", value=10, precision=0)
+
+			with gr.Accordion("Importar / Exportar Configuración Completa", open=False):
+				export_full_btn = gr.Button("📤 Descargar Configuración Completa (.zip)", variant="secondary")
+				full_config_file = gr.File(label="Archivo de Configuración Exportado (.zip)", interactive=False)
+				gr.Markdown("---")
+				import_full_file = gr.File(label="📥 Cargar Configuración Completa (.zip)", file_types=[".zip"], interactive=True)
+				import_status = gr.Textbox(label="Estado de Importación", interactive=False)
 
 	# Botón aplicar y estado
 	with gr.Row():
@@ -305,6 +318,14 @@ def build_unified_config_section() -> Dict[str, gr.components.Component]:
 		# "air_suggest_btn": air_suggest_btn,
 		"air_suggest_list": air_suggest_list,
 		"air_apply_suggest_btn": air_apply_suggest_btn,
+		"emiss_use_custom": emiss_use_custom,
+		"emiss_wl_min": emiss_wl_min,
+		"emiss_wl_max": emiss_wl_max,
+		"emiss_bands": emiss_bands,
+		"export_full_btn": export_full_btn,
+		"full_config_file": full_config_file,
+		"import_full_file": import_full_file,
+		"import_status": import_status,
 		"apply_all_btn": apply_all_btn,
 		"config_status": config_status,
 		"config_info": config_info,

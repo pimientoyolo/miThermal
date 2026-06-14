@@ -7,6 +7,8 @@ class ObjectDTO(BaseModel):
     emissivity: List[float]
     reflection: List[float]
     wavelengths: List[float]
+    material_type: str = "diffuse"
+    roughness: float = 0.05
 
 class UpdateObjectDTO(BaseModel):
     id: str

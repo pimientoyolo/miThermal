@@ -1,7 +1,7 @@
 from fastapi import APIRouter, File, UploadFile
 from fastapi.responses import FileResponse
 
-from src.api.dto.cameraDTO import CameraDTO, UpdateCameraDTO, CameraSpatialConfigDTO
+from src.api.dto.cameraDTO import CameraDTO, UpdateCameraDTO, CameraSpatialConfigDTO, EmissivityMapConfigDTO
 from src.api.service.config_service import ConfigService
 from fastapi import Query
 from typing import Dict
@@ -153,3 +153,38 @@ async def clear_cache() -> Dict:
     cache = get_cache_manager()
     cache.clear()
     return {"status": "success", "message": "Cache limpiado exitosamente"}
+
+
+@config_router.get("/emissivity-map")
+async def get_emissivity_map_config() -> EmissivityMapConfigDTO:
+    """Obtiene la configuración personalizada del mapa de emisividad"""
+    config = config_service.get_emissivity_map_config()
+    return EmissivityMapConfigDTO(**config)
+
+
+@config_router.put("/emissivity-map")
+async def update_emissivity_map_config(
+    emiss_config: EmissivityMapConfigDTO
+) -> EmissivityMapConfigDTO:
+    """Actualiza la configuración personalizada del mapa de emisividad"""
+    config = config_service.update_emissivity_map_config(
+        emiss_config.use_custom,
+        emiss_config.wl_min,
+        emiss_config.wl_max,
+        emiss_config.bands
+    )
+    return EmissivityMapConfigDTO(**config)
+
+
+@config_router.get("/full/download")
+async def download_full_config() -> FileResponse:
+    """Exporta y descarga toda la configuración del simulador en un archivo ZIP"""
+    zip_path = config_service.export_full_config()
+    return FileResponse(zip_path, media_type="application/zip", filename="scene_full_config.zip")
+
+
+@config_router.post("/full/upload")
+async def upload_full_config(file: UploadFile = File(...)) -> Dict:
+    """Importa toda la configuración del simulador desde un archivo ZIP"""
+    message = config_service.import_full_config(file)
+    return {"status": "success", "message": message}

@@ -232,6 +232,14 @@ async def update_object_with_mode(
     temp_max: float | None = Query(
         None,
         description="Temperatura máxima para rango aleatorio"
+    ),
+    material_type: str | None = Query(
+        None,
+        description="Tipo de material: 'diffuse' o 'reflectante'"
+    ),
+    roughness: float | None = Query(
+        None,
+        description="Rugosidad (0.0 a 1.0) para materiales reflectantes"
     )
 ):
     """
@@ -239,12 +247,14 @@ async def update_object_with_mode(
     
     Args:
         object_id: ID del objeto seleccionado
-        mode: "Objeto para actualizar solo este, "Familia" para toda la familia
+        mode: "Objeto" para actualizar solo este, "Familia" para toda la familia
         temperature: Nueva temperatura (opcional)
         emissivity_file: Nueva emisividad (opcional)
         is_reflectance: Si el archivo es de reflectancia
         temp_min: Temperatura mínima del rango aleatorio (opcional)
         temp_max: Temperatura máxima del rango aleatorio (opcional)
+        material_type: Tipo de material (opcional)
+        roughness: Rugosidad (opcional)
         
     Returns:
         {
@@ -268,5 +278,7 @@ async def update_object_with_mode(
         emissivity_file=emissivity_file,
         is_reflectance=is_reflectance,
         temp_min=temp_min,
-        temp_max=temp_max
+        temp_max=temp_max,
+        material_type=material_type,
+        roughness=roughness
     )

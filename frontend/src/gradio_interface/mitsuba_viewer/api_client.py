@@ -496,6 +496,50 @@ class MitsubaAPIClient:
             logger.error(f"Clear cache error: {e}")
             return {"status": "error", "detail": str(e)}
 
+    def get_emissivity_map_config(self) -> Dict:
+        """GET /config/emissivity-map"""
+        try:
+            r = self.session.get(f"{self.base_url}/config/emissivity-map")
+            r.raise_for_status()
+            return {"status": "success", "data": r.json()}
+        except Exception as e:
+            logger.error(f"Get emissivity map config error: {e}")
+            return {"status": "error", "detail": str(e)}
+
+    def update_emissivity_map_config(self, use_custom: bool, wl_min: float, wl_max: float, bands: int) -> Dict:
+        """PUT /config/emissivity-map"""
+        try:
+            payload = {
+                "use_custom": use_custom,
+                "wl_min": wl_min,
+                "wl_max": wl_max,
+                "bands": bands
+            }
+            r = self.session.put(f"{self.base_url}/config/emissivity-map", json=payload)
+            r.raise_for_status()
+            return {"status": "success", "data": r.json()}
+        except Exception as e:
+            logger.error(f"Update emissivity map config error: {e}")
+            return {"status": "error", "detail": str(e)}
+
+    def download_full_config(self) -> bytes:
+        """GET /config/full/download -> Returns zip bytes"""
+        r = self.session.get(f"{self.base_url}/config/full/download")
+        r.raise_for_status()
+        return r.content
+
+    def upload_full_config(self, zip_path: str) -> Dict:
+        """POST /config/full/upload"""
+        try:
+            with open(zip_path, 'rb') as f:
+                files = {"file": (os.path.basename(zip_path), f, "application/zip")}
+                r = self.session.post(f"{self.base_url}/config/full/upload", files=files)
+            r.raise_for_status()
+            return {"status": "success", "data": r.json()}
+        except Exception as e:
+            logger.error(f"Upload full config error: {e}")
+            return {"status": "error", "detail": str(e)}
+
     # ---------------------- Spectral Data Export ----------------------
     def get_object_spectral_data(
         self, 
@@ -612,7 +656,9 @@ class MitsubaAPIClient:
         emissivity_file_path: str = None,
         is_reflectance: bool = False,
         temp_min: float = None,
-        temp_max: float = None
+        temp_max: float = None,
+        material_type: str = None,
+        roughness: float = None
     ) -> Dict:
         """PUT /object/update-with-mode"""
         try:
@@ -620,6 +666,8 @@ class MitsubaAPIClient:
             if temperature is not None: params["temperature"] = temperature
             if temp_min is not None: params["temp_min"] = temp_min
             if temp_max is not None: params["temp_max"] = temp_max
+            if material_type is not None: params["material_type"] = material_type
+            if roughness is not None: params["roughness"] = roughness
                 
             files = None
             f = None

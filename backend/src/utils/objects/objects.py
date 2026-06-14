@@ -328,9 +328,17 @@ class ObjectUtils:
         
         return sha256_hash, safe_filename
 
-    def create_reflectance_material(self, wavelengths: np.ndarray, reflectance: np.ndarray, identifier: str = "default") -> tuple[dict, str]:
+    def create_reflectance_material(
+        self, 
+        wavelengths: np.ndarray, 
+        reflectance: np.ndarray, 
+        identifier: str = "default",
+        material_type: str = "diffuse",
+        roughness: float = 0.05
+    ) -> tuple[dict, str]:
         """
         Crea un material con reflectancia usando un archivo .spd con nombre significativo.
+        Soporta BSDF difuso (diffuse) o reflectante (roughconductor).
         Retorna (mitsuba_dict, shasum).
         """
         try:
@@ -348,13 +356,26 @@ class ObjectUtils:
             # Mitsuba busca relativo al archivo .xml de la escena
             relative_spd_path = f"spds/{safe_filename}"
 
-            material_dict = {
-                "@type": "diffuse",
-                "spectrum": {
-                    "@name": "reflectance",
-                    "@filename": relative_spd_path
+            if material_type == "reflectante":
+                material_dict = {
+                    "@type": "roughconductor",
+                    "float": {
+                        "@name": "alpha",
+                        "@value": f"{roughness:.4f}"
+                    },
+                    "spectrum": {
+                        "@name": "specular_reflectance",
+                        "@filename": relative_spd_path
+                    }
                 }
-            }
+            else:
+                material_dict = {
+                    "@type": "diffuse",
+                    "spectrum": {
+                        "@name": "reflectance",
+                        "@filename": relative_spd_path
+                    }
+                }
             
             return material_dict, shasum
             
