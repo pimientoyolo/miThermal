@@ -173,9 +173,6 @@ class SceneService(BaseService):
         config_scene["air"] = {
             "temperature": t_air
         }
-        rx = ry = rz = 0.0
-        tx = ty = tz = 0.0
-
         # obtener sensor y transform
         sensor = scene_dict["scene"].get("sensor")
         if sensor is None or not isinstance(sensor, dict):
@@ -192,58 +189,159 @@ class SceneService(BaseService):
             sensor["transform"] = {}
             transform = sensor["transform"]
 
-        # obtner las rotaciones
-        rotate = transform.get("rotate")
+        # Inicialización de variables de cámara en Blender
+        rx_b = ry_b = rz_b = 0.0
+        tx_b = ty_b = tz_b = 0.0
+        target_x_b = target_y_b = target_z_b = 0.0
+        up_x_b = up_y_b = up_z_b = None
+        theta = phi = radius = None
+        is_spherical = False
 
-        # Leer valores actuales si existen
-        if isinstance(rotate, list):
-            for r in rotate:
-                a = float(r.get("@angle", 0.0))
-                if r.get("@x") == "1":
+        # Variables de cámara en Mitsuba
+        rx_m = ry_m = rz_m = 0.0
+        tx_m = ty_m = tz_m = 0.0
+
+        # Caso 1: La escena original usa lookat
+        lookat = transform.get("lookat")
+        if lookat is not None and isinstance(lookat, dict):
+            origin_str = lookat.get("@origin", "0 0 0")
+            target_str = lookat.get("@target", "0 0 0")
+            up_str = lookat.get("@up", "0 0 1")
+
+            try:
+                origin_coords = [float(x) for x in origin_str.split()]
+                target_coords = [float(x) for x in target_str.split()]
+                up_coords = [float(x) for x in up_str.split()]
+            except ValueError as e:
+                logger.error(f"Error parseando lookat del sensor: {e}")
+                raise HTTPException(
+                    status_code=400,
+                    detail="Error parseando las coordenadas de lookat en el sensor"
+                )
+
+            if len(origin_coords) != 3 or len(target_coords) != 3 or len(up_coords) != 3:
+                logger.error(f"Dimensiones de lookat incorrectas: origin={origin_coords}, target={target_coords}, up={up_coords}")
+                raise HTTPException(
+                    status_code=400,
+                    detail="El campo lookat del sensor debe tener 3 coordenadas en cada vector (origin, target, up)"
+                )
+
+            # Coordenadas Mitsuba
+            ox_m, oy_m, oz_m = origin_coords
+            tgx_m, tgy_m, tgz_m = target_coords
+            upx_m, upy_m, upz_m = up_coords
+
+            # Convertir a espacio de trabajo Blender
+            tx_b = ox_m
+            ty_b = -oz_m
+            tz_b = oy_m
+
+            target_x_b = tgx_m
+            target_y_b = -tgz_m
+            target_z_b = tgy_m
+
+            up_x_b = upx_m
+            up_y_b = -upz_m
+            up_z_b = upy_m
+
+            # Calcular ángulos de rotación de Blender
+            try:
+                rx_b, ry_b, rz_b = calculate_look_at_blender(
+                    np.array([tx_b, ty_b, tz_b]),
+                    np.array([target_x_b, target_y_b, target_z_b]),
+                    np.array([up_x_b, up_y_b, up_z_b])
+                )
+            except Exception as e:
+                logger.error(f"Error calculando rotación lookat: {e}")
+                rx_b, ry_b, rz_b = 0.0, 0.0, 0.0
+
+            # Cálculos esféricos
+            dx = tx_b - target_x_b
+            dy = ty_b - target_y_b
+            dz = tz_b - target_z_b
+            radius = float(np.sqrt(dx*dx + dy*dy + dz*dz))
+            if radius > 1e-6:
+                cos_val = np.clip(dz / radius, -1.0, 1.0)
+                theta = float(np.rad2deg(np.arccos(cos_val)))
+                phi = float(np.rad2deg(np.arctan2(dy, dx))) % 360.0
+            else:
+                theta = 0.0
+                phi = 0.0
+
+            # Valores Mitsuba correspondientes para guardar temporalmente
+            rx_m, ry_m, rz_m = blender_cam_to_mitsuba_xyz(rx_b, ry_b, rz_b)
+            tx_m, ty_m, tz_m = ox_m, oy_m, oz_m
+            is_spherical = True
+
+        else:
+            # Caso 2: La escena original usa rotate + translate
+            rotate = transform.get("rotate")
+            rx = ry = rz = 0.0
+
+            if isinstance(rotate, list):
+                for r in rotate:
+                    a = float(r.get("@angle", 0.0))
+                    if r.get("@x") == "1":
+                        rx = a
+                    elif r.get("@y") == "1":
+                        ry = a
+                    elif r.get("@z") == "1":
+                        rz = a
+            elif isinstance(rotate, dict):
+                a = float(rotate.get("@angle", 0.0))
+                if rotate.get("@x") == "1":
                     rx = a
-                elif r.get("@y") == "1":
+                elif rotate.get("@y") == "1":
                     ry = a
-                elif r.get("@z") == "1":
+                elif rotate.get("@z") == "1":
                     rz = a
 
-        elif isinstance(rotate, dict):
-            a = float(rotate.get("@angle", 0.0))
-            if rotate.get("@x") == "1":
-                rx = a
-            elif rotate.get("@y") == "1":
-                ry = a
-            elif rotate.get("@z") == "1":
-                rz = a
+            translate = transform.get("translate")
+            if not isinstance(translate, dict):
+                translate = {"@value": "0 0 0"}
 
-        # Normalizar/crear rotate como lista de 3 entradas
+            value = translate.get("@value", "0 0 0")
+            coords = value.split()
+            if len(coords) != 3:
+                logger.error(f"Formato inválido de translate: '{value}'")
+                raise HTTPException(
+                    status_code=400,
+                    detail="El campo translate del sensor debe tener 3 coordenadas: 'x y z'"
+                )
+
+            ox_m = float(coords[0])
+            oy_m = float(coords[1])
+            oz_m = float(coords[2])
+
+            # Convertir a Blender
+            tx_b = ox_m
+            ty_b = -oz_m
+            tz_b = oy_m
+
+            angles = mitsuba_cam_to_blender_xyz(rx, ry, rz)
+            rx_b, ry_b, rz_b = angles[0], angles[1], angles[2]
+
+            rx_m, ry_m, rz_m = rx, ry, rz
+            tx_m, ty_m, tz_m = ox_m, oy_m, oz_m
+            is_spherical = False
+
+        # Limpiar todas las transformaciones previas para evitar duplicados/conflictos
+        for key in ["rotate", "translate", "matrix", "lookat"]:
+            if key in transform:
+                del transform[key]
+
+        # Guardar en formato Mitsuba estándar en el XML principal
         transform["rotate"] = [
-            {"@x": "1", "@angle": str(rx)},
-            {"@y": "1", "@angle": str(ry)},
-            {"@z": "1", "@angle": str(rz)}
+            {"@x": "1", "@angle": str(rx_m)},
+            {"@y": "1", "@angle": str(ry_m)},
+            {"@z": "1", "@angle": str(rz_m)}
         ]
-
-        # obtener las traslaciones
-        translate = transform.get("translate")
-        if not isinstance(translate, dict):
-            translate = {"@value": "0 0 0"}
-            transform["translate"] = translate
-
-        value = translate.get("@value", "0 0 0")
-        coords = value.split()
-        if len(coords) != 3:
-            logger.error(f"Formato inválido de translate: '{value}'")
-            raise HTTPException(
-                status_code=400,
-                detail="El campo translate del sensor debe tener 3 coordenadas: 'x y z'"
-            )
-
-        tx = float(coords[0])
-        ty = float(coords[1])
-        tz = float(coords[2])
+        transform["translate"] = {
+            "@value": f"{tx_m} {ty_m} {tz_m}"
+        }
 
         # obtener el fov
         floats = sensor.get("float")
-
         fov = 45.0
 
         if isinstance(floats, list):
@@ -254,21 +352,34 @@ class SceneService(BaseService):
             if floats.get("@name") == "fov":
                 fov = float(floats.get("@value"))
 
-        angles = mitsuba_cam_to_blender_xyz(rx, ry, rz)
-
+        # Guardar config_scene
         config_scene["camera"] = {
             "spp": 256,
             "width": 256,
             "height": 256,
-            "rotate_x": angles[0], # ajuste para mitsuba
-            "rotate_y": angles[1], # ajuste para mitsuba
-            "rotate_z": angles[2], # ajuste para mitsuba
-            "translate_x": tx, # x mitsuba igual al x blender
-            "translate_y": -tz, # y mitsuba igual al z blender
-            "translate_z": ty, # eje z igual al eje -y de blender
-            "fov": fov
+            "rotate_x": rx_b,
+            "rotate_y": ry_b,
+            "rotate_z": rz_b,
+            "translate_x": tx_b,
+            "translate_y": ty_b,
+            "translate_z": tz_b,
+            "fov": fov,
+            "target_x": target_x_b,
+            "target_y": target_y_b,
+            "target_z": target_z_b,
+            "is_spherical": is_spherical
         }
-        
+
+        if up_x_b is not None:
+            config_scene["camera"]["up_x"] = up_x_b
+            config_scene["camera"]["up_y"] = up_y_b
+            config_scene["camera"]["up_z"] = up_z_b
+
+        if theta is not None:
+            config_scene["camera"]["theta"] = theta
+            config_scene["camera"]["phi"] = phi
+            config_scene["camera"]["radius"] = radius
+
         config_scene["num_bands"] = num_bands
         config_scene["wavelengths"] = wavelengths.tolist()
 

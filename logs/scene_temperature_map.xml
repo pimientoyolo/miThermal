@@ -1,0 +1,528 @@
+<?xml version="1.0" encoding="utf-8"?>
+<scene version="2.1.0">
+	<default name="spp" value="1024"></default>
+	<default name="resx" value="1024"></default>
+	<default name="resy" value="1024"></default>
+	<integrator type="path">
+		<integer name="max_depth" value="16"></integer>
+	</integrator>
+	<sensor type="perspective" id="elm__1" name="elm__1">
+		<string name="fov_axis" value="x"></string>
+		<float name="fov" value="63.655"></float>
+		<float name="principal_point_offset_x" value="0.000000"></float>
+		<float name="principal_point_offset_y" value="-0.000000"></float>
+		<float name="near_clip" value="0.100000"></float>
+		<float name="far_clip" value="100.000000"></float>
+		<transform name="to_world">
+			<lookat origin="0.0 0.0 -0.0" target="0.0 0.0 -0.0" up="-1.0 0.0 0.0"></lookat>
+		</transform>
+		<sampler type="multijitter" name="sampler">
+			<integer name="sample_count" value="1024"></integer>
+		</sampler>
+		<film type="specfilm" name="film">
+			<integer name="width" value="1024"></integer>
+			<integer name="height" value="1024"></integer>
+			<spectrum type="regular" name="band_7555.56">
+				<string name="values" value="1.0, 1.0"></string>
+				<float name="wavelength_min" value="7333.3333"></float>
+				<float name="wavelength_max" value="7777.7778"></float>
+			</spectrum>
+			<spectrum type="regular" name="band_8000.00">
+				<string name="values" value="1.0, 1.0"></string>
+				<float name="wavelength_min" value="7777.7778"></float>
+				<float name="wavelength_max" value="8222.2222"></float>
+			</spectrum>
+			<spectrum type="regular" name="band_8444.44">
+				<string name="values" value="1.0, 1.0"></string>
+				<float name="wavelength_min" value="8222.2222"></float>
+				<float name="wavelength_max" value="8666.6667"></float>
+			</spectrum>
+			<spectrum type="regular" name="band_8888.89">
+				<string name="values" value="1.0, 1.0"></string>
+				<float name="wavelength_min" value="8666.6667"></float>
+				<float name="wavelength_max" value="9111.1111"></float>
+			</spectrum>
+			<spectrum type="regular" name="band_9333.33">
+				<string name="values" value="1.0, 1.0"></string>
+				<float name="wavelength_min" value="9111.1111"></float>
+				<float name="wavelength_max" value="9555.5556"></float>
+			</spectrum>
+			<spectrum type="regular" name="band_9777.78">
+				<string name="values" value="1.0, 1.0"></string>
+				<float name="wavelength_min" value="9555.5556"></float>
+				<float name="wavelength_max" value="10000.0000"></float>
+			</spectrum>
+			<spectrum type="regular" name="band_10222.22">
+				<string name="values" value="1.0, 1.0"></string>
+				<float name="wavelength_min" value="10000.0000"></float>
+				<float name="wavelength_max" value="10444.4444"></float>
+			</spectrum>
+			<spectrum type="regular" name="band_10666.67">
+				<string name="values" value="1.0, 1.0"></string>
+				<float name="wavelength_min" value="10444.4444"></float>
+				<float name="wavelength_max" value="10888.8889"></float>
+			</spectrum>
+			<spectrum type="regular" name="band_11111.11">
+				<string name="values" value="1.0, 1.0"></string>
+				<float name="wavelength_min" value="10888.8889"></float>
+				<float name="wavelength_max" value="11333.3333"></float>
+			</spectrum>
+			<spectrum type="regular" name="band_11555.56">
+				<string name="values" value="1.0, 1.0"></string>
+				<float name="wavelength_min" value="11333.3333"></float>
+				<float name="wavelength_max" value="11777.7778"></float>
+			</spectrum>
+			<spectrum type="regular" name="band_12000.00">
+				<string name="values" value="1.0, 1.0"></string>
+				<float name="wavelength_min" value="11777.7778"></float>
+				<float name="wavelength_max" value="12222.2222"></float>
+			</spectrum>
+			<spectrum type="regular" name="band_12444.44">
+				<string name="values" value="1.0, 1.0"></string>
+				<float name="wavelength_min" value="12222.2222"></float>
+				<float name="wavelength_max" value="12666.6667"></float>
+			</spectrum>
+		</film>
+	</sensor>
+	<shape type="ply" id="elm__3" name="elm__3">
+		<string name="filename" value="meshes/Cardboard_Box_Cube.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__4" name="elm__4">
+		<string name="filename" value="meshes/Cardboard_Box_Cube_001.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__5" name="elm__5">
+		<string name="filename" value="meshes/Cardboard_Box_Cube_002.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__6" name="elm__6">
+		<string name="filename" value="meshes/Cardboard_Box_Cube_003.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__7" name="elm__7">
+		<string name="filename" value="meshes/Cardboard_Box_Cube_004.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__8" name="elm__8">
+		<string name="filename" value="meshes/Cardboard_Box_Cube_005.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__9" name="elm__9">
+		<string name="filename" value="meshes/Cardboard_Box_Cube_006.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__10" name="elm__10">
+		<string name="filename" value="meshes/Cardboard_Box_Cube_007.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__11" name="elm__11">
+		<string name="filename" value="meshes/Cardboard_Box_Cube_008.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__12" name="elm__12">
+		<string name="filename" value="meshes/Cardboard_Box_Cube_009.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__13" name="elm__13">
+		<string name="filename" value="meshes/Cardboard_Box_Cube_010.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__14" name="elm__14">
+		<string name="filename" value="meshes/Cardboard_Box_Cube_011.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__15" name="elm__15">
+		<string name="filename" value="meshes/Cardboard_Box_Cube_012.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__16" name="elm__16">
+		<string name="filename" value="meshes/Cardboard_Box_Cube_013.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__17" name="elm__17">
+		<string name="filename" value="meshes/Cardboard_Box_Cube_014.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__18" name="elm__18">
+		<string name="filename" value="meshes/Cardboard_Box_Cube_015.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__19" name="elm__19">
+		<string name="filename" value="meshes/Cardboard_Box_Box1.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__20" name="elm__20">
+		<string name="filename" value="meshes/Cardboard_Box_Box1_001.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__21" name="elm__21">
+		<string name="filename" value="meshes/Cardboard_Box_Box1_002.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__22" name="elm__22">
+		<string name="filename" value="meshes/Cardboard_Box_Box1_003.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__23" name="elm__23">
+		<string name="filename" value="meshes/Cardboard_Box_Box2.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__24" name="elm__24">
+		<string name="filename" value="meshes/Cardboard_Box_Box4.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__25" name="elm__25">
+		<string name="filename" value="meshes/Cardboard_Box_Box4_001.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__27" name="elm__27">
+		<string name="filename" value="meshes/Metal_Galvanized_Ladder.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__28" name="elm__28">
+		<string name="filename" value="meshes/Metal_Galvanized_Shelf_001.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__29" name="elm__29">
+		<string name="filename" value="meshes/Metal_Galvanized_Shelf_005.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__30" name="elm__30">
+		<string name="filename" value="meshes/Metal_Galvanized_uis.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__31" name="elm__31">
+		<string name="filename" value="meshes/Metal_Galvanized_uis_001.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__33" name="elm__33">
+		<string name="filename" value="meshes/Metal_Galvanized_Shelf_230.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__34" name="elm__34">
+		<string name="filename" value="meshes/Metal_Galvanized_Shelf_233.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__35" name="elm__35">
+		<string name="filename" value="meshes/Metal_Galvanized_Shelf_236.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__36" name="elm__36">
+		<string name="filename" value="meshes/Metal_Galvanized_Shelf_242.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__37" name="elm__37">
+		<string name="filename" value="meshes/Metal_Galvanized_Shelf_244.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__39" name="elm__39">
+		<string name="filename" value="meshes/Metal_Galvanized_Shelf_007.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__41" name="elm__41">
+		<string name="filename" value="meshes/Metal_Galvanized_Shelf_003.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__43" name="elm__43">
+		<string name="filename" value="meshes/Rubber_Industrial_back_shaft_.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__44" name="elm__44">
+		<string name="filename" value="meshes/Rubber_Industrial_front_shaft.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__45" name="elm__45">
+		<string name="filename" value="meshes/Metal_Galvanized_Cube_8.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__47" name="elm__47">
+		<string name="filename" value="meshes/Glass_Window_Roof.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__49" name="elm__49">
+		<string name="filename" value="meshes/Plastic_Polymer_Cube_3_2.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__51" name="elm__51">
+		<string name="filename" value="meshes/Cube_016.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__52" name="elm__52">
+		<string name="filename" value="meshes/Plastic_Polymer_14040_Cardboard_Box_On_Palette_v1_L1.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__54" name="elm__54">
+		<string name="filename" value="meshes/Wood_Pine_14040_Cardboard_Box_On_Palette_v1_L1_001.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__55" name="elm__55">
+		<string name="filename" value="meshes/Cardboard_Box_14040_Cardboard_Box_On_Palette_v1_L1_002.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__56" name="elm__56">
+		<string name="filename" value="meshes/Plastic_Polymer_Roof_001.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__58" name="elm__58">
+		<string name="filename" value="meshes/Metal_Rough_NurbsPath_005_Metal_0.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__59" name="elm__59">
+		<string name="filename" value="meshes/Glass_Window_NurbsPath_005_Emissive_0.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__61" name="elm__61">
+		<string name="filename" value="meshes/Concrete_Pavement_NurbsPath_005_WetConcrete_0.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+	<shape type="ply" id="elm__62" name="elm__62">
+		<string name="filename" value="meshes/NurbsPath_005_WetConcrete_0_001.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<emitter type="area">
+			<spectrum name="radiance" type="uniform">
+				<float name="value" value="300.0"></float>
+			</spectrum>
+		</emitter>
+	</shape>
+</scene>

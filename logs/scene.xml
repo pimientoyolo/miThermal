@@ -1,0 +1,410 @@
+<?xml version="1.0" encoding="utf-8"?>
+<scene version="2.1.0">
+	<default name="spp" value="1024"></default>
+	<default name="resx" value="1024"></default>
+	<default name="resy" value="1024"></default>
+	<integrator type="path" id="elm__0" name="elm__0">
+		<integer name="max_depth" value="12"></integer>
+	</integrator>
+	<sensor type="perspective" id="elm__1" name="elm__1">
+		<string name="fov_axis" value="x"></string>
+		<float name="fov" value="63.655"></float>
+		<float name="principal_point_offset_x" value="0.000000"></float>
+		<float name="principal_point_offset_y" value="-0.000000"></float>
+		<float name="near_clip" value="0.100000"></float>
+		<float name="far_clip" value="100.000000"></float>
+		<transform name="to_world">
+			<lookat origin="0.0 0.0 -0.0" target="0.0 0.0 -0.0" up="-1.0 0.0 0.0"></lookat>
+		</transform>
+		<sampler type="independent" name="sampler">
+			<integer name="sample_count" value="1024"></integer>
+		</sampler>
+		<film type="hdrfilm" name="film">
+			<integer name="width" value="1024"></integer>
+			<integer name="height" value="1024"></integer>
+		</film>
+	</sensor>
+	<bsdf type="twosided" id="mat-Cardboard_Box" name="mat-Cardboard_Box">
+		<bsdf type="principled" name="bsdf">
+			<rgb value="0.750000 0.200000 0.400000" name="base_color"></rgb>
+			<rgb value="1.000000 1.000000 1.000000" name="spec_tint"></rgb>
+			<rgb value="1.000000 1.000000 1.000000" name="sheen_tint"></rgb>
+			<float name="spec_trans" value="0.000000"></float>
+			<float name="metallic" value="0.000000"></float>
+			<float name="anisotropic" value="0.000000"></float>
+			<float name="roughness" value="0.250000"></float>
+			<float name="sheen" value="0.000000"></float>
+			<float name="clearcoat" value="0.000000"></float>
+			<float name="clearcoat_gloss" value="0.000900"></float>
+			<float name="specular" value="0.500000"></float>
+		</bsdf>
+	</bsdf>
+	<bsdf type="twosided" id="mat-Metal_Galvanized" name="mat-Metal_Galvanized">
+		<bsdf type="principled" name="bsdf">
+			<rgb value="0.050000 0.020000 0.150000" name="base_color"></rgb>
+			<rgb value="1.000000 1.000000 1.000000" name="spec_tint"></rgb>
+			<rgb value="1.000000 1.000000 1.000000" name="sheen_tint"></rgb>
+			<float name="spec_trans" value="0.000000"></float>
+			<float name="metallic" value="1.000000"></float>
+			<float name="anisotropic" value="0.000000"></float>
+			<float name="roughness" value="0.010000"></float>
+			<float name="sheen" value="0.000000"></float>
+			<float name="clearcoat" value="0.000000"></float>
+			<float name="clearcoat_gloss" value="0.000900"></float>
+			<float name="specular" value="0.500000"></float>
+		</bsdf>
+	</bsdf>
+	<bsdf type="twosided" id="mat-Metal_Galvanized.001" name="mat-Metal_Galvanized.001">
+		<bsdf type="principled" name="bsdf">
+			<rgb value="0.050000 0.020000 0.150000" name="base_color"></rgb>
+			<rgb value="1.000000 1.000000 1.000000" name="spec_tint"></rgb>
+			<rgb value="1.000000 1.000000 1.000000" name="sheen_tint"></rgb>
+			<float name="spec_trans" value="0.000000"></float>
+			<float name="metallic" value="1.000000"></float>
+			<float name="anisotropic" value="0.000000"></float>
+			<float name="roughness" value="0.010000"></float>
+			<float name="sheen" value="0.000000"></float>
+			<float name="clearcoat" value="0.000000"></float>
+			<float name="clearcoat_gloss" value="0.000900"></float>
+			<float name="specular" value="0.500000"></float>
+		</bsdf>
+	</bsdf>
+	<bsdf type="twosided" id="mat-Metal_Galvanized.002" name="mat-Metal_Galvanized.002">
+		<bsdf type="principled" name="bsdf">
+			<rgb value="0.050000 0.020000 0.150000" name="base_color"></rgb>
+			<rgb value="1.000000 1.000000 1.000000" name="spec_tint"></rgb>
+			<rgb value="1.000000 1.000000 1.000000" name="sheen_tint"></rgb>
+			<float name="spec_trans" value="0.000000"></float>
+			<float name="metallic" value="1.000000"></float>
+			<float name="anisotropic" value="0.000000"></float>
+			<float name="roughness" value="0.010000"></float>
+			<float name="sheen" value="0.000000"></float>
+			<float name="clearcoat" value="0.000000"></float>
+			<float name="clearcoat_gloss" value="0.000900"></float>
+			<float name="specular" value="0.500000"></float>
+		</bsdf>
+	</bsdf>
+	<bsdf type="twosided" id="mat-Metal_Galvanized.003" name="mat-Metal_Galvanized.003">
+		<bsdf type="principled" name="bsdf">
+			<rgb value="0.050000 0.020000 0.150000" name="base_color"></rgb>
+			<rgb value="1.000000 1.000000 1.000000" name="spec_tint"></rgb>
+			<rgb value="1.000000 1.000000 1.000000" name="sheen_tint"></rgb>
+			<float name="spec_trans" value="0.000000"></float>
+			<float name="metallic" value="1.000000"></float>
+			<float name="anisotropic" value="0.000000"></float>
+			<float name="roughness" value="0.010000"></float>
+			<float name="sheen" value="0.000000"></float>
+			<float name="clearcoat" value="0.000000"></float>
+			<float name="clearcoat_gloss" value="0.000900"></float>
+			<float name="specular" value="0.500000"></float>
+		</bsdf>
+	</bsdf>
+	<bsdf type="twosided" id="mat-Rubber_Industrial" name="mat-Rubber_Industrial">
+		<bsdf type="principled" name="bsdf">
+			<rgb value="0.850000 0.300000 0.300000" name="base_color"></rgb>
+			<rgb value="1.000000 1.000000 1.000000" name="spec_tint"></rgb>
+			<rgb value="1.000000 1.000000 1.000000" name="sheen_tint"></rgb>
+			<float name="spec_trans" value="0.000000"></float>
+			<float name="metallic" value="0.000000"></float>
+			<float name="anisotropic" value="0.000000"></float>
+			<float name="roughness" value="0.250000"></float>
+			<float name="sheen" value="0.000000"></float>
+			<float name="clearcoat" value="0.000000"></float>
+			<float name="clearcoat_gloss" value="0.000900"></float>
+			<float name="specular" value="0.500000"></float>
+		</bsdf>
+	</bsdf>
+	<bsdf type="principled" id="mat-Glass_Window" name="mat-Glass_Window">
+		<rgb value="0.900000 0.400000 0.300000" name="base_color"></rgb>
+		<rgb value="1.000000 1.000000 1.000000" name="spec_tint"></rgb>
+		<rgb value="1.000000 1.000000 1.000000" name="sheen_tint"></rgb>
+		<float name="spec_trans" value="1.000000"></float>
+		<float name="metallic" value="0.000000"></float>
+		<float name="anisotropic" value="0.000000"></float>
+		<float name="roughness" value="0.002500"></float>
+		<float name="sheen" value="0.000000"></float>
+		<float name="clearcoat" value="0.000000"></float>
+		<float name="clearcoat_gloss" value="0.000900"></float>
+		<float name="eta" value="1.500000"></float>
+	</bsdf>
+	<bsdf type="twosided" id="mat-Plastic_Polymer" name="mat-Plastic_Polymer">
+		<bsdf type="principled" name="bsdf">
+			<rgb value="0.900000 0.700000 0.300000" name="base_color"></rgb>
+			<rgb value="1.000000 1.000000 1.000000" name="spec_tint"></rgb>
+			<rgb value="1.000000 1.000000 1.000000" name="sheen_tint"></rgb>
+			<float name="spec_trans" value="0.000000"></float>
+			<float name="metallic" value="0.000000"></float>
+			<float name="anisotropic" value="0.000000"></float>
+			<float name="roughness" value="0.250000"></float>
+			<float name="sheen" value="0.000000"></float>
+			<float name="clearcoat" value="0.000000"></float>
+			<float name="clearcoat_gloss" value="0.000900"></float>
+			<float name="specular" value="0.500000"></float>
+		</bsdf>
+	</bsdf>
+	<bsdf type="twosided" id="default-bsdf" name="default-bsdf">
+		<bsdf type="diffuse" name="bsdf"></bsdf>
+	</bsdf>
+	<bsdf type="twosided" id="mat-Wood_Pine" name="mat-Wood_Pine">
+		<bsdf type="principled" name="bsdf">
+			<rgb value="0.950000 0.500000 0.250000" name="base_color"></rgb>
+			<rgb value="1.000000 1.000000 1.000000" name="spec_tint"></rgb>
+			<rgb value="1.000000 1.000000 1.000000" name="sheen_tint"></rgb>
+			<float name="spec_trans" value="0.000000"></float>
+			<float name="metallic" value="0.000000"></float>
+			<float name="anisotropic" value="0.000000"></float>
+			<float name="roughness" value="0.250000"></float>
+			<float name="sheen" value="0.000000"></float>
+			<float name="clearcoat" value="0.000000"></float>
+			<float name="clearcoat_gloss" value="0.000900"></float>
+			<float name="specular" value="0.500000"></float>
+		</bsdf>
+	</bsdf>
+	<bsdf type="twosided" id="mat-Metal_Rough" name="mat-Metal_Rough">
+		<bsdf type="principled" name="bsdf">
+			<rgb value="0.600000 0.100000 0.400000" name="base_color"></rgb>
+			<rgb value="1.000000 1.000000 1.000000" name="spec_tint"></rgb>
+			<rgb value="1.000000 1.000000 1.000000" name="sheen_tint"></rgb>
+			<float name="spec_trans" value="0.000000"></float>
+			<float name="metallic" value="1.000000"></float>
+			<float name="anisotropic" value="0.000000"></float>
+			<float name="roughness" value="0.640000"></float>
+			<float name="sheen" value="0.000000"></float>
+			<float name="clearcoat" value="0.000000"></float>
+			<float name="clearcoat_gloss" value="0.000900"></float>
+			<float name="specular" value="0.500000"></float>
+		</bsdf>
+	</bsdf>
+	<bsdf type="twosided" id="mat-Concrete_Pavement" name="mat-Concrete_Pavement">
+		<bsdf type="principled" name="bsdf">
+			<rgb value="0.980000 0.800000 0.400000" name="base_color"></rgb>
+			<rgb value="1.000000 1.000000 1.000000" name="spec_tint"></rgb>
+			<rgb value="1.000000 1.000000 1.000000" name="sheen_tint"></rgb>
+			<float name="spec_trans" value="0.000000"></float>
+			<float name="metallic" value="0.000000"></float>
+			<float name="anisotropic" value="0.000000"></float>
+			<float name="roughness" value="0.250000"></float>
+			<float name="sheen" value="0.000000"></float>
+			<float name="clearcoat" value="0.000000"></float>
+			<float name="clearcoat_gloss" value="0.000900"></float>
+			<float name="specular" value="0.500000"></float>
+		</bsdf>
+	</bsdf>
+	<shape type="ply" id="elm__3" name="elm__3">
+		<string name="filename" value="meshes/Cardboard_Box_Cube.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<ref id="mat-Cardboard_Box" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__4" name="elm__4">
+		<string name="filename" value="meshes/Cardboard_Box_Cube_001.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<ref id="mat-Cardboard_Box" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__5" name="elm__5">
+		<string name="filename" value="meshes/Cardboard_Box_Cube_002.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<ref id="mat-Cardboard_Box" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__6" name="elm__6">
+		<string name="filename" value="meshes/Cardboard_Box_Cube_003.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<ref id="mat-Cardboard_Box" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__7" name="elm__7">
+		<string name="filename" value="meshes/Cardboard_Box_Cube_004.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<ref id="mat-Cardboard_Box" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__8" name="elm__8">
+		<string name="filename" value="meshes/Cardboard_Box_Cube_005.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<ref id="mat-Cardboard_Box" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__9" name="elm__9">
+		<string name="filename" value="meshes/Cardboard_Box_Cube_006.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<ref id="mat-Cardboard_Box" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__10" name="elm__10">
+		<string name="filename" value="meshes/Cardboard_Box_Cube_007.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<ref id="mat-Cardboard_Box" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__11" name="elm__11">
+		<string name="filename" value="meshes/Cardboard_Box_Cube_008.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<ref id="mat-Cardboard_Box" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__12" name="elm__12">
+		<string name="filename" value="meshes/Cardboard_Box_Cube_009.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<ref id="mat-Cardboard_Box" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__13" name="elm__13">
+		<string name="filename" value="meshes/Cardboard_Box_Cube_010.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<ref id="mat-Cardboard_Box" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__14" name="elm__14">
+		<string name="filename" value="meshes/Cardboard_Box_Cube_011.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<ref id="mat-Cardboard_Box" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__15" name="elm__15">
+		<string name="filename" value="meshes/Cardboard_Box_Cube_012.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<ref id="mat-Cardboard_Box" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__16" name="elm__16">
+		<string name="filename" value="meshes/Cardboard_Box_Cube_013.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<ref id="mat-Cardboard_Box" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__17" name="elm__17">
+		<string name="filename" value="meshes/Cardboard_Box_Cube_014.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<ref id="mat-Cardboard_Box" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__18" name="elm__18">
+		<string name="filename" value="meshes/Cardboard_Box_Cube_015.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<ref id="mat-Cardboard_Box" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__19" name="elm__19">
+		<string name="filename" value="meshes/Cardboard_Box_Box1.ply"></string>
+		<ref id="mat-Cardboard_Box" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__20" name="elm__20">
+		<string name="filename" value="meshes/Cardboard_Box_Box1_001.ply"></string>
+		<ref id="mat-Cardboard_Box" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__21" name="elm__21">
+		<string name="filename" value="meshes/Cardboard_Box_Box1_002.ply"></string>
+		<ref id="mat-Cardboard_Box" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__22" name="elm__22">
+		<string name="filename" value="meshes/Cardboard_Box_Box1_003.ply"></string>
+		<ref id="mat-Cardboard_Box" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__23" name="elm__23">
+		<string name="filename" value="meshes/Cardboard_Box_Box2.ply"></string>
+		<ref id="mat-Cardboard_Box" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__24" name="elm__24">
+		<string name="filename" value="meshes/Cardboard_Box_Box4.ply"></string>
+		<ref id="mat-Cardboard_Box" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__25" name="elm__25">
+		<string name="filename" value="meshes/Cardboard_Box_Box4_001.ply"></string>
+		<ref id="mat-Cardboard_Box" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__27" name="elm__27">
+		<string name="filename" value="meshes/Metal_Galvanized_Ladder.ply"></string>
+		<ref id="mat-Metal_Galvanized" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__28" name="elm__28">
+		<string name="filename" value="meshes/Metal_Galvanized_Shelf_001.ply"></string>
+		<ref id="mat-Metal_Galvanized" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__29" name="elm__29">
+		<string name="filename" value="meshes/Metal_Galvanized_Shelf_005.ply"></string>
+		<ref id="mat-Metal_Galvanized" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__30" name="elm__30">
+		<string name="filename" value="meshes/Metal_Galvanized_uis.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<ref id="mat-Metal_Galvanized" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__31" name="elm__31">
+		<string name="filename" value="meshes/Metal_Galvanized_uis_001.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<ref id="mat-Metal_Galvanized" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__33" name="elm__33">
+		<string name="filename" value="meshes/Metal_Galvanized_Shelf_230.ply"></string>
+		<ref id="mat-Metal_Galvanized.001" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__34" name="elm__34">
+		<string name="filename" value="meshes/Metal_Galvanized_Shelf_233.ply"></string>
+		<ref id="mat-Metal_Galvanized.001" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__35" name="elm__35">
+		<string name="filename" value="meshes/Metal_Galvanized_Shelf_236.ply"></string>
+		<ref id="mat-Metal_Galvanized.001" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__36" name="elm__36">
+		<string name="filename" value="meshes/Metal_Galvanized_Shelf_242.ply"></string>
+		<ref id="mat-Metal_Galvanized.001" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__37" name="elm__37">
+		<string name="filename" value="meshes/Metal_Galvanized_Shelf_244.ply"></string>
+		<ref id="mat-Metal_Galvanized.001" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__39" name="elm__39">
+		<string name="filename" value="meshes/Metal_Galvanized_Shelf_007.ply"></string>
+		<ref id="mat-Metal_Galvanized.002" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__41" name="elm__41">
+		<string name="filename" value="meshes/Metal_Galvanized_Shelf_003.ply"></string>
+		<ref id="mat-Metal_Galvanized.003" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__43" name="elm__43">
+		<string name="filename" value="meshes/Rubber_Industrial_back_shaft_.ply"></string>
+		<ref id="mat-Rubber_Industrial" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__44" name="elm__44">
+		<string name="filename" value="meshes/Rubber_Industrial_front_shaft.ply"></string>
+		<ref id="mat-Rubber_Industrial" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__45" name="elm__45">
+		<string name="filename" value="meshes/Metal_Galvanized_Cube_8.ply"></string>
+		<ref id="mat-Metal_Galvanized" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__47" name="elm__47">
+		<string name="filename" value="meshes/Glass_Window_Roof.ply"></string>
+		<ref id="mat-Glass_Window" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__49" name="elm__49">
+		<string name="filename" value="meshes/Plastic_Polymer_Cube_3_2.ply"></string>
+		<ref id="mat-Plastic_Polymer" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__51" name="elm__51">
+		<string name="filename" value="meshes/Cube_016.ply"></string>
+		<ref id="default-bsdf" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__52" name="elm__52">
+		<string name="filename" value="meshes/Plastic_Polymer_14040_Cardboard_Box_On_Palette_v1_L1.ply"></string>
+		<ref id="mat-Plastic_Polymer" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__54" name="elm__54">
+		<string name="filename" value="meshes/Wood_Pine_14040_Cardboard_Box_On_Palette_v1_L1_001.ply"></string>
+		<ref id="mat-Wood_Pine" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__55" name="elm__55">
+		<string name="filename" value="meshes/Cardboard_Box_14040_Cardboard_Box_On_Palette_v1_L1_002.ply"></string>
+		<ref id="mat-Cardboard_Box" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__56" name="elm__56">
+		<string name="filename" value="meshes/Plastic_Polymer_Roof_001.ply"></string>
+		<ref id="mat-Plastic_Polymer" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__58" name="elm__58">
+		<string name="filename" value="meshes/Metal_Rough_NurbsPath_005_Metal_0.ply"></string>
+		<ref id="mat-Metal_Rough" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__59" name="elm__59">
+		<string name="filename" value="meshes/Glass_Window_NurbsPath_005_Emissive_0.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<ref id="mat-Glass_Window" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__61" name="elm__61">
+		<string name="filename" value="meshes/Concrete_Pavement_NurbsPath_005_WetConcrete_0.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<ref id="mat-Concrete_Pavement" name="bsdf"></ref>
+	</shape>
+	<shape type="ply" id="elm__62" name="elm__62">
+		<string name="filename" value="meshes/NurbsPath_005_WetConcrete_0_001.ply"></string>
+		<boolean name="face_normals" value="true"></boolean>
+		<ref id="default-bsdf" name="bsdf"></ref>
+	</shape>
+</scene>
