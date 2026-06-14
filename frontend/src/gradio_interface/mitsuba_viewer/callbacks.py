@@ -483,6 +483,20 @@ def create_mitsuba_viewer_interface():
                                     load_config_btn = gr.Button("📥 Cargar Config Actual", variant="secondary")
                                     download_config_btn = gr.Button("📤 Descargar Config (JSON)", variant="secondary")
                                 download_config_file = gr.File(label="Archivo de Configuración", visible=False)
+                                
+                                with gr.Accordion("Mapa de Emisividad (Personalizado)", open=False):
+                                    emiss_use_custom = gr.Checkbox(label="Usar rango personalizado para el mapa de emisividad", value=False)
+                                    emiss_wl_min = gr.Number(label="λ min (μm)", value=8.0, precision=2)
+                                    emiss_wl_max = gr.Number(label="λ max (μm)", value=14.0, precision=2)
+                                    emiss_bands = gr.Number(label="Número de bandas", value=10, precision=0)
+
+                                with gr.Accordion("Importar / Exportar Configuración Completa", open=False):
+                                    export_full_btn = gr.Button("📤 Descargar Configuración Completa (.zip)", variant="secondary")
+                                    full_config_file = gr.File(label="Archivo de Configuración Exportado (.zip)", interactive=False)
+                                    gr.Markdown("---")
+                                    import_full_file = gr.File(label="📥 Cargar Configuración Completa (.zip)", file_types=[".zip"], interactive=True)
+                                    import_status = gr.Textbox(label="Estado de Importación", interactive=False)
+
                                 apply_all_btn = gr.Button("✅ Sincronizar Todo con Backend", variant="primary")
                                 config_status = gr.Textbox(label="Estado", lines=2, interactive=False)
                                 config_info = gr.JSON(label="Configuración (JSON)")
@@ -569,6 +583,14 @@ def create_mitsuba_viewer_interface():
             "load_config_btn": load_config_btn, "apply_all_btn": apply_all_btn,
             "config_status": config_status, "config_info": config_info,
             "download_config_btn": download_config_btn, "download_config_file": download_config_file,
+            "emiss_use_custom": emiss_use_custom,
+            "emiss_wl_min": emiss_wl_min,
+            "emiss_wl_max": emiss_wl_max,
+            "emiss_bands": emiss_bands,
+            "export_full_btn": export_full_btn,
+            "full_config_file": full_config_file,
+            "import_full_file": import_full_file,
+            "import_status": import_status,
         }
 
         # Visualización: ejecutar todos los renders y mostrarlos en galería
