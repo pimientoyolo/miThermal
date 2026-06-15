@@ -116,3 +116,52 @@ async def render_scene_emissivity_map() -> StreamingResponse:
         "emissivity_map",
         "emissivity_map.npy"
     )
+
+@render_router.get("/simulation/zip")
+async def render_simulation_zip() -> FileResponse:
+    """Ejecuta toda la simulación en el backend, genera un archivo ZIP con todos los .npy y lo sirve."""
+    import os
+    import zipfile
+    import tempfile
+
+    # 1. Asegurar que las cámaras estén actualizadas
+    scene_service.update_scene_camera_all()
+    
+    # 2. Renderizar todos los mapas
+    render_service.render_depth_image()
+    render_service.render_blackbody_air_image()
+    render_service.render_transmittance_blackbody_air_image()
+    render_service.render_thermal_image()
+    render_service.render_temperature_map()
+    render_service.render_emissivity_map()
+    
+    # 3. Empaquetar todos los archivos .npy resultantes en un archivo ZIP
+    result_types = [
+        ("thermal.npy", "thermal"),
+        ("thermal_raw.npy", "thermal_raw"),
+        ("depth.npy", "depth"),
+        ("blackbody_air.npy", "blackbody_air"),
+        ("transmittance_blackbody_air.npy", "transmittance_blackbody_air"),
+        ("contribution_blackbody_air.npy", "contribution_blackbody_air"),
+        ("temperature_map.npy", "temperature_map"),
+        ("emissivity_map.npy", "emissivity_map")
+    ]
+    
+    fd, zip_path = tempfile.mkstemp(suffix=".zip")
+    try:
+        with os.fdopen(fd, 'wb') as tmp:
+            with zipfile.ZipFile(tmp, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                for fname, rtype in result_types:
+                    file_path = path_manager.get_result_path(rtype)
+                    if os.path.exists(file_path):
+                        zf.write(file_path, arcname=fname)
+        
+        return FileResponse(
+            zip_path,
+            media_type="application/zip",
+            filename="simulation_results.zip"
+        )
+    except Exception as e:
+        if os.path.exists(zip_path):
+            os.remove(zip_path)
+        raise e

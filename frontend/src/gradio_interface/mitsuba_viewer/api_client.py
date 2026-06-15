@@ -873,3 +873,20 @@ class MitsubaAPIClient:
         except Exception as e:
             logger.error(f"Load camera animation error: {e}")
             return {"status": "error", "detail": str(e)}
+
+    def download_simulation_zip(self) -> Dict:
+        """GET /render/simulation/zip -> Descarga el ZIP de resultados directamente"""
+        try:
+            r = self.session.get(f"{self.base_url}/render/simulation/zip", stream=True)
+            r.raise_for_status()
+            import tempfile
+            import os
+            fd, path = tempfile.mkstemp(suffix=".zip")
+            with os.fdopen(fd, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    if chunk:
+                        f.write(chunk)
+            return {"status": "ok", "zip_path": path}
+        except Exception as e:
+            logger.error(f"Download simulation zip error: {e}")
+            return {"status": "error", "detail": str(e)}

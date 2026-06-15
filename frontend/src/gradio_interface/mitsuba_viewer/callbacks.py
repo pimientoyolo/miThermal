@@ -454,10 +454,6 @@ def create_mitsuba_viewer_interface():
                     run_sim_btn = gr.Button("▶️ EJECUTAR SIMULACIÓN COMPLETA", variant="primary", size="lg")
                 
                 with gr.Row():
-                    with gr.Column(scale=2, elem_id="viz_gallery_wrap"):
-                        gallery = gr.Gallery(label="Resultados", show_label=True, columns=2, rows=3)
-                
-                with gr.Row():
                     download_zip = gr.File(label="💾 Descargar Resultados (.zip)")
                 
                 # Definición de diccionarios para callbacks
@@ -469,7 +465,7 @@ def create_mitsuba_viewer_interface():
                     "server_path": None, "load_btn": None,
                 }
                 visualization_section = {
-                    "run_sim_btn": run_sim_btn, "gallery": gallery, "download_zip": download_zip,
+                    "run_sim_btn": run_sim_btn, "download_zip": download_zip,
                 }
 
             # ==================== TAB 2: 🎯 OBJETOS ====================
@@ -646,97 +642,20 @@ def create_mitsuba_viewer_interface():
             "import_status": import_status,
         }
 
-        # Visualización: ejecutar todos los renders y mostrarlos en galería
+        # Visualización: ejecutar simulación en backend y descargar ZIP
         def run_simulation_cb():
-            """Renderiza todos los mapas necesarios y crea un ZIP con los .npy."""
-            import io
-            import zipfile
-            import tempfile
-
+            """Renderiza todos los mapas necesarios en el backend y descarga el ZIP directamente."""
             client = get_client()
-            items = []  # (image, caption)
-            npy_data = []  # [(filename, numpy_array)]
-
-            def _consume_npy(bytes_buf: bytes, title: str, expect_first_band: bool = False, explicit_name: str | None = None):
-                nonlocal items, npy_data
-                if not bytes_buf: return
-                try:
-                    arr = np.load(io.BytesIO(bytes_buf))
-                    # Visualización en galería
-                    if expect_first_band and arr.ndim == 3:
-                        arr2d = arr[:, :, 0]
-                    else:
-                        arr2d = arr if arr.ndim == 2 else (arr[:, :, 0] if arr.ndim == 3 else arr)
-                    items.append((normalize_to_uint8(arr2d), title))
-                    
-                    # Guardar para el ZIP
-                    safe_fname = (explicit_name or title).lower().replace(" ", "_") + ".npy"
-                    npy_data.append((safe_fname, arr))
-                except Exception as e:
-                    logger.error(f"Error procesando {title}: {e}")
-
-            # 1) Thermal & Raw
-            try:
-                r = client.render_thermal()
-                if r.get("status") == "ok":
-                    _consume_npy(r.get("npy_bytes"), "Thermal", expect_first_band=True, explicit_name="thermal")
-                
-                # Intentar obtener el Raw (L_surface)
-                raw_res = client.session.get(f"{client.base_url}/render/thermal/raw")
-                if raw_res.status_code == 200:
-                    _consume_npy(raw_res.content, "Thermal Raw", expect_first_band=True, explicit_name="thermal_raw")
-            except Exception as e: logger.error(f"Thermal steps fail: {e}")
-
-            # 2) Depth
-            try:
-                r = client.render_depth()
-                if r.get("status") == "ok":
-                    _consume_npy(r.get("npy_bytes"), "Depth", explicit_name="depth")
-            except Exception as e: logger.error(f"Depth fail: {e}")
-
-            # 3) Emissivity Map
-            try:
-                r = client.render_emissivity()
-                if r.get("status") == "ok":
-                    _consume_npy(r.get("npy_bytes"), "Emissivity Map", explicit_name="emissivity_map")
-            except Exception as e: logger.error(f"Emissivity fail: {e}")
-
-            # 4) Otros (Air & TMap)
-            for endpoint, title, first_band in [
-                ("/render/air/blackbody", "Blackbody Air", True),
-                ("/render/air/transmittance", "Transmittance Air", True),
-                ("/render/air/contribution", "Contribution Air", True),
-                ("/render/temperature/map", "Temperature Map", False),
-            ]:
-                try:
-                    res = client.session.get(f"{client.base_url}{endpoint}")
-                    if res.status_code == 200:
-                        _consume_npy(res.content, title, expect_first_band=first_band)
-                except Exception as e: logger.error(f"Render {title} fail: {e}")
-
-            # Empaquetar el ZIP
-            if not npy_data:
-                return items, None
-
-            try:
-                # Crear un archivo temporal único para esta ejecución
-                fd, path = tempfile.mkstemp(suffix=".zip")
-                with os.fdopen(fd, 'wb') as tmp:
-                    with zipfile.ZipFile(tmp, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-                        for fname, arr in npy_data:
-                            buf = io.BytesIO()
-                            np.save(buf, arr)
-                            zf.writestr(fname, buf.getvalue())
-                logger.info(f"ZIP de resultados creado en {path} con {len(npy_data)} archivos")
-                return items, path
-            except Exception as e:
-                logger.error(f"Error creando ZIP final: {e}")
-                return items, None
+            r = client.download_simulation_zip()
+            if r.get("status") == "ok":
+                return r.get("zip_path")
+            else:
+                return gr.update(value=None)
 
         visualization_section["run_sim_btn"].click(
             fn=run_simulation_cb,
             inputs=[],
-            outputs=[visualization_section["gallery"], visualization_section["download_zip"]],
+            outputs=[visualization_section["download_zip"]],
         )
 
     # Carga de escena (upload / ruta servidor / escenas default miThermal)
