@@ -39,5 +39,20 @@ if __name__ == "__main__":
     print(f"⚠️ Servidor API esperado en {base_url}")
     print("💡 Ctrl+C para detener")
 
+    import tempfile
+    project_root = Path(__file__).resolve().parent.parent
+    downloads_dir = project_root / "downloads"
+    downloads_dir.mkdir(parents=True, exist_ok=True)
+
     interface = create_mitsuba_viewer_interface()
-    interface.launch(server_name="0.0.0.0", server_port=7860, share=False, debug=True)
+    interface.launch(
+        server_name="0.0.0.0",
+        server_port=7860,
+        share=False,
+        debug=True,
+        allowed_paths=[
+            str(project_root),
+            str(downloads_dir),
+            tempfile.gettempdir()
+        ]
+    )

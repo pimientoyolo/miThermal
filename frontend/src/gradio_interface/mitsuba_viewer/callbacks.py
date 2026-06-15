@@ -21,6 +21,17 @@ from .state import viewer_state
 
 logger = logging.getLogger(__name__)
 
+def _get_downloads_dir() -> Path:
+    curr = Path(__file__).resolve()
+    for parent in [curr] + list(curr.parents):
+        if (parent / "frontend").is_dir() and (parent / "backend").is_dir():
+            d = parent / "downloads"
+            d.mkdir(parents=True, exist_ok=True)
+            return d
+    return Path(tempfile.gettempdir())
+
+DOWNLOADS_DIR = _get_downloads_dir()
+
 # --------------------------------------------------------------------------------------
 # Cliente HTTP compartido
 # --------------------------------------------------------------------------------------
@@ -262,7 +273,7 @@ def view_object_3d(choice_label: str):
         if oid in viewer_state.object_file_cache:
             downloaded_path = viewer_state.object_file_cache[oid]
         else:
-            tmp_dir = tempfile.mkdtemp()
+            tmp_dir = tempfile.mkdtemp(dir=str(DOWNLOADS_DIR))
             tmp_base = Path(tmp_dir) / oid
             downloaded_path = client.download_object(oid, str(tmp_base))
             if not downloaded_path:
@@ -407,8 +418,9 @@ def create_mitsuba_viewer_interface():
                                 camera_width = gr.Number(label="Ancho (px)", precision=0, value=640)
                                 camera_height = gr.Number(label="Alto (px)", precision=0, value=480)
                             
-                            with gr.Tabs():
-                                with gr.Tab("Coordenadas Esféricas"):
+                            camera_mode = gr.Textbox(value="Esférico", visible=False)
+                            with gr.Tabs() as cam_tabs:
+                                with gr.Tab("Coordenadas Esféricas") as tab_sph:
                                     with gr.Row():
                                         theta = gr.Number(label="Zenital (theta)", precision=3)
                                         phi = gr.Number(label="Azimutal (phi)", precision=3)
@@ -418,7 +430,7 @@ def create_mitsuba_viewer_interface():
                                         target_y = gr.Number(label="Target Y", precision=3, value=0.0)
                                         target_z = gr.Number(label="Target Z", precision=3, value=0.0)
                                 
-                                with gr.Tab("Transformaciones"):
+                                with gr.Tab("Transformaciones") as tab_cart:
                                     with gr.Row():
                                         rotate_x = gr.Number(label="Rotar X (°)", precision=3, value=0)
                                         rotate_y = gr.Number(label="Rotar Y (°)", precision=3, value=0)
@@ -427,6 +439,9 @@ def create_mitsuba_viewer_interface():
                                         translate_x = gr.Number(label="Trasladar X", precision=6, value=0)
                                         translate_y = gr.Number(label="Trasladar Y", precision=6, value=0)
                                         translate_z = gr.Number(label="Trasladar Z", precision=6, value=0)
+                            
+                            tab_sph.select(fn=lambda: "Esférico", outputs=[camera_mode])
+                            tab_cart.select(fn=lambda: "Cartesiano", outputs=[camera_mode])
                             
                             apply_cam_btn = gr.Button("✅ Aplicar Cámara", variant="secondary")
                             cam_status = gr.Textbox(label="Estado Cámara", lines=1, interactive=False)
@@ -557,7 +572,7 @@ def create_mitsuba_viewer_interface():
                         air_plot = gr.Plot(visible=False) # Mantenido por compatibilidad de callbacks
                 
         # Callback para aplicar solo configuración de cámara
-        def apply_camera_config_cb(spp_k, width, height, fov, rx, ry, rz, tx, ty, tz, theta, phi, radius, tgx, tgy, tgz):
+        def apply_camera_config_cb(spp_k, width, height, fov, rx, ry, rz, tx, ty, tz, theta, phi, radius, tgx, tgy, tgz, camera_mode):
             client = get_client()
             try:
                 k = int(float(spp_k)) if spp_k is not None else None
@@ -570,7 +585,7 @@ def create_mitsuba_viewer_interface():
                     "fov": float(fov) if fov is not None else None,
                 }
                 
-                if all(v is not None for v in [theta, phi, radius]):
+                if camera_mode == "Esférico" and all(v is not None for v in [theta, phi, radius]):
                     cam_args.update({
                         "theta": float(theta), "phi": float(phi), "radius": float(radius),
                         "target_x": float(tgx), "target_y": float(tgy), "target_z": float(tgz),
@@ -579,6 +594,9 @@ def create_mitsuba_viewer_interface():
                     cam_args.update({
                         "rotate_x": float(rx), "rotate_y": float(ry), "rotate_z": float(rz),
                         "translate_x": float(tx), "translate_y": float(ty), "translate_z": float(tz),
+                        "target_x": float(tgx) if tgx is not None else 0.0,
+                        "target_y": float(tgy) if tgy is not None else 0.0,
+                        "target_z": float(tgz) if tgz is not None else 0.0,
                     })
                 
                 res = client.update_camera_config(**cam_args)
@@ -594,7 +612,8 @@ def create_mitsuba_viewer_interface():
                 camera_spp, camera_width, camera_height, fov,
                 rotate_x, rotate_y, rotate_z,
                 translate_x, translate_y, translate_z,
-                theta, phi, radius, target_x, target_y, target_z
+                theta, phi, radius, target_x, target_y, target_z,
+                camera_mode
             ],
             outputs=[cam_status]
         )
@@ -1585,7 +1604,7 @@ def create_mitsuba_viewer_interface():
             import json, tempfile
             res = get_client().export_camera_spatial_config()
             if res.get("status") == "success":
-                with tempfile.NamedTemporaryFile(delete=False, mode="w", suffix=".json") as f:
+                with tempfile.NamedTemporaryFile(delete=False, mode="w", suffix=".json", dir=str(DOWNLOADS_DIR)) as f:
                     json.dump(res["data"], f)
                     return f.name
             return None
@@ -1692,7 +1711,7 @@ def create_mitsuba_viewer_interface():
             try:
                 res = get_client().download_config()
                 if res.get("status") == "ok":
-                    temp_dir = tempfile.mkdtemp()
+                    temp_dir = tempfile.mkdtemp(dir=str(DOWNLOADS_DIR))
                     temp_path = os.path.join(temp_dir, "config_scene.json")
                     with open(temp_path, "wb") as f:
                         f.write(res.get("json_bytes"))
@@ -1713,7 +1732,7 @@ def create_mitsuba_viewer_interface():
         def export_full_config_cb():
             try:
                 zip_bytes = get_client().download_full_config()
-                temp_dir = tempfile.mkdtemp()
+                temp_dir = tempfile.mkdtemp(dir=str(DOWNLOADS_DIR))
                 temp_path = os.path.join(temp_dir, "scene_full_config.zip")
                 with open(temp_path, "wb") as f:
                     f.write(zip_bytes)
@@ -2003,7 +2022,7 @@ def create_mitsuba_viewer_interface():
 
                 res = client.session.post(url, json=payload, timeout=600)
                 res.raise_for_status()
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".zip") as tf:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".zip", dir=str(DOWNLOADS_DIR)) as tf:
                     tf.write(res.content)
                     return f"✅ Animación renderizada ({mode})", tf.name
             except Exception as e:
@@ -2026,7 +2045,7 @@ def create_mitsuba_viewer_interface():
                 
                 res = client.session.post(url, json=payload, timeout=300)
                 res.raise_for_status()
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".gif") as tf:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".gif", dir=str(DOWNLOADS_DIR)) as tf:
                     tf.write(res.content)
                     return f"✅ Preview generado ({mode})", tf.name
             except Exception as e:
@@ -2059,7 +2078,7 @@ def create_mitsuba_viewer_interface():
                 }
             res = client.export_camera_animation(mode.lower(), data)
             if res.get("status") == "success":
-                with tempfile.NamedTemporaryFile(delete=False, mode="w", suffix=".json") as f:
+                with tempfile.NamedTemporaryFile(delete=False, mode="w", suffix=".json", dir=str(DOWNLOADS_DIR)) as f:
                     json.dump(res["data"], f)
                     return f.name
             return None
@@ -2393,7 +2412,7 @@ def create_mitsuba_viewer_interface():
 
                 # Crear CSV temporal
                 df = pd.DataFrame({"wavelength_nm": wavelengths, "value": values})
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".csv") as tf:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".csv", dir=str(DOWNLOADS_DIR)) as tf:
                     df.to_csv(tf.name, index=False)
                     return f"✅ Datos exportados a {filename}", tf.name, gr.update(visible=True)
             except Exception as e:
@@ -2406,7 +2425,7 @@ def create_mitsuba_viewer_interface():
                     return "❌ No hay gráfico para exportar", None, gr.update(visible=False)
                 
                 # Plotly figure a PNG usando kaleido (si está disponible) o el método incorporado
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tf:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".png", dir=str(DOWNLOADS_DIR)) as tf:
                     plot_fig.write_image(tf.name)
                     return "✅ Gráfico exportado a PNG", tf.name, gr.update(visible=True)
             except Exception as e:

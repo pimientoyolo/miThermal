@@ -1306,7 +1306,31 @@ class SceneService(BaseService):
 
         # Si se usa modo esférico o hay un target explícito, usar lookat de Mitsuba
         # Esto es mucho más robusto para órbitas que usar ángulos Euler
-        if is_spherical or any(v != 0.0 for v in [target_x, target_y, target_z]):
+        if is_spherical or any(abs(v) > 1e-5 for v in [target_x, target_y, target_z]):
+            # 1. Recalcular coordenadas cartesianas si estamos en modo esférico y tenemos los datos necesarios
+            theta = cam_cfg.get("theta")
+            phi = cam_cfg.get("phi")
+            radius = cam_cfg.get("radius")
+            if is_spherical and theta is not None and phi is not None and radius is not None:
+                try:
+                    theta_rad = np.deg2rad(float(theta))
+                    phi_rad = np.deg2rad(float(phi))
+                    r_val = float(radius)
+                    x = r_val * np.sin(theta_rad) * np.cos(phi_rad)
+                    y = r_val * np.sin(theta_rad) * np.sin(phi_rad)
+                    z = r_val * np.cos(theta_rad)
+                    tx = target_x + x
+                    ty = target_y + y
+                    tz = target_z + z
+                except Exception as e:
+                    logger.warning(f"Error recalculando coords esféricas en lookat: {e}")
+
+            # 2. Evitar lookat inválido (origen == target)
+            dist = np.sqrt((tx - target_x)**2 + (ty - target_y)**2 + (tz - target_z)**2)
+            if dist < 1e-5:
+                # Desplazar origen ligeramente para evitar crash de Mitsuba
+                tz += 1.0
+
             # Aplicar cambio de base Blender -> Mitsuba: (x, y, z)_B -> (x, z, -y)_M
             origin_m = f"{tx} {tz} {-ty}"
             target_m = f"{target_x} {target_z} {-target_y}"

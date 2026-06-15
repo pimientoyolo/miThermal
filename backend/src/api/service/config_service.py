@@ -583,6 +583,7 @@ class ConfigService:
             scene_service.prepare_transmittance_blackbody_air_scene()
             scene_service.prepare_temperature_map()
             scene_service.prepare_emissivity_map_scene()
+            scene_service.update_scene_camera_all()
             
             return "Configuración completa importada exitosamente"
         finally:

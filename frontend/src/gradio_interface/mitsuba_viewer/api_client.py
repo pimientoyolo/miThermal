@@ -14,6 +14,20 @@ logger = logging.getLogger(__name__)
 DEFAULT_BASE_URL = os.environ.get("MITSUBA_API_BASE", os.environ.get("MITHERMAL_BACKEND", "http://localhost:8000"))
 
 
+def _get_downloads_dir() -> Path:
+    import tempfile
+    curr = Path(__file__).resolve()
+    for parent in [curr] + list(curr.parents):
+        if (parent / "frontend").is_dir() and (parent / "backend").is_dir():
+            d = parent / "downloads"
+            d.mkdir(parents=True, exist_ok=True)
+            return d
+    return Path(tempfile.gettempdir())
+
+DOWNLOADS_DIR = _get_downloads_dir()
+
+
+
 def set_default_base_url(url: str) -> None:
     """Establece la URL base por defecto usada al crear nuevos clientes.
 
@@ -881,7 +895,7 @@ class MitsubaAPIClient:
             r.raise_for_status()
             import tempfile
             import os
-            fd, path = tempfile.mkstemp(suffix=".zip")
+            fd, path = tempfile.mkstemp(suffix=".zip", dir=str(DOWNLOADS_DIR))
             with os.fdopen(fd, 'wb') as f:
                 for chunk in r.iter_content(chunk_size=8192):
                     if chunk:
