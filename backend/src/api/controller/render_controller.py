@@ -8,7 +8,7 @@ from fastapi import APIRouter
 from fastapi.responses import FileResponse, StreamingResponse
 from src.api.service.render_service import RenderService
 from src.api.service.scene_service import SceneService
-from src.config import PathManager
+from src.config import PathManager, OUTPUT_STATIC_DIR
 import aiofiles
 
 OCTET_STREAM_MEDIA_TYPE = "application/octet-stream"
@@ -165,3 +165,46 @@ async def render_simulation_zip() -> FileResponse:
         if os.path.exists(zip_path):
             os.remove(zip_path)
         raise e
+
+
+@render_router.post("/simulation/run")
+async def run_simulation() -> dict:
+    """Ejecuta la simulación completa en el backend y genera el ZIP estático de resultados."""
+    import os
+    import zipfile
+
+    # 1. Asegurar que las cámaras estén actualizadas
+    scene_service.update_scene_camera_all()
+    
+    # 2. Renderizar todos los mapas
+    render_service.render_depth_image()
+    render_service.render_blackbody_air_image()
+    render_service.render_transmittance_blackbody_air_image()
+    render_service.render_thermal_image()
+    render_service.render_temperature_map()
+    render_service.render_emissivity_map()
+    
+    # 3. Empaquetar en el directorio estático
+    result_types = [
+        ("thermal.npy", "thermal"),
+        ("thermal_raw.npy", "thermal_raw"),
+        ("depth.npy", "depth"),
+        ("blackbody_air.npy", "blackbody_air"),
+        ("transmittance_blackbody_air.npy", "transmittance_blackbody_air"),
+        ("contribution_blackbody_air.npy", "contribution_blackbody_air"),
+        ("temperature_map.npy", "temperature_map"),
+        ("emissivity_map.npy", "emissivity_map")
+    ]
+    
+    zip_path = os.path.join(OUTPUT_STATIC_DIR, "simulation_results.zip")
+    # Asegurar que se elimine si ya existe para evitar inconsistencias
+    if os.path.exists(zip_path):
+        os.remove(zip_path)
+        
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for fname, rtype in result_types:
+            file_path = path_manager.get_result_path(rtype)
+            if os.path.exists(file_path):
+                zf.write(file_path, arcname=fname)
+                
+    return {"status": "success", "download_path": "/static/simulation_results.zip"}

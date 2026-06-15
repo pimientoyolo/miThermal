@@ -469,7 +469,7 @@ def create_mitsuba_viewer_interface():
                     run_sim_btn = gr.Button("▶️ EJECUTAR SIMULACIÓN COMPLETA", variant="primary", size="lg")
                 
                 with gr.Row():
-                    download_zip = gr.File(label="💾 Descargar Resultados (.zip)")
+                    download_zip = gr.HTML(visible=False)
                 
                 # Definición de diccionarios para callbacks
                 upload_section = {
@@ -661,15 +661,36 @@ def create_mitsuba_viewer_interface():
             "import_status": import_status,
         }
 
-        # Visualización: ejecutar simulación en backend y descargar ZIP
+        # Visualización: ejecutar simulación en backend y retornar link de descarga directa
         def run_simulation_cb():
-            """Renderiza todos los mapas necesarios en el backend y descarga el ZIP directamente."""
+            """Renderiza todos los mapas necesarios en el backend y genera el ZIP estático directamente en el servidor de Mitsuba."""
             client = get_client()
-            r = client.download_simulation_zip()
-            if r.get("status") == "ok":
-                return r.get("zip_path")
+            res = client.run_simulation()
+            if res.get("status") == "success":
+                # La URL de descarga directa es la IP del backend + el path estático
+                download_url = f"{client.base_url}/static/simulation_results.zip"
+                html_btn = f"""
+                <div style="text-align: center; margin-top: 15px; width: 100%;">
+                    <a href="{download_url}" target="_blank" download style="
+                        display: inline-block;
+                        background-color: #2e86de;
+                        color: white !important;
+                        padding: 14px 28px;
+                        font-size: 16px;
+                        text-decoration: none;
+                        border-radius: 6px;
+                        font-weight: bold;
+                        box-shadow: 0 4px 15px rgba(46, 134, 222, 0.3);
+                        transition: all 0.3s ease;
+                    " onmouseover="this.style.backgroundColor='#1b6ca8'; this.style.boxShadow='0 6px 20px rgba(27, 108, 168, 0.4)';" onmouseout="this.style.backgroundColor='#2e86de'; this.style.boxShadow='0 4px 15px rgba(46, 134, 222, 0.3)';">
+                        💾 DESCARGAR SIMULACIÓN COMPLETA (.ZIP)
+                    </a>
+                </div>
+                """
+                return gr.update(value=html_btn, visible=True)
             else:
-                return gr.update(value=None)
+                err = res.get("detail", "Error en la simulación")
+                return gr.update(value=f"<p style='color:red; text-align:center; font-weight:bold;'>❌ Error: {err}</p>", visible=True)
 
         visualization_section["run_sim_btn"].click(
             fn=run_simulation_cb,

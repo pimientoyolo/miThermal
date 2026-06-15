@@ -904,3 +904,13 @@ class MitsubaAPIClient:
         except Exception as e:
             logger.error(f"Download simulation zip error: {e}")
             return {"status": "error", "detail": str(e)}
+
+    def run_simulation(self) -> Dict:
+        """POST /render/simulation/run -> Ejecuta simulación y genera el ZIP estático"""
+        try:
+            r = self.session.post(f"{self.base_url}/render/simulation/run")
+            r.raise_for_status()
+            return r.json()
+        except Exception as e:
+            logger.error(f"Run simulation error: {e}")
+            return {"status": "error", "detail": str(e)}
