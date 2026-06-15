@@ -218,6 +218,10 @@ class ObjService:
         mensaje = ""
 
         scene_config = get_config_scene_dict()
+        if object_id in scene_config.get("objects", {}):
+            scene_config["objects"][object_id]["emissivity_file"] = dst_path
+            save_config_scene_dict(scene_config)
+
         wavelengths_scene = scene_config.get("wavelengths")
         wavelengths_scene = np.array(wavelengths_scene)/1000  # Convertir a µm
 
@@ -390,6 +394,11 @@ class ObjService:
                 status_code=500,
                 detail=f"Error copiando el archivo: {e}"
             )
+        
+        config = get_config_scene_dict()
+        if object_id in config.get("objects", {}):
+            config["objects"][object_id]["emissivity_file"] = dst_path
+            save_config_scene_dict(config)
         
         scene_service.update_thermal_scene_obj(object_id=object_id)
         scene_service.prepare_depth_scene()

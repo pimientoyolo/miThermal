@@ -38,6 +38,59 @@ def get_client() -> MitsubaAPIClient:
 # Agrupación y estado
 # --------------------------------------------------------------------------------------
 
+def get_groups_for_mode(mode: str) -> Dict[str, List[str]]:
+    """
+    Calcula la agrupación de object_id por nombre de grupo según el modo seleccionado.
+    El modo puede ser "individual", "1 palabra", "2 palabras", "3 palabras", etc.
+    """
+    import os
+    mode_l = (mode or "").lower()
+    client = get_client()
+    try:
+        data = client.get_objects()
+        objs: List[Dict] = []
+        if isinstance(data, dict):
+            if isinstance(data.get("objects"), list):
+                objs = data["objects"]
+            elif data.get("status") == "success" and isinstance(data.get("data"), list):
+                objs = data["data"]
+        elif isinstance(data, list):
+            objs = data
+    except Exception:
+        objs = []
+        
+    groups: Dict[str, List[str]] = {}
+    for o in objs:
+        oid = o.get("id") or ""
+        suggest = (o.get("suggest") or "").strip()
+        if suggest:
+            name = suggest
+        else:
+            base_name = os.path.splitext(os.path.basename(oid))[0]
+            name = base_name or oid
+        
+        # Normalizar eliminando el sufijo de variante '-' si existe
+        name_base = name.split("-", 1)[0]
+        
+        if mode_l == "individual":
+            group_key = name
+        else:
+            # Determinar el número de palabras deseado
+            try:
+                num_words = int(mode_l.split()[0].replace("+", ""))
+            except Exception:
+                num_words = 1
+            
+            parts = name_base.split("_")
+            if len(parts) <= num_words:
+                group_key = name_base
+            else:
+                group_key = "_".join(parts[:num_words])
+        
+        groups.setdefault(group_key, []).append(oid)
+    return groups
+
+
 def _compute_groups(objects: List[Dict]) -> Tuple[Dict[str, List[str]], Dict[str, List[str]]]:
     """Calcula grupos por instancia y familia a partir de una etiqueta estable.
 
@@ -423,7 +476,7 @@ def create_mitsuba_viewer_interface():
             with gr.Tab("🎯 Objetos"):
                 with gr.Row():
                     with gr.Column(scale=1):
-                        mode_radio = gr.Radio(label="Modo", choices=["Objeto", "Instancia", "Familia"], value="Objeto")
+                        mode_radio = gr.Radio(label="Modo de Selección", choices=["Individual", "1 palabra", "2 palabras", "3 palabras", "4 palabras", "5+ palabras"], value="Individual")
                         selector = gr.Dropdown(label="Selecciona", choices=[], interactive=True)
                         members = gr.Dropdown(label="Miembros", choices=[], multiselect=True, interactive=False)
                         gr.Markdown("#### Propiedades")
@@ -1115,13 +1168,8 @@ def create_mitsuba_viewer_interface():
 
         # --- Lógica unificada Objeto/Instancia/Familia ---
         def og_refresh_selector(mode: str):
-            mode_l = (mode or "").lower()
-            if mode_l.startswith("obj"):
-                choices = sorted(viewer_state.object_id_mapping.keys())
-            elif mode_l.startswith("inst"):
-                choices = sorted(viewer_state.object_groups_instance.keys())
-            else:
-                choices = sorted(viewer_state.object_groups_family.keys())
+            groups = get_groups_for_mode(mode)
+            choices = sorted(groups.keys())
             return (
                 gr.update(choices=choices, value=None),
                 gr.update(choices=[], value=[]),
@@ -1140,14 +1188,14 @@ def create_mitsuba_viewer_interface():
 
         def og_update_temp_controls_visibility(mode: str, temp_mode_val: str):
             mode_l = (mode or "").lower()
-            is_family = mode_l.startswith("fam")
+            is_group = mode_l != "individual"
             is_range = temp_mode_val == "Rango Aleatorio"
             
             return (
-                gr.update(visible=is_family), # temp_mode
-                gr.update(visible=not (is_family and is_range)), # temp_input
-                gr.update(visible=is_family and is_range), # temp_min
-                gr.update(visible=is_family and is_range), # temp_max
+                gr.update(visible=is_group), # temp_mode
+                gr.update(visible=not (is_group and is_range)), # temp_input
+                gr.update(visible=is_group and is_range), # temp_min
+                gr.update(visible=is_group and is_range), # temp_max
             )
 
         og_section["mode_radio"].change(
@@ -1194,7 +1242,16 @@ def create_mitsuba_viewer_interface():
                     gr.update(value="Difuso"),
                     gr.update(value=0.05, visible=False),
                 )
-            if mode_l.startswith("obj"):
+            
+            groups = get_groups_for_mode(mode)
+            oids = groups.get(selection, [])
+            
+            # Mapear oids a las etiquetas legibles en la UI
+            rev_map = {v: k for k, v in viewer_state.object_id_mapping.items()}
+            labels = [rev_map.get(oid, oid) for oid in oids]
+            labels_sorted = sorted(labels)
+            
+            if mode_l == "individual":
                 mv, info, _of, temp_upd, plot, mat_type_ui, roughness_val = view_object_3d(selection)
                 
                 # Agregar información de familia si pertenece a una
@@ -1210,7 +1267,7 @@ def create_mitsuba_viewer_interface():
                             family_info = (
                                 f"\n\n👨‍👩‍👧‍👦 **Familia:** {preview['family_name']}\n"
                                 f"**Miembros:** {preview['count']} objetos\n"
-                                f"💡 *Cambia a modo 'Familia' para actualizar "
+                                f"💡 *Cambia a modo de agrupamiento para actualizar "
                                 f"todos a la vez*"
                             )
                             info = info + family_info if info else family_info
@@ -1226,26 +1283,24 @@ def create_mitsuba_viewer_interface():
                     gr.update(value=mat_type_ui),
                     gr.update(value=roughness_val, visible=(mat_type_ui == "Reflectante")),
                 )
-            elif mode_l.startswith("inst"):
-                oids = viewer_state.object_groups_instance.get(selection, [])
             else:
-                oids = viewer_state.object_groups_family.get(selection, [])
-            labels = [
-                label for label, oid in viewer_state.object_id_mapping.items()
-                if oid in oids
-            ]
-            labels_sorted = sorted(labels)
-            if labels_sorted:
-                mv, info, _of, temp_upd, plot, mat_type_ui, roughness_val = view_object_3d(labels_sorted[0])
-                return (
-                    gr.update(choices=labels_sorted, value=[]),
-                    gr.update(value=info),
-                    mv,
-                    plot,
-                    temp_upd,
-                    gr.update(value=mat_type_ui),
-                    gr.update(value=roughness_val, visible=(mat_type_ui == "Reflectante")),
-                )
+                if labels_sorted:
+                    mv, info, _of, temp_upd, plot, mat_type_ui, roughness_val = view_object_3d(labels_sorted[0])
+                    group_info = (
+                        f"\n\n👥 **Grupo:** {selection}\n"
+                        f"**Miembros del grupo:** {len(labels_sorted)} objetos\n"
+                    )
+                    info = info + group_info if info else group_info
+                    
+                    return (
+                        gr.update(choices=labels_sorted, value=[]),
+                        gr.update(value=info),
+                        mv,
+                        plot,
+                        temp_upd,
+                        gr.update(value=mat_type_ui),
+                        gr.update(value=roughness_val, visible=(mat_type_ui == "Reflectante")),
+                    )
             return (
                 gr.update(choices=[], value=[]),
                 gr.update(value=f"Sin miembros para {selection}"),
@@ -1275,7 +1330,7 @@ def create_mitsuba_viewer_interface():
             Actualiza objeto(s) según el modo seleccionado.
             
             Args:
-                mode: "Objeto", "Instancia", o "Familia"
+                mode: "Individual", "1 palabra", "2 palabras", "3 palabras", etc.
                 selection: Objeto/grupo seleccionado
                 temp_value: Nueva temperatura (opcional)
                 emissivity_file: Archivo de emisividad (opcional)
@@ -1293,64 +1348,15 @@ def create_mitsuba_viewer_interface():
             
             # Validar que hay algo que actualizar
             if not selection:
-                return gr.update(value='❌ Debe seleccionar un objeto')
+                return gr.update(value='❌ Debe seleccionar un objeto o grupo')
             
-            # Obtener el object_id
-            if mode_l.startswith('obj'):
-                oid = viewer_state.object_id_mapping.get(selection)
-                if not oid:
-                    return gr.update(value='❌ Objeto no encontrado')
-            elif mode_l.startswith('inst'):
-                # Para instancia, usar el antiguo método
-                targets = viewer_state.object_groups_instance.get(selection, [])
-                if not targets:
-                    return gr.update(value='❌ No hay instancias seleccionadas')
-                # Fallback al método antiguo para instancias
-                path = getattr(emissivity_file, 'name', None)
-                if not path:
-                    return gr.update(value='❌ Suba archivo de emisividad')
-                try:
-                    user_temp = (
-                        float(temp_value) if temp_value not in (None, '') else None
-                    )
-                except Exception:
-                    user_temp = None
-                
-                objs_payload = []
-                for target_oid in targets:
-                    if user_temp is not None:
-                        t = user_temp
-                    else:
-                        try:
-                            obj_resp = client.get_object(target_oid)
-                            if obj_resp.get('status') == 'success':
-                                odata = obj_resp.get('object', {})
-                            else:
-                                odata = obj_resp.get('object', obj_resp)
-                            t = float(odata.get('temperature', 300.0))
-                        except Exception:
-                            t = 300.0
-                    objs_payload.append({'id': target_oid, 'temperature': t})
-                
-                res = client.update_objects_with_emissivity(objs_payload, path)
-                if res.get('status') == 'error':
-                    return gr.update(value=f"❌ Error: {res.get('detail')}")
-                msg = res.get('message') if isinstance(res, dict) else 'OK'
-                return gr.update(
-                    value=f"✅ Actualizados {len(objs_payload)} objeto(s). {msg}"
-                )
-            else:
-                # Modo Familia
-                targets = viewer_state.object_groups_family.get(selection, [])
-                if not targets:
-                    return gr.update(value='❌ No hay objetos en esta familia')
-                oid = targets[0] if targets else None
-                if not oid:
-                    return gr.update(value='❌ Familia vacía')
+            groups = get_groups_for_mode(mode)
+            targets = groups.get(selection, [])
+            if not targets:
+                return gr.update(value='❌ No hay objetos en el grupo seleccionado')
             
-            # Preparar parámetros para el endpoint de actualización con modo
-            is_family = mode_l.startswith("fam")
-            use_range = is_family and temp_mode_val == "Rango Aleatorio"
+            is_group = mode_l != "individual"
+            use_range = is_group and temp_mode_val == "Rango Aleatorio"
 
             t_val = None
             t_min = None
@@ -1387,35 +1393,38 @@ def create_mitsuba_viewer_interface():
                 )
             
             try:
-                # Usar el método del cliente que ya maneja la subida de archivos
-                result = client.update_object_with_mode(
-                    object_id=oid,
-                    mode="Familia" if is_family else "Objeto",
-                    temperature=t_val,
-                    emissivity_file_path=emissivity_file_path,
-                    is_reflectance=is_refl,
-                    temp_min=t_min,
-                    temp_max=t_max,
-                    material_type=mat_type,
-                    roughness=roughness_param
-                )
+                updated_details = {}
+                props_updated = []
+                count = 0
                 
-                if result.get("status") == "error":
-                    return gr.update(value=f"❌ Error: {result.get('detail')}")
-                
-                data = result.get("data", {})
-                count = data.get("count", 0)
-                mode_text = (data.get("mode") or "").lower()
-                
-                if mode_text in ["family", "familia"]:
-                    family_name = data.get("family_name", "")
-                    if family_name:
-                        msg = f"✅ Familia '{family_name}' actualizada ({count} objetos modificados):\n\n"
-                    else:
-                        msg = f"✅ Objeto único actualizado (no pertenece a familia):\n\n"
+                for target_oid in targets:
+                    t_val_obj = t_val
+                    if use_range:
+                        import random
+                        t_val_obj = random.uniform(t_min, t_max)
                     
-                    details = data.get("updated_details", {})
-                    for obj, props in details.items():
+                    result = client.update_object_with_mode(
+                        object_id=target_oid,
+                        mode="Objeto",
+                        temperature=t_val_obj,
+                        emissivity_file_path=emissivity_file_path,
+                        is_reflectance=is_refl,
+                        material_type=mat_type,
+                        roughness=roughness_param
+                    )
+                    
+                    if result.get("status") == "error":
+                        return gr.update(value=f"❌ Error actualizando {target_oid}: {result.get('detail')}")
+                    
+                    data = result.get("data", {})
+                    props_updated = data.get("properties_updated", [])
+                    obj_details = data.get("updated_details", {}).get(target_oid, {})
+                    updated_details[target_oid] = obj_details
+                    count += 1
+                
+                if is_group:
+                    msg = f"✅ Grupo '{selection}' actualizado ({count} objetos modificados):\n\n"
+                    for obj, props in updated_details.items():
                         temp = props.get("temperature")
                         base_obj = os.path.basename(obj)
                         if temp is not None:
@@ -1426,14 +1435,13 @@ def create_mitsuba_viewer_interface():
                         else:
                             msg += f"• **{base_obj}**\n"
                 else:
-                    msg = f"✅ Objeto '{oid}' actualizado"
-                    details = data.get("updated_details", {})
-                    if oid in details:
-                        temp = details[oid].get("temperature")
+                    msg = f"✅ Objeto '{selection}' actualizado"
+                    oid = targets[0] if targets else None
+                    if oid in updated_details:
+                        temp = updated_details[oid].get("temperature")
                         if temp is not None:
                             msg += f" ({temp:.2f} K)"
                 
-                props_updated = data.get("properties_updated", [])
                 if props_updated:
                     if t_min is not None and t_max is not None:
                         if "temperature" in props_updated:

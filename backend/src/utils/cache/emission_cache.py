@@ -77,9 +77,9 @@ class EmissionCacheManager:
             logger.error(f"Error calculando checksum de {file_path}: {e}")
             return ""
     
-    def _make_cache_key(self, emissivity_file: str, temperature: float) -> str:
+    def _make_cache_key(self, emissivity_file: str, temperature: float, material_type: str = "diffuse", roughness: float = 0.05) -> str:
         """Genera una clave única para el cache."""
-        key_str = f"{emissivity_file}:{temperature:.2f}"
+        key_str = f"{emissivity_file}:{temperature:.2f}:{material_type}:{roughness:.4f}"
         return hashlib.sha256(key_str.encode()).hexdigest()[:16]
     
     def _get_cache_path(self, cache_key: str) -> Path:
@@ -89,7 +89,9 @@ class EmissionCacheManager:
     def get(
         self, 
         emissivity_file: str, 
-        temperature: float
+        temperature: float,
+        material_type: str = "diffuse",
+        roughness: float = 0.05
     ) -> Optional[Tuple[Dict, Dict]]:
         """
         Obtiene datos del cache si existen y son válidos.
@@ -97,11 +99,13 @@ class EmissionCacheManager:
         Args:
             emissivity_file: Ruta al archivo de emisividad
             temperature: Temperatura del objeto
+            material_type: Tipo de material
+            roughness: Rugosidad
             
         Returns:
             (dict_reflectance, dict_emission) o None si no está en cache
         """
-        cache_key = self._make_cache_key(emissivity_file, temperature)
+        cache_key = self._make_cache_key(emissivity_file, temperature, material_type, roughness)
         cache_path = self._get_cache_path(cache_key)
         
         # Verificar si existe en índice
@@ -115,7 +119,7 @@ class EmissionCacheManager:
         
         if current_checksum != cached_checksum:
             logger.info(f"Archivo modificado, invalidando cache: {emissivity_file}")
-            self.invalidate(emissivity_file, temperature)
+            self.invalidate(emissivity_file, temperature, material_type, roughness)
             self.misses += 1
             return None
         
@@ -129,7 +133,7 @@ class EmissionCacheManager:
                 return data
             except Exception as e:
                 logger.error(f"Error cargando cache: {e}")
-                self.invalidate(emissivity_file, temperature)
+                self.invalidate(emissivity_file, temperature, material_type, roughness)
         
         self.misses += 1
         return None
@@ -139,7 +143,9 @@ class EmissionCacheManager:
         emissivity_file: str,
         temperature: float,
         dict_reflectance: Dict,
-        dict_emission: Dict
+        dict_emission: Dict,
+        material_type: str = "diffuse",
+        roughness: float = 0.05
     ):
         """
         Guarda datos en el cache.
@@ -149,8 +155,10 @@ class EmissionCacheManager:
             temperature: Temperatura del objeto
             dict_reflectance: Diccionario de reflectancia
             dict_emission: Diccionario de emisión
+            material_type: Tipo de material
+            roughness: Rugosidad
         """
-        cache_key = self._make_cache_key(emissivity_file, temperature)
+        cache_key = self._make_cache_key(emissivity_file, temperature, material_type, roughness)
         cache_path = self._get_cache_path(cache_key)
         
         # Calcular checksum del archivo
@@ -166,6 +174,8 @@ class EmissionCacheManager:
             self.index[cache_key] = {
                 "emissivity_file": emissivity_file,
                 "temperature": temperature,
+                "material_type": material_type,
+                "roughness": roughness,
                 "checksum": checksum,
                 "timestamp": time.time()
             }
@@ -200,9 +210,9 @@ class EmissionCacheManager:
                 except Exception as e:
                     logger.error(f"Error eliminando cache antiguo: {e}")
     
-    def invalidate(self, emissivity_file: str, temperature: float):
+    def invalidate(self, emissivity_file: str, temperature: float, material_type: str = "diffuse", roughness: float = 0.05):
         """Invalida una entrada específica del cache."""
-        cache_key = self._make_cache_key(emissivity_file, temperature)
+        cache_key = self._make_cache_key(emissivity_file, temperature, material_type, roughness)
         cache_path = self._get_cache_path(cache_key)
         
         try:

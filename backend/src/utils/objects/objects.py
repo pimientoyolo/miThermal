@@ -471,6 +471,10 @@ class ObjectUtils:
                 obj_path = obj_path.relative_to(obj_path.anchor)
 
             dst_path = base_out / obj_path.with_suffix(".txt")
+            if dst_path.exists():
+                self.logger.info(f"Archivo de emisividad ya existe en '{dst_path}', no se sobrescribe.")
+                return
+
             dst_path.parent.mkdir(parents=True, exist_ok=True)
 
             shutil.copy2(src_path, dst_path)

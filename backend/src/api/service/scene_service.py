@@ -124,17 +124,25 @@ class SceneService(BaseService):
         if scene_dict and "scene" in scene_dict and "shape" in scene_dict["scene"]:
             shapes = scene_dict["scene"]["shape"]
             config_scene["objects"] = {}  # inicializar como diccionario
-            emissivity_file = path_manager.get_default_emissivity_path()
-            logger.warning(f"Usando archivo de emisividad por defecto: {emissivity_file}")
+            base_out = Path(OUTPUT_STATIC_DIR)
 
             if isinstance(shapes, list):
                 for shape in shapes:
                     id = shape["string"]["@value"]
-                    # object_utils.save_default_emissivity(id)
+                    
+                    rel_obj = Path(id)
+                    if rel_obj.is_absolute():
+                        rel_obj = rel_obj.relative_to(rel_obj.anchor)
+                    emissivity_path = str(base_out / rel_obj.with_suffix('.txt'))
+                    
+                    try:
+                        object_utils.save_default_emissivity(id)
+                    except Exception as e:
+                        logger.error(f"No se pudo guardar la emisividad por defecto para '{id}': {e}")
 
                     config_scene["objects"][id] = {
                         "temperature": T,
-                        "emissivity_file": emissivity_file
+                        "emissivity_file": emissivity_path
                     }
 
                     dir_file = os.path.join(OUTPUT_STATIC_DIR, id)
@@ -147,11 +155,20 @@ class SceneService(BaseService):
 
             elif isinstance(shapes, dict):
                 id = shapes["string"]["@value"]
-                # object_utils.save_default_emissivity(id)
+                
+                rel_obj = Path(id)
+                if rel_obj.is_absolute():
+                    rel_obj = rel_obj.relative_to(rel_obj.anchor)
+                emissivity_path = str(base_out / rel_obj.with_suffix('.txt'))
+                
+                try:
+                    object_utils.save_default_emissivity(id)
+                except Exception as e:
+                    logger.error(f"No se pudo guardar la emisividad por defecto para '{id}': {e}")
 
                 config_scene["objects"][id] = {
                     "temperature": T,
-                    "emissivity_file": emissivity_file
+                    "emissivity_file": emissivity_path
                 }
 
                 dir_file = os.path.join(OUTPUT_STATIC_DIR, id)
@@ -901,6 +918,9 @@ class SceneService(BaseService):
         emissivity_file = config_scene["objects"][object_id]["emissivity_file"]
         wavelengths_obj, emissivity = object_utils.read_object_emissivity_file(object_id)
         temperature = config_scene["objects"][object_id]["temperature"]
+        obj_cfg = config_scene["objects"].get(object_id, {})
+        material_type = obj_cfg.get("material_type", "diffuse")
+        roughness = obj_cfg.get("roughness", 0.05)
 
 
         object_found = False
@@ -915,7 +935,7 @@ class SceneService(BaseService):
                     if shape_id == object_id:
                         # Intentar obtener del cache persistente
                         cache = get_cache_manager()
-                        result = cache.get(emissivity_file, temperature)
+                        result = cache.get(emissivity_file, temperature, material_type, roughness)
                         
                         if result is not None:
                             # Cargar de cache, pero verificar que los archivos .spd existan en disco
@@ -935,7 +955,10 @@ class SceneService(BaseService):
                             emission = radiance * emissivity
                             reflectance = 1 - np.array(emissivity)
                             
-                            dict_reflectance, refl_sha = object_utils.create_reflectance_material(wavelengths_obj, reflectance, object_id)
+                            dict_reflectance, refl_sha = object_utils.create_reflectance_material(
+                                wavelengths_obj, reflectance, object_id,
+                                material_type=material_type, roughness=roughness
+                            )
                             dict_emission, emi_sha = object_utils.create_spectral_emitter(wavelengths_obj, emission, object_id)
                             
                             # Actualizar config con shasums (Ruta absoluta para persistencia)
@@ -945,7 +968,7 @@ class SceneService(BaseService):
                             config_scene["objects"][object_id]["emission_spd"] = str(OUTPUT_SPD_DIR / dict_emission["spectrum"]["@filename"].split('/')[-1])
                             save_config_scene_dict(config_scene)
                             
-                            cache.set(emissivity_file, temperature, dict_reflectance, dict_emission)
+                            cache.set(emissivity_file, temperature, dict_reflectance, dict_emission, material_type, roughness)
 
                         # Actualizar solo este objeto
                         shape["emitter"] = dict_emission
@@ -959,7 +982,7 @@ class SceneService(BaseService):
                 if shape_id == object_id:
                     # Intentar obtener del cache persistente
                     cache = get_cache_manager()
-                    result = cache.get(emissivity_file, temperature)
+                    result = cache.get(emissivity_file, temperature, material_type, roughness)
                     
                     if result is not None:
                         # Cargar de cache
@@ -970,7 +993,10 @@ class SceneService(BaseService):
                         emission = radiance * emissivity
                         reflectance = 1 - np.array(emissivity)
                         
-                        dict_reflectance, refl_sha = object_utils.create_reflectance_material(wavelengths_obj, reflectance, object_id)
+                        dict_reflectance, refl_sha = object_utils.create_reflectance_material(
+                            wavelengths_obj, reflectance, object_id,
+                            material_type=material_type, roughness=roughness
+                        )
                         dict_emission, emi_sha = object_utils.create_spectral_emitter(wavelengths_obj, emission, object_id)
                         
                         # Actualizar config con shasums
@@ -980,7 +1006,7 @@ class SceneService(BaseService):
                         config_scene["objects"][object_id]["emission_spd"] = dict_emission["spectrum"]["@filename"]
                         save_config_scene_dict(config_scene)
                         
-                        cache.set(emissivity_file, temperature, dict_reflectance, dict_emission)
+                        cache.set(emissivity_file, temperature, dict_reflectance, dict_emission, material_type, roughness)
                     
                     shapes["emitter"] = dict_emission
                     shapes['bsdf'] = dict_reflectance
@@ -1029,12 +1055,15 @@ class SceneService(BaseService):
                 continue  # ignorar shapes no en la lista de IDs
 
             # Obtener propiedades del objeto
-            emissivity_file = config_scene["objects"][object_id]["emissivity_file"]
-            temperature = config_scene["objects"][object_id]["temperature"]
+            obj_cfg = config_scene["objects"].get(object_id, {})
+            emissivity_file = obj_cfg["emissivity_file"]
+            temperature = obj_cfg["temperature"]
+            material_type = obj_cfg.get("material_type", "diffuse")
+            roughness = obj_cfg.get("roughness", 0.05)
 
             # Intentar obtener del cache persistente
             cache = get_cache_manager()
-            result = cache.get(emissivity_file, temperature)
+            result = cache.get(emissivity_file, temperature, material_type, roughness)
             
             if result is not None:
                 # Cargar de cache, pero verificar que existan archivos físicos
@@ -1055,7 +1084,10 @@ class SceneService(BaseService):
                 emission = radiance * emissivity
                 reflectance = 1 - np.array(emissivity)
 
-                dict_reflectance, refl_sha = object_utils.create_reflectance_material(wavelengths_obj, reflectance, object_id)
+                dict_reflectance, refl_sha = object_utils.create_reflectance_material(
+                    wavelengths_obj, reflectance, object_id,
+                    material_type=material_type, roughness=roughness
+                )
                 dict_emission, emi_sha = object_utils.create_spectral_emitter(wavelengths_obj, emission, object_id)
                 
                 # Actualizar config (Ruta absoluta para persistencia)
@@ -1064,7 +1096,7 @@ class SceneService(BaseService):
                 config_scene["objects"][object_id]["emission_shasum"] = emi_sha
                 config_scene["objects"][object_id]["emission_spd"] = str(OUTPUT_SPD_DIR / dict_emission["spectrum"]["@filename"].split('/')[-1])
 
-                cache.set(emissivity_file, temperature, dict_reflectance, dict_emission)
+                cache.set(emissivity_file, temperature, dict_reflectance, dict_emission, material_type, roughness)
 
             # Actualizar shape
             shape["emitter"] = dict_emission
